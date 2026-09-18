@@ -24,6 +24,8 @@ public struct SidebarView: View {
                 PlayerTable(rows: playingRows(state))
                 divider
                 opponentSection
+                divider
+                phoneSection
                 Spacer(minLength: 0)
                 actions(state)
             } else {
@@ -101,6 +103,33 @@ public struct SidebarView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help(session.currentMode.summary)
+    }
+
+    /// The phone that watches the real board. One line: the button to connect it,
+    /// or what it is doing once connected.
+    private var phoneSection: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "iphone")
+                .foregroundStyle(Theme.secondaryText)
+            switch session.phone.status {
+            case .idle:
+                Button("Connecter le téléphone") { session.phone.connect() }
+                    .buttonStyle(.link)
+                    .font(.system(size: 13))
+            case .searching:
+                Text("Recherche du téléphone…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
+                Button("Arrêter") { session.phone.disconnect() }.buttonStyle(.link).font(.system(size: 12))
+            case .connecting(let name):
+                Text("Connexion à \(name)…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
+            case .connected(let name):
+                Text(name).font(.system(size: 13)).foregroundStyle(Theme.primaryText).lineLimit(1)
+                Button("Déconnecter") { session.phone.disconnect() }.buttonStyle(.link).font(.system(size: 12))
+            case .failed(let message):
+                Text("Échec : \(message)").font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(2)
+                Button("Réessayer") { session.phone.connect() }.buttonStyle(.link).font(.system(size: 12))
+            }
+            Spacer(minLength: 0)
+        }
     }
 
     private func actions(_ state: GameState) -> some View {

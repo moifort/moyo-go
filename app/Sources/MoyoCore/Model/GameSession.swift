@@ -100,6 +100,12 @@ public final class GameSession {
 
     public let thinking = ThinkingIndicator()
 
+    /// The phone watching the real board, when the player has connected one.
+    public let phone = PhoneLink()
+    /// The move sent on the phone's behalf and not yet answered by the bridge,
+    /// so the same stone is not played twice while the state is in flight.
+    private var phoneMoveInFlight: Point?
+
     /// Score lead per move number, filled in as analyses come back.
     public private(set) var scoreByMove: [Int: Double] = [:]
 
@@ -119,6 +125,7 @@ public final class GameSession {
         self.bridge = bridge
         self.store = store
         self.settings = store.load() ?? Settings()
+        phone.onBoard = { [weak self] board in self?.phoneBoardDidChange(board) }
     }
 
     // -- lifecycle -----------------------------------------------------------
@@ -215,6 +222,30 @@ public final class GameSession {
         }
         state = newState
         if newState.status != .playing { thinking.ended() }
+        phoneMoveInFlight = nil
+        syncWithPhone()
+    }
+
+    // -- phone ----------------------------------------------------------------
+
+    /// The real board changed. A board of another size starts a matching game;
+    /// otherwise the board is compared with the game to find the player's move.
+    private func phoneBoardDidChange(_ board: PhoneBoard) {
+        guard phase == .running else { return }
+        if state == nil || state?.size != board.size, board.stones.isEmpty {
+            settings.size = board.size
+            newGame()
+            return
+        }
+        syncWithPhone()
+    }
+
+    private func syncWithPhone() {
+        guard let board = phone.latest, let state, canAct,
+              let point = BoardSync.pendingMove(phone: board, game: state),
+              point != phoneMoveInFlight else { return }
+        phoneMoveInFlight = point
+        play(row: point.row, col: point.col)
     }
 
     // -- commands ------------------------------------------------------------

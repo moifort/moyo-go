@@ -83,6 +83,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
          chaque envoi de build. -->
     <key>ITSAppUsesNonExemptEncryption</key><false/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSLocalNetworkUsageDescription</key><string>Moyo cherche l'iPhone qui filme le plateau pour lire vos coups.</string>
+    <key>NSBonjourServices</key><array><string>_goboard._tcp</string></array>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <!-- macOS ne déclare aucun type pour un enregistrement de go : Moyo importe
          le sien, puis se déclare capable de le lire. -->
@@ -113,6 +115,8 @@ cat > "$WORK/app.entitlements" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>com.apple.security.app-sandbox</key><true/>
+  <!-- Trouver l'iPhone qui filme le plateau : Bonjour et une connexion TCP sortante. -->
+  <key>com.apple.security.network.client</key><true/>
   <!-- Ouvrir un SGF. L'accès vaut pour la fenêtre, pas pour le pont : c'est
        l'application qui lit le fichier et en envoie le texte. -->
   <key>com.apple.security.files.user-selected.read-only</key><true/>
@@ -126,6 +130,8 @@ cat > "$WORK/app.entitlements" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>com.apple.security.app-sandbox</key><true/>
+  <!-- Trouver l'iPhone qui filme le plateau : Bonjour et une connexion TCP sortante. -->
+  <key>com.apple.security.network.client</key><true/>
   <!-- Ouvrir un SGF. L'accès vaut pour la fenêtre, pas pour le pont : c'est
        l'application qui lit le fichier et en envoie le texte. -->
   <key>com.apple.security.files.user-selected.read-only</key><true/>
@@ -139,6 +145,8 @@ cat > "$WORK/helper.entitlements" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>com.apple.security.app-sandbox</key><true/>
+  <!-- Trouver l'iPhone qui filme le plateau : Bonjour et une connexion TCP sortante. -->
+  <key>com.apple.security.network.client</key><true/>
   <key>com.apple.security.inherit</key><true/>
 </dict></plist>
 PLIST
