@@ -45,6 +45,14 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 
 - **Teaching mode.** KaTrain's per-move feedback on mistakes and better options.
 
+- **Replaying the AI's old answer after an undo.** A move replayed after an undo
+  lands on the node KaTrain kept, with the AI's former reply still below it. The
+  bridge now has the AI think afresh, so the reply may differ and the tree grows a
+  sibling. Walking into the old reply instead would be KaTrain's own redo, but Moyo
+  has no redo during a game, and an AI that answers instantly with a move the
+  player already saw reads as a replay, not a game. Worth revisiting if a redo
+  button ever appears.
+
 ## Design
 
 - **A record under review is read-only.** Clicking the board does nothing, not even
