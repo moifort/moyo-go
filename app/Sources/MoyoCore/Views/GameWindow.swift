@@ -37,9 +37,6 @@ public struct GameWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .moyoOpenRecordRequested)) { _ in
             presentOpenPanel()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .moyoRecordDropped)) { note in
-            if let url = note.object as? URL { session.openRecord(at: url) }
-        }
         // `lastErrorMessage` was already being set and shown nowhere. A record that
         // will not open has to say so, or the window simply ignores the file.
         .alert(

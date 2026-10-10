@@ -3,9 +3,30 @@ import SwiftUI
 extension Notification.Name {
     /// Posted by the File menu; the window answers with an open panel.
     public static let moyoOpenRecordRequested = Notification.Name("Moyo.openRecordRequested")
-    /// Carries a URL the window should read: dropped on the board, or opened from
-    /// the Finder. Both arrive with the sandbox grant already attached.
-    public static let moyoRecordDropped = Notification.Name("Moyo.recordDropped")
+    /// A record opened from the Finder is waiting in `RecordInbox`.
+    public static let moyoRecordArrived = Notification.Name("Moyo.recordArrived")
+}
+
+/// Where a record opened from the Finder waits for someone to read it.
+///
+/// A double-click on a record launches the app with it, and Launch Services hands
+/// it over before the window exists. A notification alone would be posted to nobody;
+/// the inbox keeps the file until the root view comes up and takes it.
+@MainActor
+public enum RecordInbox {
+    private static var pending: URL?
+
+    /// The URL arrives with its sandbox grant already attached.
+    public static func deliver(_ url: URL) {
+        pending = url
+        NotificationCenter.default.post(name: .moyoRecordArrived, object: nil)
+    }
+
+    /// The waiting record, handed over once.
+    public static func take() -> URL? {
+        defer { pending = nil }
+        return pending
+    }
 }
 
 /// Catches records opened from the Finder.
@@ -18,7 +39,7 @@ public final class RecordOpeningDelegate: NSObject, NSApplicationDelegate {
     public func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first(where: { $0.pathExtension.lowercased() == SGFImport.fileExtension })
         else { return }
-        NotificationCenter.default.post(name: .moyoRecordDropped, object: url)
+        RecordInbox.deliver(url)
     }
 }
 

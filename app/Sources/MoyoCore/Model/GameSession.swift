@@ -116,12 +116,19 @@ public final class GameSession {
     /// The record's file name, for the window title.
     public private(set) var recordName: String?
 
+    /// A record that arrived before the engine was ready, read while its sandbox
+    /// grant was live and held until the bridge can take it.
+    private var recordWaiting: SGFImport.Record?
+
+    var hasRecordWaiting: Bool { recordWaiting != nil }
+
     /// A game the bridge has turned into text, waiting for the save panel.
     public private(set) var pendingExport: SGFExport.Document?
 
     private let bridge: BridgeProcess
     private let store: SettingsStore
     private var nextCommandID = 1
+    private var hasStarted = false
     private var eventTask: Task<Void, Never>?
 
     public init(bridge: BridgeProcess = BridgeProcess(), store: SettingsStore = SettingsStore()) {
@@ -133,7 +140,11 @@ public final class GameSession {
 
     // -- lifecycle -----------------------------------------------------------
 
+    /// Starts the bridge once. Later calls do nothing, so a view coming back up
+    /// never launches a second KataGo.
     public func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
         guard let location = BridgeLocation.resolve() else {
             phase = .failed(
                 "Emplacement du projet inconnu. Définissez MOYO_DEV_ROOT ou reconstruisez l'application."
@@ -172,14 +183,22 @@ public final class GameSession {
 
     // -- events --------------------------------------------------------------
 
-    private func handle(_ event: BridgeEvent) {
+    /// Internal rather than private so the tests can play the bridge's part.
+    func handle(_ event: BridgeEvent) {
         switch event {
         case .ready(let katago, let model, let strategies, let settings):
             phase = .running
             engineDescription = model.map { URL(fileURLWithPath: $0).lastPathComponent } ?? katago
             availableStrategies = strategies
             bridgeSettings = settings
-            newGame()
+            // A record double-clicked in the Finder launched the app: it is what the
+            // player came for, so it takes the place of the opening game.
+            if let record = recordWaiting {
+                recordWaiting = nil
+                load(record)
+            } else {
+                newGame()
+            }
 
         case .state(_, let newState):
             apply(newState)
@@ -345,17 +364,25 @@ public final class GameSession {
     /// the sandbox out of the child process and the encoding guess in AppKit's hands.
     public func openRecord(at url: URL) {
         do {
-            let record = try SGFImport.read(url)
-            scoreByMove.removeAll()
-            analysisProgress = nil
-            lastErrorMessage = nil
-            recordName = record.name
-            thinking.ended()
-            bridge.send(.loadSGF(id: nextID(), name: record.name, contents: record.contents))
+            load(try SGFImport.read(url))
         } catch {
             recordName = nil
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    /// Hands a record to the bridge, or holds it until the bridge is ready for one.
+    private func load(_ record: SGFImport.Record) {
+        scoreByMove.removeAll()
+        analysisProgress = nil
+        lastErrorMessage = nil
+        recordName = record.name
+        thinking.ended()
+        guard phase == .running else {
+            recordWaiting = record
+            return
+        }
+        bridge.send(.loadSGF(id: nextID(), name: record.name, contents: record.contents))
     }
 
     /// True when there is a game or a record to save.
