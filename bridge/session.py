@@ -23,6 +23,7 @@ from katrain.core.constants import (
 from katrain.core.game import Game, IllegalMoveException
 from pysgf import Move
 
+import record
 import review
 import scoring
 import serialize
@@ -382,6 +383,31 @@ class BridgeSession(KaTrainHost):
         self.game.set_current_node(self._line[self._index])
         self._boost_window()
         self._emit_state(command_id)
+
+    def export_sgf(self, command_id, black_name, white_name):
+        """Hands the game over as SGF text, for the app to write where the player chose.
+
+        A game against the AI goes out as the line actually on the board: moves taken
+        back stay in KaTrain's tree but were never part of the game. A record under
+        review goes out whole, as it came in — names, result, branches — plus the
+        variation being walked, which is how a reading of KataGo's is kept.
+        """
+        self._require_game()
+        if self._status == "review":
+            text = record.text(self.game.root)
+        else:
+            text = record.text(
+                self.game.root,
+                line=self.game.current_node.nodes_from_root,
+                properties={
+                    "AP": "Moyo",
+                    "DT": record.sgf_date(self.game.root.get_property("DT", None)),
+                    "PB": black_name or None,
+                    "PW": white_name or None,
+                    "RE": self.game.end_result or None,
+                },
+            )
+        self._writer.emit("sgf", command_id, contents=text)
 
     def goto(self, command_id, move_number):
         """Jumps to a position in the main line. Out-of-range asks are clamped."""

@@ -51,6 +51,10 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         session.submit(
             session.load_sgf, command_id, command.get("name") or "", command["contents"]
         )
+    elif name == "export_sgf":
+        session.submit(
+            session.export_sgf, command_id, command.get("black_name"), command.get("white_name")
+        )
     elif name == "goto":
         session.submit(session.goto, command_id, int(command["move_number"]))
     elif name == "variation":
