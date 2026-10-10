@@ -324,6 +324,54 @@ struct ReviewPanel: View {
         ]
     }
 
+    /// The same moves as the Revue menu and its arrow keys, within reach of the mouse:
+    /// a record dropped on the window is read with the pointer as often as with keys.
+    private var navigation: some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 7) {
+                step("Début de la partie", systemImage: "backward.end.fill", enabled: session.canStepBackward) {
+                    session.goto(moveNumber: 0)
+                }
+                step("Coup précédent", systemImage: "backward.frame.fill", enabled: session.canStepBackward) {
+                    session.step(-1)
+                }
+                step("Coup suivant", systemImage: "forward.frame.fill", enabled: session.canStepForward) {
+                    session.step(1)
+                }
+                step("Fin de la partie", systemImage: "forward.end.fill", enabled: session.canStepForward) {
+                    if let count = state.moveCount { session.goto(moveNumber: count) }
+                }
+            }
+            HStack(spacing: 7) {
+                step(
+                    "Remonter la proposition de KataGo", systemImage: "arrow.uturn.backward",
+                    enabled: (state.variationDepth ?? 0) > 0
+                ) {
+                    session.stepVariation(-1)
+                }
+                step("Dérouler la proposition de KataGo", systemImage: "sparkles", enabled: true) {
+                    session.stepVariation(1)
+                }
+            }
+        }
+        .buttonStyle(.glass)
+        .controlSize(.large)
+    }
+
+    /// An icon wide enough to hit, with its name in the tooltip and for VoiceOver:
+    /// four labels would not fit across the sidebar.
+    private func step(
+        _ title: String, systemImage: String, enabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(maxWidth: .infinity)
+        }
+        .help(title)
+        .accessibilityLabel(title)
+        .disabled(!enabled)
+    }
+
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -334,6 +382,7 @@ struct ReviewPanel: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
             }
+            navigation
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
             } label: {
