@@ -116,6 +116,9 @@ public final class GameSession {
     /// The record's file name, for the window title.
     public private(set) var recordName: String?
 
+    /// A game the bridge has turned into text, waiting for the save panel.
+    public private(set) var pendingExport: SGFExport.Document?
+
     private let bridge: BridgeProcess
     private let store: SettingsStore
     private var nextCommandID = 1
@@ -189,6 +192,12 @@ public final class GameSession {
 
         case .analysisProgress(let done, let total):
             analysisProgress = done >= total ? nil : (done, total)
+
+        case .sgf(_, let contents):
+            pendingExport = SGFExport.Document(
+                name: SGFExport.suggestedName(recordName: isReviewing ? recordName : nil, date: .now),
+                contents: contents
+            )
 
         case .failure(_, let code, let message):
             // Some refusals are answers, not faults, and a keystroke that arrives a
@@ -347,6 +356,34 @@ public final class GameSession {
             recordName = nil
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    /// True when there is a game or a record to save.
+    public var canExport: Bool { phase == .running && state != nil }
+
+    /// Asks the bridge for the game as SGF; the answer lands in `pendingExport`.
+    ///
+    /// A game against the AI is signed with the Mac user's name and the opponent's
+    /// mode. A record under review keeps the names it came with.
+    public func exportRecord() {
+        guard canExport else { return }
+        var black: String?
+        var white: String?
+        if !isReviewing, let state {
+            let mode = currentMode
+            let players = SGFExport.players(
+                humanColor: state.humanColor,
+                human: NSFullUserName(),
+                ai: SGFExport.aiName(mode: mode, value: settingValue(for: mode))
+            )
+            (black, white) = (players.black, players.white)
+        }
+        bridge.send(.exportSGF(id: nextID(), blackName: black, whiteName: white))
+    }
+
+    /// The save panel is done with the document, written or not.
+    public func exportHandled() {
+        pendingExport = nil
     }
 
     /// Moves to a position in the record. The bridge clamps anything out of range.

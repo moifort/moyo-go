@@ -15,18 +15,24 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   and friends). The App Store listing is worldwide, so the strings should move to a
   String Catalog with English alongside French.
 
-- **SGF export.** Records come in, nothing goes out. A game played against the AI
-  cannot be saved, and a variation walked during a review cannot be kept. Import
-  landed first because reading someone else's game is the use we had; writing one
-  back out needs decisions about where files go under the sandbox.
+- **Autosave.** A game is saved only when the player asks, through the save panel.
+  The panel is what grants a sandboxed app a place to write; saving on its own would
+  mean a folder inside the container nobody browses, or a security-scoped bookmark
+  and a preference to choose it. A game lost to a quit is the price until then.
+
+- **Only one variation survives a save.** Leaving a variation prunes it, so a saved
+  review carries the record plus the continuation on screen at that moment. Keeping
+  every reading walked would need the bridge to stop pruning, and the review to tell
+  the record's own branches from ours.
 
 - **Variations in an imported record.** A review follows `children[0]` throughout and
   ignores every branch the file carries. Records from a server have none; records
   from a teaching session are mostly branches. Showing them means a tree in the
   sidebar, which is a screen of its own.
 
-- **SGF comments.** `C[]` is parsed by pysgf and dropped on the floor. A review that
-  showed the commentary would be worth more than one that only shows the engine.
+- **SGF comments.** `C[]` is kept as KaTrain's node note and written back on save,
+  but never shown. A review that showed the commentary would be worth more than one
+  that only shows the engine.
 
 - **`CA[]` is ignored on import.** The app decodes the file with the system's own
   encoding detection and sends text to the bridge, so the record's declared charset

@@ -7,6 +7,7 @@ public struct GameWindow: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isShowingNewGame = false
     @State private var isTargetedByDrop = false
+    @State private var exportFailure: String?
 
     public init(session: GameSession) {
         self.session = session
@@ -51,6 +52,40 @@ public struct GameWindow: View {
             Button("Fermer", role: .cancel) { session.clearError() }
         } message: {
             Text(session.lastErrorMessage ?? "")
+        }
+        .onChange(of: session.pendingExport) { _, document in
+            guard let document else { return }
+            // Out of the view update: a modal panel run from inside one stalls it.
+            Task { @MainActor in presentSavePanel(for: document) }
+        }
+        .alert(
+            "Cette partie n'a pas pu être enregistrée",
+            isPresented: Binding(
+                get: { exportFailure != nil },
+                set: { if !$0 { exportFailure = nil } }
+            )
+        ) {
+            Button("Fermer", role: .cancel) { exportFailure = nil }
+        } message: {
+            Text(exportFailure ?? "")
+        }
+    }
+
+    /// The save panel is what grants a sandboxed app the right to write there. The
+    /// file is written straight away, while that grant is live.
+    private func presentSavePanel(for document: SGFExport.Document) {
+        defer { session.exportHandled() }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType.moyoSGF]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = document.name
+        panel.prompt = "Enregistrer"
+        panel.message = "La partie est enregistrée au format SGF, lisible par KaTrain, Sabaki ou OGS."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try SGFExport.write(document.contents, to: url)
+        } catch {
+            exportFailure = error.localizedDescription
         }
     }
 

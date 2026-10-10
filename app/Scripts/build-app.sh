@@ -87,7 +87,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>NSBonjourServices</key><array><string>_goboard._tcp</string></array>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <!-- macOS ne déclare aucun type pour un enregistrement de go : Moyo importe
-         le sien, puis se déclare capable de le lire. -->
+         le sien, puis se déclare capable de le lire et de l'écrire. -->
     <key>UTImportedTypeDeclarations</key>
     <array><dict>
         <key>UTTypeIdentifier</key><string>org.smart-game-format.sgf</string>
@@ -99,7 +99,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleDocumentTypes</key>
     <array><dict>
         <key>CFBundleTypeName</key><string>Partie de go (SGF)</string>
-        <key>CFBundleTypeRole</key><string>Viewer</string>
+        <key>CFBundleTypeRole</key><string>Editor</string>
         <key>LSHandlerRank</key><string>Alternate</string>
         <key>LSItemContentTypes</key><array><string>org.smart-game-format.sgf</string></array>
     </dict></array>
@@ -117,9 +117,10 @@ cat > "$WORK/app.entitlements" <<PLIST
   <key>com.apple.security.app-sandbox</key><true/>
   <!-- Trouver l'iPhone qui filme le plateau : Bonjour et une connexion TCP sortante. -->
   <key>com.apple.security.network.client</key><true/>
-  <!-- Ouvrir un SGF. L'accès vaut pour la fenêtre, pas pour le pont : c'est
-       l'application qui lit le fichier et en envoie le texte. -->
-  <key>com.apple.security.files.user-selected.read-only</key><true/>
+  <!-- Ouvrir et enregistrer un SGF. L'accès vaut pour la fenêtre, pas pour le
+       pont : c'est l'application qui lit et écrit le fichier, le pont ne voit que
+       du texte. -->
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
   <key>com.apple.application-identifier</key><string>$TEAM_ID.com.thibaut.moyo</string>
   <key>com.apple.developer.team-identifier</key><string>$TEAM_ID</string>
 </dict></plist>
@@ -132,9 +133,10 @@ cat > "$WORK/app.entitlements" <<PLIST
   <key>com.apple.security.app-sandbox</key><true/>
   <!-- Trouver l'iPhone qui filme le plateau : Bonjour et une connexion TCP sortante. -->
   <key>com.apple.security.network.client</key><true/>
-  <!-- Ouvrir un SGF. L'accès vaut pour la fenêtre, pas pour le pont : c'est
-       l'application qui lit le fichier et en envoie le texte. -->
-  <key>com.apple.security.files.user-selected.read-only</key><true/>
+  <!-- Ouvrir et enregistrer un SGF. L'accès vaut pour la fenêtre, pas pour le
+       pont : c'est l'application qui lit et écrit le fichier, le pont ne voit que
+       du texte. -->
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
 </dict></plist>
 PLIST
 fi

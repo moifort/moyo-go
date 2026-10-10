@@ -1,6 +1,6 @@
 import Foundation
 
-/// Vérifie, depuis l'intérieur du sandbox, que le bundle sait jouer et relire.
+/// Vérifie, depuis l'intérieur du sandbox, que le bundle sait jouer, relire et réécrire.
 ///
 /// Lancer le python du bundle depuis un terminal ne prouverait rien : il porte
 /// l'entitlement `inherit` et n'aurait alors aucun parent sandboxé dont hériter.
@@ -58,7 +58,7 @@ public enum BundleSelfTest {
                 return 1
             }
         }
-        note("OK — le bundle joue et relit")
+        note("OK — le bundle joue, relit et réécrit")
         return 0
     }
 
@@ -107,6 +107,14 @@ public enum BundleSelfTest {
             Phase(name: "le record reste intact") { bridge, deadline in
                 bridge.send(#"{"cmd":"goto","id":6,"move_number":5}"#)
                 return bridge.await(#""variation_depth":0"#, by: deadline)
+            },
+
+            Phase(name: "la partie repart en SGF") { bridge, deadline in
+                // Le pont rend du texte, il n'écrit rien : c'est l'aller-retour qui
+                // compte ici, le dernier coup du record doit y être.
+                bridge.send(#"{"cmd":"export_sgf","id":7}"#)
+                return bridge.await(#""event":"sgf""#, by: deadline)
+                    && bridge.await("B[gc]", by: deadline, alreadySeen: true)
             },
         ]
     }

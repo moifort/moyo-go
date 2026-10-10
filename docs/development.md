@@ -34,8 +34,9 @@ The bundle is self-contained — interpreter, engine, models and configuration a
 live inside it, because the App Store sandbox forbids reaching outside. It weighs
 about 250 MB, most of it the two KataGo models.
 
-To verify a built bundle end to end, from inside its own sandbox — it plays a move
-and reads a record back, and exits non-zero on the first phase that fails:
+To verify a built bundle end to end, from inside its own sandbox — it plays a move,
+reads a record back and writes it out again as SGF, and exits non-zero on the first
+phase that fails:
 
 ```bash
 ./app/build/Moyo.app/Contents/MacOS/Moyo --smoke
@@ -77,7 +78,8 @@ compilation, les suivantes non.
 ### La barrière
 
 `Moyo --smoke`. Le bundle joue un coup contre KataGo, ouvre un enregistrement, le
-parcourt et déroule la proposition du moteur — depuis son propre sandbox, seul
+parcourt, déroule la proposition du moteur et le réécrit en SGF — depuis son propre
+sandbox, seul
 endroit d'où la preuve vaut. Il sort non nul à la première phase qui échoue, et rien
 n'est publié ensuite.
 

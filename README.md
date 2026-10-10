@@ -31,6 +31,13 @@ Open an SGF and walk it with the arrow keys. At any position you can see the mov
 KataGo would have played, and hold Option with the arrows to unroll the engine's
 whole continuation before stepping back into the real game.
 
+## Keep a game
+
+⌘S saves to SGF. A game against the AI goes out as it was played, signed with
+your name and the opponent's mode; a record under review goes out as it came in,
+along with the engine's continuation you are walking. The file opens in KaTrain,
+Sabaki or OGS.
+
 ## Native, and nothing else
 
 Real menus, keyboard shortcuts, a collapsible sidebar, Liquid Glass. The board
@@ -47,8 +54,8 @@ models and everything they need ship inside the app.
 
 ## Limits
 
-Records can be read but not written. A review follows the main line and ignores a
-record's branches and comments. There is no teaching mode yet.
+A review follows the main line and does not show a record's branches or comments,
+though saving the record keeps both. There is no teaching mode yet.
 
 ## License
 

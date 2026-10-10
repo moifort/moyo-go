@@ -218,6 +218,8 @@ public enum BridgeEvent: Sendable {
     case score(moveNumber: Int, scoreLead: Double)
     /// How much of a record under review KataGo has finished chewing through.
     case analysisProgress(done: Int, total: Int)
+    /// The game as SGF text, in answer to `export_sgf`.
+    case sgf(id: Int?, contents: String)
     case failure(id: Int?, code: String, message: String)
     case engineFailed(message: String)
 
@@ -229,7 +231,7 @@ public enum BridgeEvent: Sendable {
 extension BridgeEvent: Decodable {
     private enum Keys: String, CodingKey {
         case event, id, katago, model, value, moveNumber, scoreLead, code, message
-        case strategies, aiSettings, done, total
+        case strategies, aiSettings, done, total, contents
     }
 
     public init(from decoder: any Decoder) throws {
@@ -261,6 +263,8 @@ extension BridgeEvent: Decodable {
                 done: try container.decode(Int.self, forKey: .done),
                 total: try container.decode(Int.self, forKey: .total)
             )
+        case "sgf":
+            self = .sgf(id: id, contents: try container.decode(String.self, forKey: .contents))
         case "error":
             self = .failure(
                 id: id,

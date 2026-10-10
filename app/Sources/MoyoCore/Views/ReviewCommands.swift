@@ -41,6 +41,12 @@ public struct ReviewCommands: Commands {
                 NotificationCenter.default.post(name: .moyoOpenRecordRequested, object: nil)
             }
             .keyboardShortcut("o", modifiers: .command)
+
+            // A game against the AI and a record under review alike: the first goes
+            // out as played, the second as read, with the variation being walked.
+            Button("Enregistrer la partie…") { session?.exportRecord() }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(session?.canExport != true)
         }
 
         CommandMenu("Revue") {

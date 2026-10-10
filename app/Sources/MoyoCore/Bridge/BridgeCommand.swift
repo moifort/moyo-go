@@ -18,6 +18,8 @@ public struct BridgeCommand: Encodable, Sendable {
     var contents: String?
     var moveNumber: Int?
     var step: Int?
+    var blackName: String?
+    var whiteName: String?
 
     public static func newGame(
         id: Int,
@@ -50,6 +52,14 @@ public struct BridgeCommand: Encodable, Sendable {
     /// encoding. Decoding happens here, where AppKit does it well.
     public static func loadSGF(id: Int, name: String, contents: String) -> BridgeCommand {
         BridgeCommand(id: id, cmd: "load_sgf", name: name, contents: contents)
+    }
+
+    /// Asks for the game as SGF text, answered by an `sgf` event.
+    ///
+    /// The names sign a game against the AI; a record under review keeps its own,
+    /// and the bridge ignores these.
+    public static func exportSGF(id: Int, blackName: String?, whiteName: String?) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "export_sgf", blackName: blackName, whiteName: whiteName)
     }
 
     /// Jumps to a position in the record. The bridge clamps anything out of range.
