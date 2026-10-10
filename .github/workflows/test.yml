@@ -33,18 +33,21 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: bridge/requirements.txt
+          cache-dependency-path: |
+            bridge/requirements.txt
+            bridge/requirements-dev.txt
 
-      - name: Install KaTrain
+      - name: Install KaTrain and pytest
         # katrain tire kivy, qui sur Linux veut des en-têtes SDL2 pour se compiler.
         # Le pont ne l'importe jamais — il a son propre shim — mais pip, lui, résout
-        # la dépendance déclarée.
+        # la dépendance déclarée. requirements-dev.txt et non requirements.txt :
+        # celui-ci ne porte que ce qui part dans le bundle, et pytest n'y est pas.
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq libsdl2-dev libsdl2-image-dev \
             libsdl2-mixer-dev libsdl2-ttf-dev
-          pip install --quiet -r bridge/requirements.txt
+          pip install --quiet -r bridge/requirements-dev.txt
 
       - run: python -m pytest bridge/tests -q
 
