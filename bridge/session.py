@@ -137,13 +137,19 @@ class BridgeSession(KaTrainHost):
         """Reproduces the core's own trigger condition for an AI move.
 
         Mirrors katrain/__main__.py: the AI only moves once the current node's
-        analysis is complete, it is the AI's turn, nothing has been played on top,
-        and the game has not ended.
+        analysis is complete, it is the AI's turn, and the game has not ended.
+
+        One condition is left out: KaTrain also waits for the node to have no
+        children, so the AI keeps still while the player browses the tree. Nothing
+        browses here — `_ai_pending` already says the AI owes a move — and the tree
+        keeps what an undo took back: a move replayed after an undo, or a count
+        called off after the AI's pass, lands on a node with children, and the AI
+        would wait forever.
         """
         node = self.game.current_node
         if not self._ai_pending:
             return
-        if not (node.analysis_complete and not node.children and not self.game.end_result):
+        if not (node.analysis_complete and not self.game.end_result):
             return
         if not self.players_info[node.next_player].ai:
             return
