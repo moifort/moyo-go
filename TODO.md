@@ -57,6 +57,26 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   turn to mush at the smallest sizes; a hand-drawn 16 and 32 px variant, with the
   grid dropped entirely, would sharpen the Finder list view.
 
+- **One window, and it can be closed.** Moyo moved to a single `Window` so that a
+  record opened from the Finder reaches the game already running instead of a new
+  window with its own KataGo. Closing that window leaves the engine running and the
+  game intact; a record opened from the Finder while it is closed waits in
+  `RecordInbox` until the window comes back. Whether macOS brings it back on its own
+  for a document has not been checked.
+
+- **The new-game sheet is the only way out of a finished game.** After a
+  resignation or an accepted count, undo is refused by the bridge as well as by the
+  app. Taking back the last moves of a lost game to try again would be a gift to the
+  player, but it means reopening a result already written into the record.
+
+- **An unexplained crash in the macOS 27 menu bar.** On 10 October 2026, opening
+  records from the Finder crashed Moyo five times on the main thread, inside
+  `MenuBarClientCore` checking the main executor — no frame of Moyo above the run
+  loop. A minimal SwiftUI app with the same delegate, menus and focused value did
+  not reproduce it, and neither did Moyo itself afterwards, before or after the
+  window and session fixes. If it returns, the crash reports in
+  `~/Library/Logs/DiagnosticReports` are the place to start.
+
 ## Release
 
 - **Nothing past the gate has ever run.** `release.sh` is exercised up to and
@@ -95,6 +115,11 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   67 MB to 53 MB, still the second largest item in the bundle after the models. Freezing
   the standard library into a zip, or dropping unused encodings and `lib-dynload`
   modules, should claw back more.
+
+- **The development install is not a build.** `install-dev-app.sh` puts a Moyo in
+  `~/Applications` that runs the repository's bridge and Homebrew's KataGo, with no
+  sandbox. It is what opens SGF files on this Mac until a real bundle is built; it
+  proves nothing about the sandbox, which only `build-app.sh` and the gate do.
 
 ## Out of scope
 
