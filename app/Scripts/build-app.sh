@@ -100,7 +100,9 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <array><dict>
         <key>CFBundleTypeName</key><string>Partie de go (SGF)</string>
         <key>CFBundleTypeRole</key><string>Editor</string>
-        <key>LSHandlerRank</key><string>Alternate</string>
+        <!-- Default : un double-clic sur un .sgf ouvre Moyo, tant que l'utilisateur
+             n'a pas choisi une autre application dans le Finder. -->
+        <key>LSHandlerRank</key><string>Default</string>
         <key>LSItemContentTypes</key><array><string>org.smart-game-format.sgf</string></array>
     </dict></array>
 </dict>

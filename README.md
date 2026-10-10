@@ -27,9 +27,10 @@ scoring.
 
 ## Read a game record
 
-Open an SGF and walk it with the arrow keys. At any position you can see the move
-KataGo would have played, and hold Option with the arrows to unroll the engine's
-whole continuation before stepping back into the real game.
+Double-click an SGF, drop it on the board, or open it from the File menu, and walk
+it with the arrow keys or the buttons under the sidebar. At any position you can see
+the move KataGo would have played, and hold Option with the arrows to unroll the
+engine's whole continuation before stepping back into the real game.
 
 ## Keep a game
 

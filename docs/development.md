@@ -44,6 +44,16 @@ phase that fails:
 
 ## Develop
 
+To play from the Finder — a double-click on an `.sgf` opens Moyo — without building
+the full bundle:
+
+```bash
+./app/Scripts/install-dev-app.sh
+```
+
+It installs `~/Applications/Moyo.app`, which runs the bridge from this repository
+and KataGo from Homebrew, and registers it for SGF files.
+
 `MOYO_DEV_ROOT` runs the bridge from the repository's virtual environment
 instead of the bundle, and leaves `~/.katrain/config.json` in charge of the
 engine — so a game played this way behaves exactly like KaTrain.
