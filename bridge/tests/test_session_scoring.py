@@ -205,3 +205,21 @@ class TestAIStrategies:
         assert session._ai_color == "B"
         assert session.players_info["B"].ai
         assert session.players_info["W"].human
+
+
+class TestResigning:
+    """The result of a resignation names the winner, which is always the AI.
+
+    Read off the game rather than the published state: a resignation is recorded on
+    the node, which is what goes into a saved record.
+    """
+
+    def test_resigning_on_your_own_turn_hands_the_game_over(self, session):
+        session.resign(2)
+        assert session.game.end_result == "W+R"
+
+    def test_resigning_while_the_ai_thinks_still_hands_it_over(self, session):
+        session.new_game(9, 9, 6.5, "japanese", "W", "ai:human", {})
+        # Black, the AI, is to move: the player gives up before it has answered.
+        session.resign(10)
+        assert session.game.end_result == "B+R"

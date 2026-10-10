@@ -333,7 +333,9 @@ class BridgeSession(KaTrainHost):
         self._require_game()
         self._refuse_in_review()
         self._ai_pending = False
-        self.game.current_node.end_state = f"{self.game.current_node.next_player}+R"
+        # Only the player can resign, and may do so while the AI is thinking: the
+        # winner is the AI, whoever happens to be to move. The result names the winner.
+        self.game.current_node.end_state = f"{self._ai_color}+R"
         self._writer.emit("thinking", None, value=False)
         self._emit_state(command_id)
 
