@@ -205,6 +205,15 @@ public struct GameState: Codable, Sendable {
 
     public var isHumanTurn: Bool { status == .playing && toPlay == humanColor }
 
+    /// Who won, when the game ended on a resignation rather than a count.
+    ///
+    /// Read off the result the bridge sends, in SGF's own form: `W+R` is White
+    /// winning by resignation.
+    public var winnerByResignation: PlayerColor? {
+        guard status == .finished, let result, result.hasSuffix("+R") else { return nil }
+        return PlayerColor(rawValue: String(result.prefix(1)))
+    }
+
     /// Points the player can act on: play a stone, or mark a group dead.
     ///
     /// A record under review accepts none: it is read, not played on.

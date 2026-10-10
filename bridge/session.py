@@ -167,7 +167,13 @@ class BridgeSession(KaTrainHost):
             self._emit_review_state(command_id)
             return
         result = self.game.current_node.end_state if self._status == "finished" else None
-        counted = self._count() if self._status in ("scoring", "finished") else None
+        # A resigned game has nothing to count: the stones on the board were never
+        # agreed on, and a territory table would contradict the result above it.
+        counted = (
+            self._count()
+            if self._status == "scoring" or (self._status == "finished" and not self._ended_by_resignation())
+            else None
+        )
         if counted is not None and result is None and self._status == "finished":
             result = counted["result"]
         self._writer.emit(
@@ -199,6 +205,9 @@ class BridgeSession(KaTrainHost):
             captures=captures,
             rules=str(self.game.root.ruleset or "japanese"),
         )
+
+    def _ended_by_resignation(self) -> bool:
+        return str(self.game.current_node.end_state or "").endswith("+R")
 
     def _two_passes_played(self) -> bool:
         node = self.game.current_node
@@ -314,9 +323,14 @@ class BridgeSession(KaTrainHost):
             self._maybe_play_ai_move()
 
     def undo(self, command_id):
-        """Steps back until it is the human's turn again, two moves in the usual case."""
+        """Steps back until it is the human's turn again, two moves in the usual case.
+
+        Not once the game is over: a resignation or an accepted count is final, and
+        the next game starts from the new-game sheet.
+        """
         self._require_game()
         self._refuse_in_review()
+        self._refuse_when_over()
         self._status = "playing"
         self._dead = set()
         self._ai_pending = False
@@ -331,8 +345,13 @@ class BridgeSession(KaTrainHost):
         self._emit_state(command_id)
 
     def resign(self, command_id):
+        """Ends the game on the spot: no count, and nothing more is played."""
         self._require_game()
         self._refuse_in_review()
+        if self._status != "playing":
+            raise CommandError("not_playing", "the game is over")
+        self._status = "finished"
+        self._dead = set()
         self._ai_pending = False
         # Only the player can resign, and may do so while the AI is thinking: the
         # winner is the AI, whoever happens to be to move. The result names the winner.
@@ -544,6 +563,10 @@ class BridgeSession(KaTrainHost):
     def _require_review(self) -> None:
         if self._status != "review":
             raise CommandError("not_reviewing", "aucune partie n'est en cours de revue")
+
+    def _refuse_when_over(self) -> None:
+        if self._status == "finished":
+            raise CommandError("not_playing", "the game is over")
 
     def _refuse_in_review(self) -> None:
         if self._status == "review":

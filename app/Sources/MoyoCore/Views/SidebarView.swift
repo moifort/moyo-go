@@ -17,7 +17,11 @@ public struct SidebarView: View {
                     NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
                 }
             } else if let state = session.state {
-                turnRow(state)
+                if let winner = state.winnerByResignation {
+                    resignationRow(winner)
+                } else {
+                    turnRow(state)
+                }
                 divider
                 scoreSection(state)
                 divider
@@ -27,7 +31,17 @@ public struct SidebarView: View {
                 divider
                 phoneSection
                 Spacer(minLength: 0)
-                actions(state)
+                if state.status == .finished {
+                    // Nothing left to play: the only way on is the next game.
+                    Button("Nouvelle partie") {
+                        NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                } else {
+                    actions(state)
+                }
             } else {
                 Text("Préparation de la partie…")
                     .font(.system(size: 13))
@@ -52,6 +66,21 @@ public struct SidebarView: View {
             Text(Theme.name(state.toPlay))
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.primaryText)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Takes the place of the turn once a player has given up: the stone says who
+    /// won, the words say how.
+    private func resignationRow(_ winner: PlayerColor) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Theme.stone(winner))
+                .frame(width: 13, height: 13)
+            Text("\(Theme.name(winner)) gagne par abandon")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.primaryText)
+                .lineLimit(1)
             Spacer(minLength: 0)
         }
     }

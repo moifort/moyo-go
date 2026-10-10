@@ -208,11 +208,7 @@ class TestAIStrategies:
 
 
 class TestResigning:
-    """The result of a resignation names the winner, which is always the AI.
-
-    Read off the game rather than the published state: a resignation is recorded on
-    the node, which is what goes into a saved record.
-    """
+    """A resignation ends the game, and its result names the winner: always the AI."""
 
     def test_resigning_on_your_own_turn_hands_the_game_over(self, session):
         session.resign(2)
@@ -223,3 +219,34 @@ class TestResigning:
         # Black, the AI, is to move: the player gives up before it has answered.
         session.resign(10)
         assert session.game.end_result == "B+R"
+
+    def test_resigning_ends_the_game_on_screen(self, session):
+        session.resign(2)
+        state = last_state(session)
+        assert state["status"] == "finished"
+        assert state["result"] == "W+R"
+
+    def test_a_resigned_game_is_not_counted(self, session):
+        session.resign(2)
+        assert "scoring" not in last_state(session)
+
+    @pytest.mark.parametrize("action", ["play", "pass", "resign", "undo"])
+    def test_nothing_more_is_played_after_resigning(self, session, action):
+        session.resign(2)
+        attempt = {
+            "play": lambda: session.play(3, 4, 4),
+            "pass": lambda: session.play_pass(3),
+            "resign": lambda: session.resign(3),
+            "undo": lambda: session.undo(3),
+        }[action]
+        with pytest.raises(CommandError) as exc:
+            attempt()
+        assert exc.value.code == "not_playing"
+        assert session.game.end_result == "W+R"
+
+    def test_a_new_game_starts_afresh(self, session):
+        session.resign(2)
+        session.new_game(3, 9, 6.5, "japanese", "B", "ai:human", {})
+        state = last_state(session)
+        assert state["status"] == "playing"
+        assert state["result"] is None
