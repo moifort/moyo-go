@@ -109,7 +109,8 @@ Ce qui ne passe pas le troisième filtre attend. Si l'attente dure, l'app alerte
 ### Calibrage au doigt
 
 L'utilisateur touche les quatre coins de la grille (intersections extrêmes,
-pas le bord du bois) sur l'image figée, avec une loupe pour viser précisément.
+pas le bord du bois) sur l'image en direct, avec une loupe pour viser
+précisément.
 Chaque toucher est ensuite affiné automatiquement : recherche, dans un petit
 voisinage, du point qui maximise le croisement de deux lignes sombres. Les
 pierres posées sur un coin (fréquent avec un handicap) désactivent
@@ -137,8 +138,10 @@ Pour chaque intersection, deux zones définies dans le plan du plateau et
 projetées dans l'image par l'homographie :
 
 - **zone pierre** : un disque de rayon 0,35 espacement, dont le centre est
-  décalé vers le haut de l'image de `stoneLift` espacements pour suivre le
-  dessus de la pierre (voir « Hauteur des pierres ») ;
+  décalé de `stoneLift` espacements dans la direction qui s'éloigne de la
+  caméra, pour suivre le dessus de la pierre (voir « Hauteur des pierres »).
+  Cette direction se déduit de l'homographie : du bord où l'espacement
+  projeté est le plus grand vers celui où il est le plus petit ;
 - **zone bois** : les quatre centres de cases adjacents, disques de rayon
   0,15 espacement, dont on garde la médiane de luminosité.
 
@@ -153,7 +156,8 @@ Mesures : luminosité moyenne de la zone pierre, luminosité du bois local,
 Ces seuils sont des points de départ à régler sur les photos de référence.
 L'écart-type sert à écarter les cas ambigus (une main a un relief, pas une
 pierre) : si l'écart-type dépasse un seuil, l'intersection est « illisible »
-et n'autorise aucun changement d'état cette image-là.
+et compte comme une lecture différente pour le filtre temporel : son compteur
+repart de zéro.
 
 ### Hauteur des pierres
 
@@ -179,10 +183,13 @@ suicide interdit. Il expose une seule fonction :
 
     explain(from: Position, to: Position, toPlay: Stone) -> [Move]?
 
-qui rend la suite de coups (0, 1 ou 2, avec passes implicites) qui mène
-exactement de `from` à `to`, ou nil. Les captures sont appliquées par le moteur
-et doivent correspondre aux pierres disparues. Deux pierres apparues de la même
-couleur sans passe visible ne s'expliquent pas.
+qui rend la suite de coups qui mène exactement de `from` à `to`, ou nil.
+Au plus deux pierres posées, en alternance à partir de `toPlay`. Une passe
+implicite est tolérée une seule fois, juste avant une pose : une pierre blanche
+qui apparaît quand c'est à noir de jouer s'explique par « noir passe, blanc
+joue » et s'écrit `;B[];W[..]`. Deux pierres de la même couleur demanderaient
+deux passes : nil. Les captures sont appliquées par le moteur et doivent
+correspondre exactement aux pierres disparues.
 
 À chaque image, l'app construit la position candidate (état accepté + lectures
 candidates) et appelle `explain`. Si la réponse n'est pas nil, les coups sont
@@ -205,8 +212,10 @@ plateau tel qu'elle le lit, les intersections en désaccord en orange, et deux
 boutons :
 
 - « C'est bon » : l'état lu devient l'état accepté, les pierres ajoutées sont
-  enregistrées comme coups dans l'ordre d'alternance, les pierres retirées
-  comme captures ou retraits manuels (`AE` en SGF) ;
+  enregistrées comme coups dans l'ordre d'alternance (et, à couleur égale, par
+  coordonnées croissantes), chaque coup ainsi forcé portant un commentaire SGF
+  `C[ordre incertain]` pour qu'on le retrouve à la relecture ; les pierres
+  retirées sans capture s'écrivent en retrait manuel (`AE`) ;
 - « Recalibrer » : retour au calibrage, la partie enregistrée est conservée.
 
 Un heurt du téléphone est détecté par le même mécanisme : la grille ne
@@ -223,8 +232,9 @@ coup en cours.
       KM[6.5]
       ;B[pd];W[dp]...)
 
-Avec handicap : `HA[n]`, `AB[..][..]`, `KM[0.5]`, blanc joue en premier. Les
-pierres blanches présentes au départ vont dans `AW`. Un retrait manuel validé
+Avec handicap : `HA[n]`, `AB[..][..]`, `KM[0.5]`, blanc joue en premier. Si
+des pierres des deux couleurs sont présentes au départ (reprise d'une
+position), elles vont dans `AB` et `AW`, sans `HA`, et noir joue en premier. Un retrait manuel validé
 par « C'est bon » s'écrit `AE[..]` dans le nœud du coup suivant.
 
 « Fin de partie » ajoute rien de plus, ferme la partie et ouvre la feuille de
@@ -234,14 +244,16 @@ partage. La liste des parties passées est accessible depuis l'écran d'accueil.
 
 1. **Accueil** : bouton « Nouvelle partie », liste des SGF enregistrés
    (partage, suppression).
-2. **Calibrage** : image caméra figée, consigne « Touche le coin haut-gauche
-   de la grille », loupe sous le doigt, quatre repères numérotés, puis grille
-   projetée et pierres lues, indicateur de qualité, boutons « Reprendre les
-   coins » et « Commencer ».
+2. **Calibrage** : image caméra en direct (le téléphone est déjà fixe),
+   consigne « Touche le coin haut-gauche de la grille », loupe sous le doigt,
+   quatre repères numérotés, puis grille projetée et pierres lues, indicateur
+   de qualité, boutons « Reprendre les coins » et « Commencer ».
 3. **Partie** : image caméra en direct, grille, pierres acceptées (disques
-   pleins) et dernier coup marqué, compteur de coups, bandeau d'état, boutons
-   « Annuler le dernier coup » et « Fin de partie ». Le bandeau « Je ne
-   comprends pas la position » avec ses deux boutons apparaît par-dessus.
+   pleins) et dernier coup marqué, compteur de coups, bandeau d'état, bouton
+   « Fin de partie ». Pas de bouton d'annulation : un coup repris sur le
+   plateau est détecté comme retour en arrière, et un désaccord passe par le
+   bandeau « Je ne comprends pas la position », qui apparaît par-dessus avec
+   ses deux boutons.
 
 Textes en français. Portrait et paysage acceptés : le téléphone est posé comme
 il tombe.
@@ -302,7 +314,8 @@ point, zéro à terme.
 - Les valeurs exactes des seuils et des rayons, à régler sur les fixtures.
 - La méthode d'estimation de `stoneLift` sans pierre au calibrage.
 - Le format de stockage du calibrage à côté du SGF (utile pour reprendre une
-  partie après un crash de l'app).
+  partie après un crash de l'app) et le format des fichiers annexes des
+  fixtures (coins et position attendue ; un JSON par photo convient).
 - La mise en page précise des écrans, dans l'esprit sobre des autres apps de
   Thibaut.
 
