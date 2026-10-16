@@ -1,0 +1,33 @@
+name: Kifu
+options:
+  bundleIdPrefix: com.thibautmottet
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+packages:
+  KifuCore:
+    path: ../KifuCore
+targets:
+  Kifu:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: KifuCore
+        product: KifuCore
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Kifu
+        NSCameraUsageDescription: "La caméra regarde le plateau pour noter les coups de la partie."
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UILaunchScreen: {}
+    settings:
+      base:
+        SWIFT_VERSION: "5.10"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 46C337T7YN
+        PRODUCT_BUNDLE_IDENTIFIER: com.thibautmottet.Kifu
