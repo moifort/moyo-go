@@ -11,8 +11,9 @@ struct SyntheticScene {
     var white = 240.0
     var lineWidth = 0.05          // in spacings
     var stoneRadius = 0.47        // in spacings
-    /// Shift of stone tops away from the camera, in spacings (simulates stone height).
-    var stoneLift = 0.0
+    /// Stone thickness in spacings: the stone body is drawn shifted away from the camera by the
+    /// same rule the reader uses, so the scene and the reader agree by construction.
+    var stoneHeight = 0.0
     var stones: [Intersection: Stone] = [:]
     /// Image-space lighting: multiplier as a function of (x, y) in pixels.
     var lighting: (Double, Double) -> Double = { _, _ in 1 }
@@ -47,6 +48,12 @@ struct SyntheticScene {
         let toImage = Homography(from: src, to: corners)!
         let toBoard = toImage.inverted()!
         let away = awayFromCamera
+        var lifts: [Intersection: Double] = [:]
+        if stoneHeight > 0 {
+            var settings = ReaderSettings(); settings.stoneHeight = stoneHeight
+            let reader = IntersectionReader(geometry: BoardGeometry(calibration: calibration)!, settings: settings)
+            for i in stones.keys { lifts[i] = reader.stoneLift(at: i) }
+        }
         var pixels = [UInt8](repeating: 0, count: width * height)
         let offsets = [-0.25, 0.25]
         for y in 0..<height {
@@ -55,7 +62,7 @@ struct SyntheticScene {
                 for oy in offsets {
                     for ox in offsets {
                         let b = toBoard.apply(Point(x: Double(x) + ox, y: Double(y) + oy))
-                        v += value(atBoard: b, away: away)
+                        v += value(atBoard: b, away: away, lifts: lifts)
                     }
                 }
                 v = v / 4 * lighting(Double(x), Double(y))
@@ -65,16 +72,17 @@ struct SyntheticScene {
         return GrayImage(width: width, height: height, pixels: pixels)
     }
 
-    private func value(atBoard b: Point, away: (Double, Double)) -> Double {
+    private func value(atBoard b: Point, away: (Double, Double), lifts: [Intersection: Double]) -> Double {
         let n = Double(lines - 1)
         // Outside the wood (beyond one spacing past the grid): dark table.
         if b.x < -1 || b.y < -1 || b.x > n + 1 || b.y > n + 1 { return 60 }
         // A stone covers at most the cells around its (possibly lifted) centre.
-        let sx = b.x - away.0 * stoneLift, sy = b.y - away.1 * stoneLift
-        for row in Int(sy.rounded(.down))...Int(sy.rounded(.up)) {
-            for col in Int(sx.rounded(.down))...Int(sx.rounded(.up)) {
-                guard let stone = stones[Intersection(col: col, row: row)] else { continue }
-                let dx = sx - Double(col), dy = sy - Double(row)
+        for row in Int((b.y - 1).rounded(.down))...Int((b.y + 1).rounded(.up)) {
+            for col in Int((b.x - 1).rounded(.down))...Int((b.x + 1).rounded(.up)) {
+                let i = Intersection(col: col, row: row)
+                guard let stone = stones[i] else { continue }
+                let lift = lifts[i] ?? 0
+                let dx = b.x - (Double(col) + away.0 * lift), dy = b.y - (Double(row) + away.1 * lift)
                 if dx * dx + dy * dy <= stoneRadius * stoneRadius { return stone == .black ? black : white }
             }
         }

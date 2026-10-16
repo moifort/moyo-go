@@ -20,9 +20,9 @@ final class IntersectionReaderTests: XCTestCase {
         return p
     }
 
-    private func reader(for scene: SyntheticScene, lift: Double = 0) -> IntersectionReader {
+    private func reader(for scene: SyntheticScene, height: Double = 0) -> IntersectionReader {
         var settings = ReaderSettings()
-        settings.stoneLift = lift
+        settings.stoneHeight = height
         return IntersectionReader(geometry: BoardGeometry(calibration: scene.calibration)!, settings: settings)
     }
 
@@ -40,12 +40,20 @@ final class IntersectionReaderTests: XCTestCase {
         XCTAssertEqual(readings.position, expected(stones))
     }
 
-    func testLiftedStonesAreReadWithMatchingLift() {
+    func testThickStonesAreReadWhereTheirTopsAppear() {
         var scene = SyntheticScene()
         scene.stones = stones
-        scene.stoneLift = 0.3
-        let readings = reader(for: scene, lift: 0.3).read(scene.render(), previous: nil)
+        scene.stoneHeight = 0.35
+        let readings = reader(for: scene, height: 0.35).read(scene.render(), previous: nil)
         XCTAssertEqual(readings.position, expected(stones))
+    }
+
+    func testStoneLiftGrowsTowardsTheFarEdge() {
+        let r = reader(for: SyntheticScene(), height: 0.35)
+        let near = r.stoneLift(at: at(9, 18)), far = r.stoneLift(at: at(9, 0))
+        XCTAssertGreaterThan(far, near)
+        XCTAssertGreaterThanOrEqual(near, 0)
+        XCTAssertLessThan(far, 1.0)
     }
 
     func testGradientAndHardShadowDoNotChangeTheReading() {

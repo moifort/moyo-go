@@ -121,4 +121,55 @@ public struct BoardGeometry: Sendable {
             return isCrossing ? best : taps[k]
         }
     }
+
+    // MARK: Global grid fit
+
+    /// Contrast of every grid line: darkness on the line minus darkness a third of a spacing
+    /// to either side, so broad dark areas (shadows, table, board edge) do not attract the fit.
+    static func gridScore(_ corners: [Point], lines: Int, in image: GrayImage, samplesPerLine: Int = 40) -> Double {
+        guard let g = BoardGeometry(calibration: Calibration(lines: lines, corners: corners)) else { return -.infinity }
+        let n = Double(lines - 1)
+        let side = 0.33
+        func darkness(_ x: Double, _ y: Double) -> Double {
+            let p = g.imagePoint(boardX: x, boardY: y)
+            return 255 - image.sample(x: p.x, y: p.y)
+        }
+        var sum = 0.0
+        for k in 0..<lines {
+            let t = Double(k)
+            for s in 0..<samplesPerLine {
+                let u = n * (Double(s) + 0.5) / Double(samplesPerLine)
+                sum += darkness(t, u) - (darkness(t - side, u) + darkness(t + side, u)) / 2
+                sum += darkness(u, t) - (darkness(u, t - side) + darkness(u, t + side)) / 2
+            }
+        }
+        return sum / Double(2 * lines * samplesPerLine)
+    }
+
+    /// Moves the four corners, within `radius` pixels each, to maximise the darkness along all
+    /// grid lines. Robust to stones on the corners since every line contributes.
+    public static func fitCorners(_ taps: [Point], lines: Int, in image: GrayImage, radius: Int) -> [Point] {
+        guard taps.count == 4 else { return taps }
+        var best = taps
+        var bestScore = gridScore(best, lines: lines, in: image)
+        var step = Double(max(radius / 2, 1))
+        while step >= 0.5 {
+            var improved = true
+            while improved {
+                improved = false
+                for k in 0..<4 {
+                    for (dx, dy) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
+                        var candidate = best
+                        candidate[k] = Point(x: best[k].x + dx, y: best[k].y + dy)
+                        guard abs(candidate[k].x - taps[k].x) <= Double(radius),
+                              abs(candidate[k].y - taps[k].y) <= Double(radius) else { continue }
+                        let score = gridScore(candidate, lines: lines, in: image)
+                        if score > bestScore + 1e-9 { bestScore = score; best = candidate; improved = true }
+                    }
+                }
+            }
+            step /= 2
+        }
+        return best
+    }
 }

@@ -5,8 +5,10 @@ import ImageIO
 
 /// Real photos: `name.jpg` next to `name.json` holding the tapped corners and the expected position.
 ///
-///     { "corners": [[x, y], [x, y], [x, y], [x, y]], "lines": 19, "stoneLift": 0.3,
-///       "expected": ["...", "..."] }
+///     { "corners": [[x, y], [x, y], [x, y], [x, y]], "lines": 19, "stoneHeight": 0,
+///       "expected": ["...", "..."], "ignore": [[col, row], ...] }
+///
+/// `ignore` lists intersections whose truth is unknown (stones dropped off-grid).
 ///
 /// Corners are in pixels of the photo as stored (origin top-left), order top-left, top-right,
 /// bottom-right, bottom-left of the grid as seen in the photo.
@@ -14,8 +16,9 @@ final class FixtureTests: XCTestCase {
     struct Fixture: Decodable {
         let corners: [[Double]]
         let lines: Int?
-        let stoneLift: Double?
+        let stoneHeight: Double?
         let expected: [String]
+        let ignore: [[Int]]?
     }
 
     func testAllFixturesReadCorrectly() throws {
@@ -43,12 +46,13 @@ final class FixtureTests: XCTestCase {
                 failures.append("\(name): degenerate corners"); continue
             }
             var settings = ReaderSettings()
-            settings.stoneLift = fixture.stoneLift ?? 0
+            settings.stoneHeight = fixture.stoneHeight ?? 0
             let readings = IntersectionReader(geometry: geometry, settings: settings).read(image, previous: nil)
             let expected = Position(parsing: fixture.expected.joined(separator: "\n"))
-            if readings.position != expected {
-                let wrong = expected.diff(to: readings.position).keys.sorted().map(\.description).joined(separator: " ")
-                failures.append("\(name): wrong at \(wrong)\nexpected\n\(expected)\nread\n\(readings.position)")
+            let ignored = Set((fixture.ignore ?? []).map { Intersection(col: $0[0], row: $0[1]) })
+            let wrong = expected.diff(to: readings.position).keys.filter { !ignored.contains($0) }.sorted()
+            if !wrong.isEmpty {
+                failures.append("\(name): wrong at \(wrong.map(\.description).joined(separator: " "))\nexpected\n\(expected)\nread\n\(readings.position)")
             }
         }
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n\n"))

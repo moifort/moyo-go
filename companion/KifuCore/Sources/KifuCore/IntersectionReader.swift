@@ -1,12 +1,16 @@
 import Foundation
 
 public struct ReaderSettings: Sendable, Equatable, Codable {
-    /// Radius of the measuring disk at an intersection, in line spacings.
-    public var stoneRadius = 0.35
+    /// Radius of the measuring disk at an intersection, in line spacings. Small enough that a
+    /// stone's cast shadow on the next intersection does not fill the disk.
+    public var stoneRadius = 0.30
     /// Radius of the wood disks at the four adjacent cell centres, in line spacings.
     public var woodRadius = 0.15
-    /// Shift of the stone disk away from the camera, in line spacings, to follow the stone's top.
-    public var stoneLift = 0.0
+    /// Stone thickness as a fraction of the line spacing, used with the local viewing angle to
+    /// follow a stone's top away from the camera. Zero by default: on the reference photo the
+    /// cast shadows fall towards the camera and the far rows are so compressed that lifting the
+    /// disk reads the background beyond the board. Kept for tuning on more photos.
+    public var stoneHeight = 0.0
     /// Black when stone / wood is below this.
     public var blackBelow = 0.55
     /// White when stone / wood is above this, or when the headroom fraction is above `whiteHeadroom`.
@@ -72,10 +76,29 @@ public struct IntersectionReader: Sendable {
         public var headroom: Double { (stone - wood) / max(255 - wood, 1) }
     }
 
+    /// How far, in spacings, the top of a stone at `i` appears shifted away from the camera.
+    /// A stone of height h seen at elevation θ has its top projected h / tan θ further away;
+    /// the visible body is centred about half of that.
+    public func stoneLift(at i: Intersection) -> Double {
+        guard settings.stoneHeight > 0 else { return 0 }
+        let away = geometry.awayFromCamera
+        let here = geometry.imagePoint(boardX: Double(i.col), boardY: Double(i.row))
+        let along = geometry.imagePoint(boardX: Double(i.col) + away.0, boardY: Double(i.row) + away.1)
+        let across = geometry.imagePoint(boardX: Double(i.col) + away.1, boardY: Double(i.row) + away.0)
+        let depth = BoardGeometry.distance(here, along)
+        let width = BoardGeometry.distance(here, across)
+        guard width > 0 else { return 0 }
+        let sine = min(depth / width, 1)
+        let cosine = (1 - sine * sine).squareRoot()
+        guard sine > 0.05 else { return 0 }
+        return settings.stoneHeight / 2 * cosine / sine
+    }
+
     public func measure(_ image: GrayImage, at i: Intersection) -> Measure {
         let away = geometry.awayFromCamera
-        let cx = Double(i.col) + away.0 * settings.stoneLift
-        let cy = Double(i.row) + away.1 * settings.stoneLift
+        let lift = stoneLift(at: i)
+        let cx = Double(i.col) + away.0 * lift
+        let cy = Double(i.row) + away.1 * lift
         let samples = disk(image, cx: cx, cy: cy, radius: settings.stoneRadius)
         let mean = samples.reduce(0, +) / Double(samples.count)
         let variance = samples.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(samples.count)

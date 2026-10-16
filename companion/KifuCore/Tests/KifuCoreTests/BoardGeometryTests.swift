@@ -57,3 +57,22 @@ final class BoardGeometryTests: XCTestCase {
         XCTAssertEqual(refined[3].y, taps[3].y, accuracy: 1e-9)
     }
 }
+
+final class GridFitTests: XCTestCase {
+    private let corners = SyntheticScene.grazing()
+
+    func testFitCornersRecoversTheGridFromRoughTaps() {
+        var scene = SyntheticScene()
+        scene.stones = [Intersection(col: 0, row: 0): .black, Intersection(col: 18, row: 18): .white,
+                        Intersection(col: 9, row: 9): .black, Intersection(col: 3, row: 15): .white]
+        let image = scene.render()
+        let offsets = [Point(x: 7, y: -5), Point(x: -6, y: 6), Point(x: 5, y: 7), Point(x: -7, y: -4)]
+        let taps = zip(corners, offsets).map { Point(x: $0.x + $1.x, y: $0.y + $1.y) }
+        let fitted = BoardGeometry.fitCorners(taps, lines: 19, in: image, radius: 10)
+        // Two pixels at the near edge is a twentieth of a spacing there.
+        for (f, c) in zip(fitted, corners) {
+            XCTAssertEqual(f.x, c.x, accuracy: 2.0)
+            XCTAssertEqual(f.y, c.y, accuracy: 2.0)
+        }
+    }
+}
