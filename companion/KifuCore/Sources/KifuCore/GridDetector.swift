@@ -54,8 +54,9 @@ public enum GridDetector {
         let rect = GrayImage(width: size, height: size, pixels: pixels)
 
         let seed = seeded ? Comb(first: margin * Double(cell), last: (margin + n) * Double(cell), teeth: lines, perspective: 0) : nil
-        guard let vertical = outerLines(in: rect, vertical: true, lines: lines, seed: seed),
-              let horizontal = outerLines(in: rect, vertical: false, lines: lines, seed: seed) else { return nil }
+        guard let foundV = outerLines(in: rect, vertical: true, lines: lines, seed: seed),
+              let foundH = outerLines(in: rect, vertical: false, lines: lines, seed: seed) else { return nil }
+        let (vertical, horizontal) = bestAlignment(in: rect, vertical: foundV, horizontal: foundH)
 
         // Rectified corners: intersections of outer vertical lines (x = a + b·y) and horizontal ones (y = c + d·x).
         func intersect(_ xl: (a: Double, b: Double), _ yl: (a: Double, b: Double)) -> Point {
@@ -69,13 +70,35 @@ public enum GridDetector {
         return corners
     }
 
-    /// The first and last line of one direction as straight lines in rectified coordinates:
-    /// `x = a + b·y` for vertical lines, `y = a + b·x` for horizontal ones.
-    static func outerLines(in rect: GrayImage, vertical: Bool, lines: Int, seed: Comb? = nil) -> (first: (a: Double, b: Double), last: (a: Double, b: Double))? {
+    struct Direction {
+        var combs: [Comb]
+        var centres: [Double]
+        /// First and last line as straight lines: `x = a + b·y` for vertical lines, `y = a + b·x` for horizontal ones.
+        var first: (a: Double, b: Double)
+        var last: (a: Double, b: Double)
+
+        /// The same grid moved by `teeth` lines along the profile (teeth extrapolated by the combs).
+        func shifted(by teeth: Int) -> Direction {
+            var out = self
+            out.combs = combs.map { c in
+                var d = c
+                d.first = c.position(teeth)
+                d.last = c.position(c.teeth - 1 + teeth)
+                return d
+            }
+            out.first = fitLine(zip(out.combs, centres).map { ($0.first, $1) })
+            out.last = fitLine(zip(out.combs, centres).map { ($0.last, $1) })
+            return out
+        }
+    }
+
+    /// The first and last line of one direction, fitted band by band.
+    static func outerLines(in rect: GrayImage, vertical: Bool, lines: Int, seed: Comb? = nil) -> Direction? {
         let size = rect.width
         let bandSize = size / bands
         var firsts: [(Double, Double)] = [], lasts: [(Double, Double)] = []
         var spacings: [Double] = []
+        var combs: [Comb] = [], centres: [Double] = []
         for b in 0..<bands {
             let range = (b * bandSize)..<min(size, (b + 1) * bandSize)
             if trace != nil {
@@ -91,12 +114,51 @@ public enum GridDetector {
             firsts.append((comb.first, centre))
             lasts.append((comb.last, centre))
             spacings.append(comb.spacing)
+            combs.append(comb); centres.append(centre)
         }
         guard let smin = spacings.min(), let smax = spacings.max(), smax - smin <= 0.15 * smin else {
             trace?("\(vertical ? "V" : "H"): band spacings disagree \(spacings)")
             return nil
         }
-        return (fitLine(firsts), fitLine(lasts))
+        return Direction(combs: combs, centres: centres, first: fitLine(firsts), last: fitLine(lasts))
+    }
+
+    /// Mean thin-line response of the lines running *across* the given strip of the profile axis.
+    /// For horizontal strips (vertical == false) this measures the vertical lines inside them.
+    static func crossingEnergy(in rect: GrayImage, verticalStrips: Bool, from: Double, to: Double) -> Double {
+        let lo = max(0, Int(min(from, to))), hi = min(rect.width - 1, Int(max(from, to)))
+        guard hi > lo + 2 else { return 0 }
+        // Lines across a vertical strip (columns lo..hi) are horizontal: profile them along v.
+        let profile = contrastProfile(rect, vertical: !verticalStrips, across: lo..<(hi + 1)).contrast
+        return profile.reduce(0, +) / Double(profile.count)
+    }
+
+    /// Among the detected grid and its one-line shifts, keeps the one whose perpendicular lines
+    /// fill the first and last cells and stop beyond them: the board's rim or a dark table edge
+    /// can imitate one more line, but nothing crosses it.
+    static func bestAlignment(in rect: GrayImage, vertical: Direction, horizontal: Direction) -> (Direction, Direction) {
+        func structure(_ d: Direction, verticalStrips: Bool) -> Double {
+            // Use the middle band's comb for the strip positions.
+            let c = d.combs[d.combs.count / 2]
+            let inside = crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(0), to: c.position(1))
+                + crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(c.teeth - 2), to: c.position(c.teeth - 1))
+            let outside = crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(-1), to: c.position(0))
+                + crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(c.teeth - 1), to: c.position(c.teeth))
+            return inside - outside
+        }
+        var bestV = vertical, bestH = horizontal
+        var bestScore = -Double.infinity
+        for sv in -1...1 {
+            let v = vertical.shifted(by: sv)
+            let scoreV = structure(v, verticalStrips: true)
+            for sh in -1...1 {
+                let h = horizontal.shifted(by: sh)
+                let score = scoreV + structure(h, verticalStrips: false)
+                if score > bestScore { bestScore = score; bestV = v; bestH = h }
+                if sv != 0 || sh != 0 { trace?(String(format: "  shift v%+d h%+d: %.2f", sv, sh, score)) } else { trace?(String(format: "  shift 0 0: %.2f", score)) }
+            }
+        }
+        return (bestV, bestH)
     }
 
     /// Slopes tried for the lines of a band, in pixels of drift per pixel across the band.
@@ -119,16 +181,17 @@ public enum GridDetector {
         let centre = Double(band.lowerBound + band.upperBound - 1) / 2
         var out = [Double](repeating: 0, count: size)
         var bright = [Double](repeating: 0, count: size)
-        func value(_ along: Double, _ across: Int) -> Double {
-            vertical ? rect.sample(x: along, y: Double(across)) : rect.sample(x: Double(across), y: along)
+        func value(_ along: Double, _ across: Double) -> Double {
+            vertical ? rect.sample(x: along, y: across) : rect.sample(x: across, y: along)
         }
         let rows = Array(stride(from: band.lowerBound, to: band.upperBound, by: 2))
         for i in 0..<size {
             var sum = 0.0, light = 0.0
             for j in rows {
-                let x = Double(i) + shear * (Double(j) - centre)
-                let c = value(x, j)
-                sum += max(0, min(value(x - w, j) - c, value(x + w, j) - c))
+                let y = Double(j)
+                let x = Double(i) + shear * (y - centre)
+                let c = value(x, y)
+                sum += max(0, min(value(x - w, y) - c, value(x + w, y) - c))
                 light += c
             }
             out[i] = sum / Double(rows.count)

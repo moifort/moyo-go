@@ -82,7 +82,9 @@ final class GameSession {
                 return
             }
             // Rough taps give the perspective; the grid itself is found inside that area.
-            guard let corners = GridDetector.detect(roughCorners: taps, lines: Self.lines, in: gray) else {
+            let found = GridDetector.detect(roughCorners: taps, lines: Self.lines, in: gray)
+            CalibrationDump.save(frame: gray, taps: taps, corners: found)
+            guard let corners = found else {
                 Task { @MainActor in self.taps = []; self.calibrationFailed = true }
                 return
             }
@@ -229,7 +231,7 @@ final class GameSession {
         try? text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    static var documents: URL {
+    nonisolated static var documents: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 

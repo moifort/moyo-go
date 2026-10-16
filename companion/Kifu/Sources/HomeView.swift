@@ -44,6 +44,7 @@ struct HomeView: View {
         let dir = GameSession.documents
         let urls = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         games = urls.filter { $0.pathExtension == "sgf" }.sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .filter { !$0.lastPathComponent.hasPrefix(".") }
     }
 
     private func summary(of url: URL) -> String {
