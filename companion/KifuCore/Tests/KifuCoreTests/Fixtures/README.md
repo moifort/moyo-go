@@ -16,6 +16,9 @@ Drop `name.jpg` (or .heic/.png) next to `name.json`, taken with the iPhone on it
   bottom-right, bottom-left of the grid as seen in the photo.
 - `expected`: one string per row, row 0 at the top of the photo; `.` empty, `X` black, `O` white.
 - `ignore` (optional): intersections not checked, for stones dropped off-grid.
+- `taps` (optional): rough corners as a user would tap them; `GridDetectorFixtureTests` then
+  checks that the detector lands within 8 px of `corners` starting from them. The app saves
+  each calibration attempt under Documents/Calibrage with exactly these fields; copy the pair here.
 - To find the corners precisely, point four visible intersections (hoshi are ideal) and run
   `swift run -c release kifu-tool read photo.jpg --anchors "col,row,x,y;..." --overlay out.png`,
   then check the overlay.

@@ -15,6 +15,8 @@ public enum GridDetector {
     static let bands = 3
     /// Mean line contrast (gray levels) below which there is no grid.
     static let minimumContrast = 1.0
+    /// Cost of a tooth placed where no perpendicular line crosses.
+    static let unsupportedToothPenalty = 10.0
     /// Diagnostic sink, set by tools.
     nonisolated(unsafe) public static var trace: ((String) -> Void)?
 
@@ -54,9 +56,8 @@ public enum GridDetector {
         let rect = GrayImage(width: size, height: size, pixels: pixels)
 
         let seed = seeded ? Comb(first: margin * Double(cell), last: (margin + n) * Double(cell), teeth: lines, perspective: 0) : nil
-        guard let foundV = outerLines(in: rect, vertical: true, lines: lines, seed: seed),
-              let foundH = outerLines(in: rect, vertical: false, lines: lines, seed: seed) else { return nil }
-        let (vertical, horizontal) = bestAlignment(in: rect, vertical: foundV, horizontal: foundH)
+        guard let vertical = outerLines(in: rect, vertical: true, lines: lines, seed: seed),
+              let horizontal = outerLines(in: rect, vertical: false, lines: lines, seed: seed) else { return nil }
 
         // Rectified corners: intersections of outer vertical lines (x = a + b·y) and horizontal ones (y = c + d·x).
         func intersect(_ xl: (a: Double, b: Double), _ yl: (a: Double, b: Double)) -> Point {
@@ -77,19 +78,6 @@ public enum GridDetector {
         var first: (a: Double, b: Double)
         var last: (a: Double, b: Double)
 
-        /// The same grid moved by `teeth` lines along the profile (teeth extrapolated by the combs).
-        func shifted(by teeth: Int) -> Direction {
-            var out = self
-            out.combs = combs.map { c in
-                var d = c
-                d.first = c.position(teeth)
-                d.last = c.position(c.teeth - 1 + teeth)
-                return d
-            }
-            out.first = fitLine(zip(out.combs, centres).map { ($0.first, $1) })
-            out.last = fitLine(zip(out.combs, centres).map { ($0.last, $1) })
-            return out
-        }
     }
 
     /// The first and last line of one direction, fitted band by band.
@@ -123,43 +111,6 @@ public enum GridDetector {
         return Direction(combs: combs, centres: centres, first: fitLine(firsts), last: fitLine(lasts))
     }
 
-    /// Mean thin-line response of the lines running *across* the given strip of the profile axis.
-    /// For horizontal strips (vertical == false) this measures the vertical lines inside them.
-    static func crossingEnergy(in rect: GrayImage, verticalStrips: Bool, from: Double, to: Double) -> Double {
-        let lo = max(0, Int(min(from, to))), hi = min(rect.width - 1, Int(max(from, to)))
-        guard hi > lo + 2 else { return 0 }
-        // Lines across a vertical strip (columns lo..hi) are horizontal: profile them along v.
-        let profile = contrastProfile(rect, vertical: !verticalStrips, across: lo..<(hi + 1)).contrast
-        return profile.reduce(0, +) / Double(profile.count)
-    }
-
-    /// Among the detected grid and its one-line shifts, keeps the one whose perpendicular lines
-    /// fill the first and last cells and stop beyond them: the board's rim or a dark table edge
-    /// can imitate one more line, but nothing crosses it.
-    static func bestAlignment(in rect: GrayImage, vertical: Direction, horizontal: Direction) -> (Direction, Direction) {
-        func structure(_ d: Direction, verticalStrips: Bool) -> Double {
-            // Use the middle band's comb for the strip positions.
-            let c = d.combs[d.combs.count / 2]
-            let inside = crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(0), to: c.position(1))
-                + crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(c.teeth - 2), to: c.position(c.teeth - 1))
-            let outside = crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(-1), to: c.position(0))
-                + crossingEnergy(in: rect, verticalStrips: verticalStrips, from: c.position(c.teeth - 1), to: c.position(c.teeth))
-            return inside - outside
-        }
-        var bestV = vertical, bestH = horizontal
-        var bestScore = -Double.infinity
-        for sv in -1...1 {
-            let v = vertical.shifted(by: sv)
-            let scoreV = structure(v, verticalStrips: true)
-            for sh in -1...1 {
-                let h = horizontal.shifted(by: sh)
-                let score = scoreV + structure(h, verticalStrips: false)
-                if score > bestScore { bestScore = score; bestV = v; bestH = h }
-                if sv != 0 || sh != 0 { trace?(String(format: "  shift v%+d h%+d: %.2f", sv, sh, score)) } else { trace?(String(format: "  shift 0 0: %.2f", score)) }
-            }
-        }
-        return (bestV, bestH)
-    }
 
     /// Slopes tried for the lines of a band, in pixels of drift per pixel across the band.
     static let shears: [Double] = stride(from: -0.12, through: 0.12, by: 0.02).map { $0 }
@@ -167,39 +118,33 @@ public enum GridDetector {
     struct BandProfile {
         /// Thin-line response at each position.
         var contrast: [Double]
-        /// Mean brightness at each position.
-        var brightness: [Double]
     }
 
     /// Thin-line profile of a band: how much darker position i is than *both* sides a third of a
     /// spacing away (the smaller of the two gains, floored at zero), averaged across the band along
-    /// lines of slope `shear`. A step edge, such as the board's border, gives nothing. The mean
-    /// brightness is kept alongside to check that wood, not background, lies beyond the outer lines.
+    /// lines of slope `shear`. A step edge, such as the board's border, gives nothing.
     static func contrastProfile(_ rect: GrayImage, vertical: Bool, across band: Range<Int>, shear: Double = 0) -> BandProfile {
         let size = rect.width
         let w = Double(cell) / 3
         let centre = Double(band.lowerBound + band.upperBound - 1) / 2
         var out = [Double](repeating: 0, count: size)
-        var bright = [Double](repeating: 0, count: size)
         func value(_ along: Double, _ across: Double) -> Double {
             vertical ? rect.sample(x: along, y: across) : rect.sample(x: across, y: along)
         }
         let rows = Array(stride(from: band.lowerBound, to: band.upperBound, by: 2))
         for i in 0..<size {
-            var sum = 0.0, light = 0.0
+            var sum = 0.0
             for j in rows {
                 let y = Double(j)
                 let x = Double(i) + shear * (y - centre)
                 let c = value(x, y)
                 sum += max(0, min(value(x - w, y) - c, value(x + w, y) - c))
-                light += c
             }
             out[i] = sum / Double(rows.count)
-            bright[i] = light / Double(rows.count)
         }
         // Lines thinner than a pixel land a pixel or two off where they should: widen the peaks
         // so that the comb is scored on a smooth landscape (two box blurs of width 5).
-        return BandProfile(contrast: smoothed(smoothed(out)), brightness: bright)
+        return BandProfile(contrast: smoothed(smoothed(out)))
     }
 
     static func smoothed(_ v: [Double]) -> [Double] {
@@ -209,13 +154,64 @@ public enum GridDetector {
         }
     }
 
+    /// How much evidence of *perpendicular* lines each position of the band carries, smoothed
+    /// over a spacing. Rows of the grid are crossed by the vertical lines everywhere; the margin,
+    /// the board's rim or its side face are not. Used to gate the line profile so that a comb
+    /// cannot put a tooth where nothing crosses.
+    static func perpendicularSupport(_ rect: GrayImage, vertical: Bool, across band: Range<Int>) -> [Double] {
+        let size = rect.width
+        let w = Double(cell) / 3
+        func value(_ along: Double, _ across: Double) -> Double {
+            vertical ? rect.sample(x: along, y: across) : rect.sample(x: across, y: along)
+        }
+        let rows = Array(stride(from: band.lowerBound, to: band.upperBound, by: 2))
+        var out = [Double](repeating: 0, count: size)
+        for i in stride(from: 0, to: size, by: 2) {
+            let x = Double(i)
+            var sum = 0.0
+            for j in rows {
+                let y = Double(j)
+                let c = value(x, y)
+                sum += max(0, min(value(x, y - w) - c, value(x, y + w) - c))
+            }
+            out[i] = sum / Double(rows.count)
+            if i + 1 < size { out[i + 1] = out[i] }
+        }
+        // Dilate over half a spacing each way: the outer lines inherit the support of the cells
+        // inside them, while anything further out than half a spacing keeps its own (low) support.
+        let half = cell / 2
+        return (0..<size).map { i in
+            let lo = max(0, i - half), hi = min(size - 1, i + half)
+            return out[lo...hi].max() ?? 0
+        }
+    }
+
     /// The comb of one band: a full fit on the unsheared profile, then refined on every shear
-    /// so that slanted lines are followed; the sharpest wins.
+    /// so that slanted lines are followed; the sharpest wins. Profiles are gated by the
+    /// perpendicular support.
     static func bestComb(_ rect: GrayImage, vertical: Bool, across band: Range<Int>, lines: Int, seed given: Comb? = nil) -> Comb? {
+        let support = perpendicularSupport(rect, vertical: vertical, across: band)
+        let sorted = support.sorted()
+        let typical = sorted[sorted.count / 2]
+        // Steep gate: below 35 % of the typical support nothing passes, above 65 % everything does.
+        // The board's side face or a curtain behind it keep a third of the support, the grid all of it.
+        let gate = support.map { value -> Double in
+            guard typical > 0 else { return 1 }
+            let t = min(max((value / typical - 0.35) / 0.3, 0), 1)
+            return t * t * (3 - 2 * t)
+        }
+        trace?(String(format: "    support typical %.2f, every 40px: ", typical) + stride(from: 0, to: support.count, by: 40).map { String(format: "%.1f", support[$0]) }.joined(separator: " "))
+        // A tooth where nothing crosses is not just worthless, it costs: this is what keeps the
+        // comb from sliding one line into the margin or the side face when the far lines are faint.
+        func gated(_ shear: Double) -> BandProfile {
+            var p = contrastProfile(rect, vertical: vertical, across: band, shear: shear)
+            p.contrast = zip(p.contrast, gate).map { $0 * $1 - unsupportedToothPenalty * (1 - $1) }
+            return p
+        }
         var seed = given
         if seed == nil {
             for shear in [0.0, 0.08, -0.08] {
-                if let (comb, _) = fitComb(contrastProfile(rect, vertical: vertical, across: band, shear: shear), teeth: lines) {
+                if let (comb, _) = fitComb(gated(shear), teeth: lines) {
                     seed = comb; break
                 }
             }
@@ -226,7 +222,7 @@ public enum GridDetector {
         // Once seeded the rectification is already close: only small slants remain.
         let candidates = given == nil ? shears : shears.filter { abs($0) <= 0.045 }
         for shear in candidates {
-            let profile = contrastProfile(rect, vertical: vertical, across: band, shear: shear)
+            let profile = gated(shear)
             guard let (comb, score) = fitComb(profile, teeth: lines, near: seed) else { continue }
             if score > bestScore { bestScore = score; best = comb }
         }
@@ -253,9 +249,6 @@ public enum GridDetector {
 
     /// Best comb of `teeth` positions over the profile. With `near`, only a local search around
     /// that comb is done.
-    /// Brightness beyond an outer line may differ from the wood inside it by at most this fraction.
-    static let maxWoodMismatch = 0.3
-
     static func fitComb(_ band: BandProfile, teeth: Int, near seed: Comb? = nil) -> (Comb, Double)? {
         let profile = band.contrast
         let count = Double(profile.count)
@@ -264,25 +257,10 @@ public enum GridDetector {
             let i = Int(x), f = x - Double(i)
             return i + 1 < profile.count ? profile[i] * (1 - f) + profile[i + 1] * f : profile[i]
         }
-        func brightness(_ x: Double) -> Double {
-            let i = min(max(Int(x.rounded()), 0), band.brightness.count - 1)
-            return band.brightness[i]
-        }
-        /// Wood must continue half a spacing beyond the first and last lines: the board's rim or
-        /// the background there is much darker or brighter than the cell just inside.
-        func woodBeyond(_ c: Comb) -> Bool {
-            let half = c.spacing / 2
-            for (edge, direction) in [(c.first, -1.0), (c.last, 1.0)] {
-                let inside = brightness(edge - direction * half)
-                let outside = brightness(edge + direction * half)
-                if abs(outside - inside) > maxWoodMismatch * max(inside, 1) { return false }
-            }
-            return true
-        }
         func score(_ c: Comb) -> Double {
             var s = 0.0
             for k in 0..<teeth { s += value(c.position(k)) }
-            return s / Double(teeth) - (woodBeyond(c) ? 0 : 100)
+            return s / Double(teeth)
         }
         var best = seed ?? Comb(first: 0, last: count - 1, teeth: teeth, perspective: 0)
         var bestScore = seed.map(score) ?? -Double.infinity

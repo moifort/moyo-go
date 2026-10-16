@@ -1,20 +1,20 @@
 {
   "corners": [
     [
-      712.0,
-      581.0
+      708.3,
+      580.5
     ],
     [
-      1330.0,
-      553.0
+      1329.3,
+      552.6
     ],
     [
-      1918.5,
-      1045.6
+      1904.6,
+      1031.6
     ],
     [
-      217.4,
-      1057.5
+      214.5,
+      1060.2
     ]
   ],
   "lines": 19,
@@ -74,5 +74,23 @@
       17
     ]
   ],
-  "note": "Reference photo of 2026-10-16, grazing view in sunlight. The two white stones were dropped loosely on the near corners, half off the grid, so their neighbourhoods are not checked."
+  "note": "Reference photo of 2026-10-16, grazing view in sunlight. The two white stones were dropped loosely on the near corners, half off the grid, so their neighbourhoods are not checked. Corners come from the detector and were checked on the overlay (hoshi on intersections).",
+  "taps": [
+    [
+      710,
+      587
+    ],
+    [
+      1330,
+      558
+    ],
+    [
+      1860,
+      1032
+    ],
+    [
+      255,
+      1050
+    ]
+  ]
 }
