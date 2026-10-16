@@ -12,9 +12,9 @@ table, et produit le SGF à la fin. Design : `docs/superpowers/specs/2026-10-16-
     cd KifuCore && swift run -c release kifu-tool read photo.jpg \
       --anchors "0,0,712,581;18,0,1330,553;3,15,589,889;15,15,1465,871" --overlay out.png
 
+`--corners x,y,... --rough` part de coins approximatifs et détecte la grille comme l'app ;
 `--anchors` prend quatre intersections connues (`col,row,x,y`), les hoshi sont idéaux ;
-`--corners x,y,...` prend les quatre coins directement, `--fit 20` les affine, `--measures`
-imprime les mesures par intersection.
+`--fit 20` affine des coins déjà bons, `--measures` imprime les mesures par intersection.
 
 ## Générer, compiler, installer
 
@@ -26,8 +26,8 @@ imprime les mesures par intersection.
 
 ## Recette
 
-1. Nouvelle partie : toucher les quatre coins de la grille (avec la loupe), vérifier la grille
-   jaune et les pierres lues, puis « Commencer ».
+1. Nouvelle partie : toucher à peu près les quatre coins de la grille, l'app trouve la grille
+   elle-même ; vérifier la grille jaune et les pierres lues, puis « Commencer ».
 2. Jouer. Le bandeau dit « Partie suivie » et compte les coups ; le dernier coup porte un point rouge.
 3. Après une capture, le bandeau demande de retirer les pierres capturées.
 4. Si l'app perd le fil pendant 8 s, elle vibre et propose « C'est bon » ou « Recalibrer ».

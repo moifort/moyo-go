@@ -4,7 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import KifuCore
 
-// kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--overlay out.png]
+// kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--rough] [--overlay out.png]
 //   Prints the (fitted) corners, the position read and per-intersection measures on demand,
 //   and writes an overlay image showing the grid and the stones read.
 
@@ -15,7 +15,7 @@ func fail(_ message: String) -> Never {
 
 var args = Array(CommandLine.arguments.dropFirst())
 guard args.first == "read", args.count >= 2 else {
-    fail("usage: kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--overlay out.png] [--measures]")
+    fail("usage: kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--rough] [--overlay out.png] [--measures]")
 }
 args.removeFirst()
 let photo = URL(fileURLWithPath: args.removeFirst())
@@ -24,6 +24,7 @@ var anchors: [(Point, Point)] = []
 var lines = 19
 var height = 0.0
 var fitRadius = 0
+var rough = false
 var overlay: URL?
 var printMeasures = false
 while !args.isEmpty {
@@ -41,6 +42,7 @@ while !args.isEmpty {
     case "--lines": lines = Int(args.removeFirst())!
     case "--height": height = Double(args.removeFirst())!
     case "--fit": fitRadius = Int(args.removeFirst())!
+    case "--rough": rough = true
     case "--overlay": overlay = URL(fileURLWithPath: args.removeFirst())
     case "--measures": printMeasures = true
     default: fail("unknown flag \(flag)")
@@ -59,6 +61,13 @@ guard let source = CGImageSourceCreateWithURL(photo as CFURL, nil),
       let image = GrayImage(cgImage: cg) else { fail("cannot read \(photo.path)") }
 print("image \(image.width)x\(image.height)")
 
+if rough {
+    GridDetector.trace = { print("  " + $0) }
+    let t = Date()
+    guard let found = GridDetector.detect(roughCorners: corners, lines: lines, in: image) else { fail("grid not found") }
+    corners = found
+    print(String(format: "grid detected in %.2f s: ", -t.timeIntervalSinceNow) + corners.map { String(format: "%.1f,%.1f", $0.x, $0.y) }.joined(separator: " "))
+}
 if fitRadius > 0 {
     corners = BoardGeometry.fitCorners(corners, lines: lines, in: image, radius: fitRadius)
     print("fitted corners: " + corners.map { String(format: "%.1f,%.1f", $0.x, $0.y) }.joined(separator: " "))

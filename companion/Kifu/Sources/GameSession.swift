@@ -12,7 +12,6 @@ final class GameSession {
     enum Phase { case calibrating, recording, finished }
 
     nonisolated static let lines = 19
-    static let fitRadius = 20
     static let minimumComfortableSpacing = 12.0
 
     var phase: Phase = .calibrating
@@ -82,7 +81,11 @@ final class GameSession {
                 Task { @MainActor in self.taps = []; self.calibrationFailed = true }
                 return
             }
-            let corners = BoardGeometry.fitCorners(taps, lines: Self.lines, in: gray, radius: Self.fitRadius)
+            // Rough taps give the perspective; the grid itself is found inside that area.
+            guard let corners = GridDetector.detect(roughCorners: taps, lines: Self.lines, in: gray) else {
+                Task { @MainActor in self.taps = []; self.calibrationFailed = true }
+                return
+            }
             let calibration = Calibration(lines: Self.lines, corners: corners)
             guard let geometry = BoardGeometry(calibration: calibration) else {
                 Task { @MainActor in self.taps = []; self.calibrationFailed = true }
