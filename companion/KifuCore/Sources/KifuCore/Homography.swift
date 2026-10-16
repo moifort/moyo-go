@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Point: Sendable, Equatable, Hashable {
+public struct Point: Sendable, Equatable, Hashable, Codable {
     public var x: Double
     public var y: Double
     public init(x: Double, y: Double) { self.x = x; self.y = y }
