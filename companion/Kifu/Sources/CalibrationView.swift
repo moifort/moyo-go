@@ -73,6 +73,8 @@ struct CalibrationView: View {
             let count = session.readPosition.stones.count
             return count == 0 ? "Grille calée, plateau vide" : "Grille calée, \(count) pierre\(count > 1 ? "s" : "") vue\(count > 1 ? "s" : "")"
         }
+        if session.calibrationFailed { return "Coins invalides, recommence" }
+        guard session.taps.count < labels.count else { return "Calage de la grille…" }
         return "Touche le coin \(labels[session.taps.count]) de la grille"
     }
 }

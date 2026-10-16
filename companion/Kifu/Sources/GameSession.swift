@@ -22,6 +22,7 @@ final class GameSession {
     /// Corners tapped so far, in full-resolution frame pixels.
     var taps: [Point] = []
     var calibration: Calibration?
+    var calibrationFailed = false
     var gridPoints: [[Point]] = []
     var minSpacing: Double = 0
     var readPosition = Position(size: GameSession.lines)
@@ -63,6 +64,7 @@ final class GameSession {
 
     func addTap(_ point: Point) {
         guard taps.count < 4 else { return }
+        calibrationFailed = false
         taps.append(point)
         if taps.count == 4 { fitCalibration(from: taps) }
     }
@@ -76,10 +78,16 @@ final class GameSession {
 
     private func fitCalibration(from taps: [Point]) {
         worker.async {
-            guard let gray = self.engine.latest?.gray else { return }
+            guard let gray = self.engine.latest?.gray, BoardGeometry(calibration: Calibration(lines: Self.lines, corners: taps)) != nil else {
+                Task { @MainActor in self.taps = []; self.calibrationFailed = true }
+                return
+            }
             let corners = BoardGeometry.fitCorners(taps, lines: Self.lines, in: gray, radius: Self.fitRadius)
             let calibration = Calibration(lines: Self.lines, corners: corners)
-            guard let geometry = BoardGeometry(calibration: calibration) else { return }
+            guard let geometry = BoardGeometry(calibration: calibration) else {
+                Task { @MainActor in self.taps = []; self.calibrationFailed = true }
+                return
+            }
             self.engine.reader = IntersectionReader(geometry: geometry)
             let points = (0..<Self.lines).map { row in
                 (0..<Self.lines).map { col in geometry.imagePoint(of: Intersection(col: col, row: row)) }
