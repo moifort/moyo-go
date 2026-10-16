@@ -8,6 +8,8 @@ struct CameraFrame {
     let gray: GrayImage
     let preview: CGImage
     let time: TimeInterval
+    /// Full-resolution colour image, only on the frame following `requestFullFrame()`.
+    let full: CGImage?
 }
 
 /// Back wide camera, largest 4:3 format, 2 frames per second, frames rotated upright for the
@@ -25,6 +27,7 @@ final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var rotationObservation: NSKeyValueObservation?
     private var rotationLocked = false
+    private var fullFrameRequested = false
 
     init(onFrame: @escaping (CameraFrame) -> Void) {
         self.onFrame = onFrame
@@ -73,6 +76,11 @@ final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         }
         queue.async { self.session.startRunning() }
         return true
+    }
+
+    /// The next frame will carry a full-resolution colour image.
+    func requestFullFrame() {
+        queue.async { self.fullFrameRequested = true }
     }
 
     func stop() {
@@ -127,8 +135,13 @@ final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         let scale = 1.0 / CGFloat(Self.previewDownscale)
         let small = ci.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         guard let preview = context.createCGImage(small, from: small.extent) else { return }
+        var full: CGImage?
+        if fullFrameRequested {
+            full = context.createCGImage(ci, from: ci.extent)
+            fullFrameRequested = false
+        }
         let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
-        onFrame(CameraFrame(gray: gray, preview: preview, time: time))
+        onFrame(CameraFrame(gray: gray, preview: preview, time: time, full: full))
     }
 
     /// Copies the Y plane of a 4:2:0 buffer: luminance for free, no colour conversion.

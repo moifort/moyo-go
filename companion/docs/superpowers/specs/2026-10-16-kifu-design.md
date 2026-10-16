@@ -106,25 +106,18 @@ Ce qui ne passe pas le troisième filtre attend. Si l'attente dure, l'app alerte
   arrive.
 - Écran maintenu allumé pendant la partie.
 
-### Calibrage au doigt, grille trouvée par l'app
+### Calibrage au doigt, image figée et zoomable
 
-L'utilisateur touche à peu près les quatre coins de la grille (intersections extrêmes, pas
-le bord du bois) sur l'image en direct, à moins d'un espacement près. Ces quatre touchers
-donnent la perspective ; l'app cherche ensuite la grille elle-même dans cette zone :
+L'utilisateur fige l'image en pleine résolution, puis la zoome et la déplace à deux doigts
+pour toucher précisément les quatre coins de la grille (intersections extrêmes, pas le bord
+du bois). Chaque coin est ensuite affiné de quelques pixels par un ajustage global du
+contraste des lignes.
 
-- la zone autour du quadrilatère approximatif est redressée en une image carrée où les
-  lignes sont presque verticales et horizontales ;
-- dans chaque direction, un profil « ligne fine » (plus sombre que ses deux côtés, ce
-  qui ignore les marches comme le rebord du plateau) est calculé par bande, et un peigne
-  de 19 dents régulièrement espacées en projection y est ajusté, avec une recherche
-  d'inclinaison par bande ;
-- le peigne doit laisser du bois au-delà de sa première et de sa dernière dent, sinon il
-  est rejeté : c'est ce qui l'empêche de prendre le rebord du plateau pour une ligne ;
-- les lignes extrêmes des deux directions donnent les coins ; trois passes de
-  redressement-ajustement convergent, puis un affinage global de quelques pixels.
-
-Sur la photo de référence, la détection part de touchers faux de 40 à 60 px et retombe à
-quelques pixels des coins pointés à la main, en moins d'une seconde sur Mac.
+Une détection automatique à partir de coins approximatifs existe dans le cœur
+(`GridDetector`, utilisable avec `kifu-tool --rough`) ; elle marche sur les photos de
+référence mais a échoué sur le terrain dès que le plateau sort du cadre ou que sa face
+latérale est visible, donc l'app ne s'en sert pas. Thibaut a tranché le 16 octobre 2026 :
+des coins précis valent mieux qu'une détection qui se trompe.
 
 Des quatre coins, une homographie plan du plateau → image donne la position
 des 361 intersections. Le plateau est plan et les lignes équidistantes, c'est

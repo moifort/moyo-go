@@ -13,11 +13,15 @@ final class GameSession {
 
     nonisolated static let lines = 19
     static let minimumComfortableSpacing = 12.0
+    /// How far, in frame pixels, a precisely placed corner may be nudged onto the grid.
+    static let cornerRefineRadius = 8
 
     var phase: Phase = .calibrating
     var cameraAvailable = true
     var preview: CGImage?
     var frameSize: CGSize = .zero
+    /// Full-resolution frame frozen for placing the corners.
+    var frozen: CGImage?
     /// Corners tapped so far, in full-resolution frame pixels.
     var taps: [Point] = []
     var calibration: Calibration?
@@ -61,6 +65,24 @@ final class GameSession {
 
     // MARK: Calibration
 
+    /// Freezes the next frame at full resolution so that corners can be placed on it zoomed in.
+    func freeze() {
+        taps = []
+        calibration = nil
+        calibrationFailed = false
+        gridPoints = []
+        worker.async { self.engine.reader = nil }
+        camera?.requestFullFrame()
+    }
+
+    func unfreeze() {
+        frozen = nil
+        taps = []
+        calibration = nil
+        gridPoints = []
+        worker.async { self.engine.reader = nil; self.engine.frozenGray = nil }
+    }
+
     func addTap(_ point: Point) {
         guard taps.count < 4 else { return }
         calibrationFailed = false
@@ -77,17 +99,14 @@ final class GameSession {
 
     private func fitCalibration(from taps: [Point]) {
         worker.async {
-            guard let gray = self.engine.latest?.gray, BoardGeometry(calibration: Calibration(lines: Self.lines, corners: taps)) != nil else {
+            guard let gray = self.engine.frozenGray ?? self.engine.latest?.gray,
+                  BoardGeometry(calibration: Calibration(lines: Self.lines, corners: taps)) != nil else {
                 Task { @MainActor in self.taps = []; self.calibrationFailed = true }
                 return
             }
-            // Rough taps give the perspective; the grid itself is found inside that area.
-            let found = GridDetector.detect(roughCorners: taps, lines: Self.lines, in: gray)
-            CalibrationDump.save(frame: gray, taps: taps, corners: found)
-            guard let corners = found else {
-                Task { @MainActor in self.taps = []; self.calibrationFailed = true }
-                return
-            }
+            // Corners are placed precisely, zoomed in: only nudge them onto the line crossings.
+            let corners = BoardGeometry.fitCorners(taps, lines: Self.lines, in: gray, radius: Self.cornerRefineRadius)
+            CalibrationDump.save(frame: gray, taps: taps, corners: corners)
             let calibration = Calibration(lines: Self.lines, corners: corners)
             guard let geometry = BoardGeometry(calibration: calibration) else {
                 Task { @MainActor in self.taps = []; self.calibrationFailed = true }
@@ -101,6 +120,7 @@ final class GameSession {
                 self.calibration = calibration
                 self.gridPoints = points
                 self.minSpacing = geometry.minSpacing
+                self.frozen = nil
             }
         }
     }
@@ -146,9 +166,10 @@ final class GameSession {
         taps = []
         calibration = nil
         gridPoints = []
+        frozen = nil
         camera?.unlockForCalibration()
         phase = .calibrating
-        worker.async { self.engine.reader = nil; self.engine.recording = false }
+        worker.async { self.engine.reader = nil; self.engine.recording = false; self.engine.frozenGray = nil }
     }
 
     /// Resume recording after a recalibration.
@@ -179,6 +200,7 @@ final class GameSession {
         var reader: IntersectionReader?
         var recorder: Recorder?
         var lastReadPosition = Position(size: GameSession.lines)
+        var frozenGray: GrayImage?
         var recording = false
         var fileURL: URL?
     }
@@ -186,10 +208,12 @@ final class GameSession {
     private nonisolated func handle(_ frame: CameraFrame) {
         worker.async { [self] in
             engine.latest = frame
+            if frame.full != nil { engine.frozenGray = frame.gray }
             let size = CGSize(width: frame.gray.width, height: frame.gray.height)
             Task { @MainActor in
                 self.preview = frame.preview
                 self.frameSize = size
+                if let full = frame.full { self.frozen = full }
             }
             if var recorder = engine.recorder, engine.reader != nil, engine.recording {
                 let before = recorder.status

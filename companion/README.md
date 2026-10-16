@@ -26,8 +26,8 @@ table, et produit le SGF à la fin. Design : `docs/superpowers/specs/2026-10-16-
 
 ## Recette
 
-1. Nouvelle partie : toucher à peu près les quatre coins de la grille, l'app trouve la grille
-   elle-même ; vérifier la grille jaune et les pierres lues, puis « Commencer ».
+1. Nouvelle partie : « Figer l'image », zoomer à deux doigts et toucher précisément les quatre
+   coins de la grille ; vérifier la grille jaune et les pierres lues, puis « Commencer ».
 2. Jouer. Le bandeau dit « Partie suivie » et compte les coups ; le dernier coup porte un point rouge.
 3. Après une capture, le bandeau demande de retirer les pierres capturées.
 4. Si l'app perd le fil pendant 8 s, elle vibre et propose « C'est bon » ou « Recalibrer ».

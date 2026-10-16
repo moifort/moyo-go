@@ -4,40 +4,33 @@ import KifuCore
 struct CalibrationView: View {
     @Bindable var session: GameSession
     let resuming: Bool
-    @State private var fingerAt: CGPoint?
 
     private let labels = ["haut-gauche", "haut-droite", "bas-droite", "bas-gauche"]
 
     var body: some View {
         ZStack(alignment: .top) {
-            FrameView(preview: session.preview, imageSize: session.frameSize) { frame in
-                ZStack {
+            if let frozen = session.frozen {
+                CornerPicker(image: frozen, taps: session.taps) { session.addTap($0) }
+                    .ignoresSafeArea()
+            } else {
+                FrameView(preview: session.preview, imageSize: session.frameSize) { _ in
                     BoardOverlay(imageSize: session.frameSize, gridPoints: session.gridPoints,
-                                 stones: session.isCalibrated ? session.readPosition : nil, taps: session.taps)
-                    if !session.isCalibrated {
-                        Color.clear.contentShape(Rectangle())
-                            .gesture(DragGesture(minimumDistance: 0)
-                                .onChanged { fingerAt = $0.location }
-                                .onEnded { value in
-                                    fingerAt = nil
-                                    let shown = ImageMapping.displayedRect(imageSize: session.frameSize, in: frame)
-                                    guard shown.contains(value.location) else { return }
-                                    session.addTap(ImageMapping.toImage(value.location, imageSize: session.frameSize, in: frame))
-                                })
-                    }
-                    if let fingerAt, let preview = session.preview {
-                        Loupe(preview: preview, imageSize: session.frameSize, frame: frame, point: fingerAt)
-                    }
+                                 stones: session.isCalibrated ? session.readPosition : nil)
                 }
+                .ignoresSafeArea()
             }
-            .ignoresSafeArea()
 
             VStack(spacing: 8) {
                 Text(instruction)
                     .font(.headline)
+                    .multilineTextAlignment(.center)
                     .padding(.horizontal, 16).padding(.vertical, 8)
                     .background(.black.opacity(0.65), in: Capsule())
                     .foregroundStyle(.white)
+                if session.frozen != nil, session.taps.count < 4 {
+                    Text("Zoome à deux doigts pour viser l'intersection.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.9))
+                }
                 if let warning = session.qualityWarning {
                     Text(warning)
                         .font(.subheadline).foregroundStyle(.white)
@@ -53,15 +46,23 @@ struct CalibrationView: View {
             VStack {
                 Spacer()
                 HStack(spacing: 20) {
-                    Button(session.taps.isEmpty ? "Annuler" : "Reprendre les coins") {
-                        if session.taps.isEmpty { session.cancel() } else { session.clearTaps() }
+                    if session.frozen != nil {
+                        Button("Reprendre la vidéo") { session.unfreeze() }.buttonStyle(.bordered)
+                        Button("Effacer les coins") { session.clearTaps() }
+                            .buttonStyle(.bordered)
+                            .disabled(session.taps.isEmpty)
+                    } else if session.isCalibrated {
+                        Button("Reprendre les coins") { session.freeze() }.buttonStyle(.bordered)
+                        Button(resuming ? "Reprendre la partie" : "Commencer") {
+                            if resuming { session.resumeGame() } else { session.startGame() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Annuler") { session.cancel() }.buttonStyle(.bordered)
+                        Button("Figer l'image") { session.freeze() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(session.preview == nil)
                     }
-                    .buttonStyle(.bordered)
-                    Button(resuming ? "Reprendre la partie" : "Commencer") {
-                        if resuming { session.resumeGame() } else { session.startGame() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!session.isCalibrated)
                 }
                 .padding(.bottom, 20)
             }
@@ -69,12 +70,15 @@ struct CalibrationView: View {
     }
 
     private var instruction: String {
+        if session.calibrationFailed { return "Coins invalides, recommence" }
+        if session.frozen != nil {
+            guard session.taps.count < labels.count else { return "Calage de la grille…" }
+            return "Touche le coin \(labels[session.taps.count]) de la grille"
+        }
         if session.isCalibrated {
             let count = session.readPosition.stones.count
             return count == 0 ? "Grille calée, plateau vide" : "Grille calée, \(count) pierre\(count > 1 ? "s" : "") vue\(count > 1 ? "s" : "")"
         }
-        if session.calibrationFailed { return "Grille introuvable, recommence" }
-        guard session.taps.count < labels.count else { return "Recherche de la grille…" }
-        return "Touche à peu près le coin \(labels[session.taps.count]) de la grille"
+        return "Place le téléphone, puis fige l'image"
     }
 }
