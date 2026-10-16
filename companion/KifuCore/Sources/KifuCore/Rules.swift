@@ -54,6 +54,11 @@ public enum Rules {
     /// tolerated right before a placement when the first stone belongs to the other side.
     /// Captures are applied by the rules and must match the stones that disappeared.
     public static func explain(from: Position, to: Position, toPlay: Stone) -> [Move]? {
+        explain(from: from, to: to, toPlay: toPlay, matching: { $0 == to })
+    }
+
+    /// Same as `explain`, but the final position is accepted by `matching` instead of strict equality.
+    static func explain(from: Position, to: Position, toPlay: Stone, matching: (Position) -> Bool) -> [Move]? {
         guard from.size == to.size, toPlay != .empty else { return nil }
         var added: [(Intersection, Stone)] = []
         for (i, stone) in from.diff(to: to).sorted(by: { $0.key < $1.key }) {
@@ -82,6 +87,20 @@ public enum Rules {
             guard let next = play(move, on: position) else { return nil }
             position = next
         }
-        return position == to ? sequence : nil
+        return matching(position) ? sequence : nil
+    }
+
+    /// True when `to` is `from` plus a legal sequence whose captured stones are still on the board.
+    public static func isAwaitingCaptureRemoval(from: Position, to: Position, toPlay: Stone) -> Bool {
+        // Every stone the rules would capture is still shown in `to` with its colour, nothing else differs.
+        let moves = explain(from: from, to: to, toPlay: toPlay, matching: { result in
+            var captured = false
+            for i in result.all where result[i] != to[i] {
+                guard result[i] == .empty, from[i] != .empty, to[i] == from[i] else { return false }
+                captured = true
+            }
+            return captured
+        })
+        return !(moves ?? []).isEmpty
     }
 }
