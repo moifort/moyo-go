@@ -94,21 +94,23 @@ public struct ReviewCommands: Commands {
             Divider()
 
             Button("Dérouler la proposition") { session?.stepVariation(1) }
-                .keyboardShortcut(.rightArrow, modifiers: .option)
+                .keyboardShortcut(.rightArrow, modifiers: [.option, .shift])
                 .disabled(!isReviewing)
 
             Button("Remonter la proposition") { session?.stepVariation(-1) }
-                .keyboardShortcut(.leftArrow, modifiers: .option)
+                .keyboardShortcut(.leftArrow, modifiers: [.option, .shift])
                 .disabled(session?.state?.variationDepth ?? 0 == 0)
 
             Divider()
 
+            // The bare Option arrows go to the local sequence: reading the fight out
+            // is what a review is mostly for, the whole-board line comes second.
             Button("Dérouler la séquence locale") { session?.stepVariation(1, kind: .local) }
-                .keyboardShortcut(.rightArrow, modifiers: [.option, .shift])
+                .keyboardShortcut(.rightArrow, modifiers: .option)
                 .disabled(session?.canWalkLocal != true)
 
             Button("Remonter la séquence locale") { session?.stepVariation(-1, kind: .local) }
-                .keyboardShortcut(.leftArrow, modifiers: [.option, .shift])
+                .keyboardShortcut(.leftArrow, modifiers: .option)
                 .disabled(session?.isWalkingLocal != true)
         }
     }

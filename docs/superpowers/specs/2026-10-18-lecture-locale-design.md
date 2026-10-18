@@ -31,7 +31,8 @@ deux côtés.
 - Pendant une séquence locale, `best_move` est `null` ; pendant la proposition de
   KataGo, `local_zone` et `local_move` le sont.
 
-Raccourcis : `⇧⌥→` `⇧⌥←` la séquence locale, à côté de `⌥→` `⌥←` pour la proposition.
+Raccourcis : `⌥→` `⌥←` déroulent la séquence locale, qui prend ainsi le raccourci de la
+proposition de KataGo ; celle-ci passe à `⇧⌥→` `⇧⌥←`.
 
 ## Hors périmètre
 
