@@ -53,14 +53,16 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   player already saw reads as a replay, not a game. Worth revisiting if a redo
   button ever appears.
 
-- **Drawing the zone of the fight by hand.** The local reading looks at a zone the
-  bridge deduces: the last move, every group touching it, two lines of margin, seven
-  lines a side at least. That guess is wrong whenever the last move was itself a
-  tenuki, or the fight that matters is not the one just played. Dragging a rectangle
-  on the board would settle it, and the dashed frame already shows what the bridge
-  chose. Deferred because a click on the board means nothing in a review today (see
-  "A record under review is read-only"), and the gesture deserves its own decision
-  rather than being slipped in with the first version.
+- **A drawn zone for each position.** A zone dragged on the board stays put while
+  the record is walked, until Escape gives the inferred one back: a fight is read
+  over several moves, and redrawing it at each one would be a chore. The flip side
+  is that it also follows the player into a part of the game where it means
+  nothing. Remembering one zone per position, or dropping the drawn zone once the
+  fight leaves it, both need a rule nobody has asked for yet.
+
+- **The drawn zone is not saved.** It lives in the bridge for the review at hand and
+  goes with the next record opened. SGF has no property for it short of a private
+  one, and a file read in Sabaki would not know what to do with it.
 
 - **Local reading during a game against the AI.** The zone, the blue marker and the
   local sequence exist in a review only, because that is where the best move is shown
@@ -79,7 +81,7 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 ## Design
 
 - **A record under review is read-only.** Clicking the board does nothing, not even
-  on the green marker. Playing the marked move with a click would be the obvious
+  on the green marker; dragging across it draws the zone of the local reading. Playing the marked move with a click would be the obvious
   gesture, but it collides with the arrow keys owning navigation, and it wants a
   decision about what happens to the branch afterwards.
 

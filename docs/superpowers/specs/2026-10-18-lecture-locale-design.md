@@ -11,7 +11,10 @@ deux côtés.
 
 | Sujet | Choix | Raison |
 |---|---|---|
-| Zone | Déduite par le pont : dernier coup + groupes qui le touchent, marge de 2, au moins 7×7 | Demandé ainsi pour commencer ; la tracer à la main viendra plus tard |
+| Zone | Déduite par le pont : dernier coup + groupes qui le touchent, marge de 2, au moins 7×7 | Demandé ainsi pour commencer |
+| Zone tracée | Un glisser sur le goban trace un rectangle aligné sur les intersections, qui remplace la zone déduite | La déduction se trompe dès que le dernier coup est un tenuki, ou que le combat qui compte n'est pas celui qui vient d'être joué |
+| Zone tracée et navigation | Elle reste en place d'un coup à l'autre, jusqu'à Échap | Un combat se lit sur plusieurs coups ; la retracer à chaque fois serait une corvée |
+| Zone redessinée | La lecture de l'ancienne zone est jetée, la séquence locale en cours revient au record, une réponse tardive pour l'ancienne zone est ignorée | La séquence affichée doit toujours appartenir à la zone affichée |
 | Zone couvrant tout le goban | Pas de lecture locale | Elle ne dirait rien de plus que la pastille verte |
 | Contrainte | `avoidMoves` pour les deux couleurs sur 12 coups | KaTrain ne contraint que le premier coup ; sa suite repart ailleurs |
 | Analyse | Requête séparée, rangée hors du nœud | Sinon elle se mêle aux candidats de KaTrain et fausse la pastille verte |
@@ -30,11 +33,20 @@ deux côtés.
   globale manque, et pendant le déroulé).
 - Pendant une séquence locale, `best_move` est `null` ; pendant la proposition de
   KataGo, `local_zone` et `local_move` le sont.
+- `set_local_zone {zone}` — `zone` vaut `{top, left, bottom, right}` (les coins dans
+  n'importe quel ordre, le pont les remet en ordre et refuse une zone hors du goban
+  avec `bad_arguments`), ou est absent / `null` pour revenir à la zone déduite. En
+  revue seulement. L'état de revue gagne `local_zone_drawn`, vrai quand la zone vient
+  du joueur.
 
 Raccourcis : `⌥→` `⌥←` déroulent la séquence locale, qui prend ainsi le raccourci de la
-proposition de KataGo ; celle-ci passe à `⇧⌥→` `⇧⌥←`.
+proposition de KataGo ; celle-ci passe à `⇧⌥→` `⇧⌥←`. `Échap` revient à la zone
+automatique, comme le bouton « viseur » de la barre latérale.
+
+Pendant le glisser, l'app dessine le rectangle en cours plus franchement que la zone
+en place ; un glisser qui commence et finit sur la même intersection ne trace rien.
 
 ## Hors périmètre
 
-Voir `TODO.md` : zone tracée à la main, lecture locale en partie contre l'IA,
-plusieurs zones, séquence qui sort de la zone.
+Voir `TODO.md` : une zone tracée par position, zone tracée enregistrée dans le SGF,
+lecture locale en partie contre l'IA, plusieurs zones, séquence qui sort de la zone.

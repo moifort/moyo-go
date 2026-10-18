@@ -103,13 +103,18 @@ public struct GameWindow: View {
         ZStack {
             Theme.windowBackground.ignoresSafeArea()
             if let state = session.state {
-                BoardView(state: state, isInteractive: isBoardInteractive(state)) { point in
-                    if state.status == .scoring {
-                        session.toggleDead(row: point.row, col: point.col)
-                    } else {
-                        session.play(row: point.row, col: point.col)
-                    }
-                }
+                BoardView(
+                    state: state,
+                    isInteractive: isBoardInteractive(state),
+                    onPlay: { point in
+                        if state.status == .scoring {
+                            session.toggleDead(row: point.row, col: point.col)
+                        } else {
+                            session.play(row: point.row, col: point.col)
+                        }
+                    },
+                    onDrawZone: state.isReviewing ? { session.drawLocalZone($0) } : nil
+                )
                 .padding(20)
             } else {
                 ProgressView().controlSize(.small)

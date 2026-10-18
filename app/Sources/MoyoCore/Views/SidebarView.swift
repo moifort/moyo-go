@@ -367,6 +367,16 @@ struct ReviewPanel: View {
                 step("Dérouler la séquence locale", systemImage: "scope", enabled: session.canWalkLocal) {
                     session.stepVariation(1, kind: .local)
                 }
+                // Drawing has no button: it is a drag across the board, which the line
+                // above the buttons teaches while there is nothing to undo.
+                step(
+                    session.hasDrawnZone
+                        ? "Revenir à la zone automatique (Échap)"
+                        : "Glissez sur le goban pour tracer la zone du combat",
+                    systemImage: "viewfinder", enabled: session.hasDrawnZone
+                ) {
+                    session.clearDrawnZone()
+                }
             }
         }
         .buttonStyle(.glass)

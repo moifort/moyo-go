@@ -61,6 +61,8 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         session.submit(
             session.step_variation, command_id, int(command["step"]), command.get("kind") or "best"
         )
+    elif name == "set_local_zone":
+        session.submit(session.set_local_zone, command_id, command.get("zone"))
     elif name == "state":
         session.submit(session.state, command_id)
     else:

@@ -65,6 +65,9 @@ class BridgeSession(KaTrainHost):
         #: KataGo's answer once it is back. Only positions put on screen are asked
         #: for, so a record costs one extra analysis per position actually read.
         self._local: Dict[int, Dict[str, Any]] = {}
+        #: The zone the player drew, in place of the inferred one. It stays while
+        #: the record is walked — a fight is read over several moves — until cleared.
+        self._drawn_zone: Optional[Dict[str, int]] = None
         self._game_info: Dict[str, Any] = {}
         #: Nodes already pushed to the front of the queue, by id. `request_analysis`
         #: has no guard against duplicates, and the tree holds every node for the
@@ -390,6 +393,7 @@ class BridgeSession(KaTrainHost):
         self._anchor_pv = []
         self._variation_kind = "best"
         self._local = {}
+        self._drawn_zone = None
         self._game_info = {}
         self._boosted = set()
         self._emitted_best = None
@@ -605,12 +609,37 @@ class BridgeSession(KaTrainHost):
 
     # -- local reading -------------------------------------------------------
 
+    def set_local_zone(self, command_id, zone):
+        """Reads the fight inside a zone the player drew; None goes back to the inferred one.
+
+        Whatever was read for the old zone no longer answers the question, so the
+        position on screen is asked again. A local sequence being walked belonged to
+        the old zone too: the board goes back to the record.
+        """
+        self._require_review()
+        if zone is not None:
+            try:
+                zone = local.drawn(zone, self._size())
+            except (KeyError, TypeError, ValueError) as exc:
+                raise CommandError("bad_arguments", str(exc)) from exc
+        self._drawn_zone = zone
+        if self._variation:
+            self._prune_variation()
+            self.game.set_current_node(self._line[self._index])
+        self._request_local()
+        self._emit_state(command_id)
+
     def _request_local(self) -> None:
-        """Asks for the local reading of the position on screen, once per position."""
+        """Asks for the local reading of the position on screen, once per position and zone."""
         node = self._line[self._index]
-        if self._engine is None or id(node) in self._local:
+        if self._engine is None:
             return
-        zone = local.region(serialize.stone_map(self.game), self._size(), serialize.last_move(self.game))
+        zone = self._drawn_zone or local.region(
+            serialize.stone_map(self.game), self._size(), serialize.last_move(self.game)
+        )
+        reading = self._local.get(id(node))
+        if reading is not None and reading["zone"] == zone:
+            return
         self._local[id(node)] = {"zone": zone, "analysis": None}
         if zone is None:
             return
@@ -623,15 +652,17 @@ class BridgeSession(KaTrainHost):
             node,
             zone,
             self._size(),
-            on_result=lambda analysis: self.submit(self._on_local_analysis, node, analysis),
+            on_result=lambda analysis: self.submit(self._on_local_analysis, node, analysis, zone),
             on_error=lambda analysis: self._log_stderr(f"local analysis failed: {analysis}"),
             priority=PRIORITY_DEFAULT,
         )
 
-    def _on_local_analysis(self, node, analysis) -> None:
+    def _on_local_analysis(self, node, analysis, zone=None) -> None:
         reading = self._local.get(id(node))
         if reading is None or self._status != "review":
             return  # another record has been opened since
+        if zone is not None and reading["zone"] != zone:
+            return  # the answer to a zone redrawn since
         reading["analysis"] = analysis
         if node is self._line[self._index]:
             self._emit_state()
@@ -676,6 +707,7 @@ class BridgeSession(KaTrainHost):
                     "best_move": self._best_move(),
                     "local_move": self._local_move(),
                     "local_zone": self._local_zone(),
+                    "local_zone_drawn": self._drawn_zone is not None,
                 },
             ),
         )

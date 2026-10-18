@@ -433,6 +433,22 @@ public final class GameSession {
         bridge.send(.variation(id: nextID(), step: delta > 0 ? 1 : -1, kind: kind))
     }
 
+    /// Reads the fight inside a zone drawn on the board, until it is cleared.
+    public func drawLocalZone(_ zone: LocalZone) {
+        guard isReviewing else { return }
+        bridge.send(.setLocalZone(id: nextID(), zone: zone))
+    }
+
+    /// Hands the zone back to the bridge, which infers it around the last move.
+    public func clearDrawnZone() {
+        guard hasDrawnZone else { return }
+        bridge.send(.setLocalZone(id: nextID(), zone: nil))
+    }
+
+    public var hasDrawnZone: Bool {
+        isReviewing && state?.localZoneDrawn == true
+    }
+
     /// Whether the local sequence can be started or walked further.
     public var canWalkLocal: Bool {
         guard let state, state.isReviewing else { return false }

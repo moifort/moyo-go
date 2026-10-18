@@ -112,6 +112,12 @@ public struct ReviewCommands: Commands {
             Button("Remonter la séquence locale") { session?.stepVariation(-1, kind: .local) }
                 .keyboardShortcut(.leftArrow, modifiers: .option)
                 .disabled(session?.isWalkingLocal != true)
+
+            // The zone itself is drawn by dragging across the board; only undoing
+            // it needs a key.
+            Button("Revenir à la zone automatique") { session?.clearDrawnZone() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(session?.hasDrawnZone != true)
         }
     }
 }

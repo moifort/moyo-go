@@ -346,3 +346,78 @@ def test_a_whole_board_choice_inside_the_zone_is_the_local_move_too(reviewing):
     run(reviewing, reviewing.step_variation, 2, 1, "local")
     run(reviewing, reviewing.step_variation, 3, 1, "local")
     assert last_state(reviewing)["local_move"] == {"row": 3, "col": 7, "points_lost": None}
+
+
+# -- a zone drawn by hand ----------------------------------------------------
+
+DRAWN = {"top": 5, "left": 0, "bottom": 8, "right": 3}
+
+
+def test_a_drawn_zone_replaces_the_inferred_one(reviewing):
+    node = reviewing._line[5]
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]))
+    run(reviewing, reviewing.set_local_zone, 2, DRAWN)
+    assert reviewing._local_queries[-1] == (node, DRAWN)
+    state = last_state(reviewing)
+    assert state["id"] == 2
+    assert state["local_zone"] == DRAWN
+    assert state["local_zone_drawn"] is True
+    # The answer read for the old zone is gone with it.
+    assert state["local_move"] is None
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["C3", "B3"]), DRAWN)
+    assert last_state(reviewing)["local_move"]["row"] == 6
+
+
+def test_an_answer_for_a_replaced_zone_is_dropped(reviewing):
+    node = reviewing._line[5]
+    inferred = reviewing._local_queries[-1][1]
+    run(reviewing, reviewing.set_local_zone, 2, DRAWN)
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]), inferred)
+    assert last_state(reviewing)["local_move"] is None
+
+
+def test_a_drawn_zone_follows_the_player_through_the_record(reviewing):
+    run(reviewing, reviewing.set_local_zone, 2, DRAWN)
+    run(reviewing, reviewing.goto, 3, 0)  # no fight to infer there
+    assert reviewing._local_queries[-1] == (reviewing._line[0], DRAWN)
+    assert last_state(reviewing)["local_zone"] == DRAWN
+
+
+def test_clearing_the_drawn_zone_brings_the_inferred_one_back(reviewing):
+    inferred = reviewing._local_queries[-1][1]
+    run(reviewing, reviewing.set_local_zone, 2, DRAWN)
+    run(reviewing, reviewing.set_local_zone, 3, None)
+    assert reviewing._local_queries[-1] == (reviewing._line[5], inferred)
+    state = last_state(reviewing)
+    assert state["local_zone"] == inferred
+    assert state["local_zone_drawn"] is False
+
+
+def test_a_drawn_zone_is_put_in_order_and_kept_on_the_board(reviewing):
+    run(reviewing, reviewing.set_local_zone, 2, {"top": 8, "left": 3, "bottom": 5, "right": 0})
+    assert last_state(reviewing)["local_zone"] == DRAWN
+    run(reviewing, reviewing.set_local_zone, 3, {"top": 0, "left": 0, "bottom": 9, "right": 2})
+    assert errors(reviewing)[-1]["code"] == "bad_arguments"
+    assert last_state(reviewing)["local_zone"] == DRAWN
+
+
+def test_drawing_a_zone_leaves_the_local_sequence(reviewing):
+    node = reviewing._line[5]
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6"]))
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    run(reviewing, reviewing.set_local_zone, 3, DRAWN)
+    state = last_state(reviewing)
+    assert state["variation_depth"] == 0
+    assert len(node.children) == 0
+
+
+def test_a_new_record_forgets_the_drawn_zone(reviewing):
+    run(reviewing, reviewing.set_local_zone, 2, DRAWN)
+    run(reviewing, reviewing.load_sgf, 3, "partie.sgf", RECORD)
+    assert last_state(reviewing)["local_zone_drawn"] is False
+    assert last_state(reviewing)["local_zone"] != DRAWN
+
+
+def test_a_zone_is_drawn_in_review_only(session):
+    run(session, session.set_local_zone, 1, DRAWN)
+    assert errors(session)[-1]["code"] == "not_reviewing"

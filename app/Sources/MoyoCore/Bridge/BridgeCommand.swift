@@ -21,6 +21,7 @@ public struct BridgeCommand: Encodable, Sendable {
     var kind: VariationKind?
     var blackName: String?
     var whiteName: String?
+    var zone: LocalZone?
 
     public static func newGame(
         id: Int,
@@ -74,6 +75,12 @@ public struct BridgeCommand: Encodable, Sendable {
     /// walking the other goes back to the record first.
     public static func variation(id: Int, step: Int, kind: VariationKind = .best) -> BridgeCommand {
         BridgeCommand(id: id, cmd: "variation", step: step, kind: kind)
+    }
+
+    /// Reads the fight inside a zone the player drew. nil goes back to the zone the
+    /// bridge infers around the last move.
+    public static func setLocalZone(id: Int, zone: LocalZone?) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "set_local_zone", zone: zone)
     }
 
     public static func toggleDead(id: Int, row: Int, col: Int) -> BridgeCommand {

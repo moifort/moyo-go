@@ -54,6 +54,18 @@ def region(stones: Dict[tuple, str], size: int, last: Optional[Dict[str, int]]) 
     return {"top": top, "left": left, "bottom": bottom, "right": right}
 
 
+def drawn(zone: Dict[str, Any], size: int) -> Dict[str, int]:
+    """A zone the player drew, put in order. Raises ValueError when off the board.
+
+    The corners may come in either order: a drag goes any way across the board.
+    """
+    rows = sorted((int(zone["top"]), int(zone["bottom"])))
+    cols = sorted((int(zone["left"]), int(zone["right"])))
+    if rows[0] < 0 or cols[0] < 0 or rows[1] >= size or cols[1] >= size:
+        raise ValueError(f"zone {zone} is off a {size}×{size} board")
+    return {"top": rows[0], "left": cols[0], "bottom": rows[1], "right": cols[1]}
+
+
 def _widen(low: int, high: int, size: int):
     low, high = max(0, low - MARGIN), min(size - 1, high + MARGIN)
     span = min(MIN_SPAN, size)

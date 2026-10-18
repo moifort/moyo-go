@@ -133,7 +133,8 @@ public struct LocalMove: Codable, Sendable, Hashable {
     }
 }
 
-/// The zone of the fight the bridge drew around the last move, bounds inclusive.
+/// The zone the local reading is kept in, bounds inclusive: drawn by the bridge
+/// around the last move, or by the player across the board.
 public struct LocalZone: Codable, Sendable, Hashable {
     public let top: Int
     public let left: Int
@@ -145,6 +146,14 @@ public struct LocalZone: Codable, Sendable, Hashable {
         self.left = left
         self.bottom = bottom
         self.right = right
+    }
+
+    /// The rectangle between two corners of a drag, whichever way it went.
+    public init(spanning a: Point, _ b: Point) {
+        self.init(
+            top: min(a.row, b.row), left: min(a.col, b.col),
+            bottom: max(a.row, b.row), right: max(a.col, b.col)
+        )
     }
 }
 
@@ -260,6 +269,8 @@ public struct GameState: Codable, Sendable {
     public let localMove: LocalMove?
     /// Sent before the local reading, so the player sees where it is looking.
     public let localZone: LocalZone?
+    /// Whether the zone is the player's own rather than the bridge's.
+    public let localZoneDrawn: Bool?
 
     public var isReviewing: Bool { status == .review }
 

@@ -44,6 +44,15 @@ public struct BoardGeometry: Sendable, Equatable {
         return Point(row: Int(row), col: Int(col))
     }
 
+    /// The intersection nearest a point, wherever it lies: a drag that strays into
+    /// the margin or off the board still ends on its edge.
+    public func nearestIntersection(to location: CGPoint) -> Point {
+        let last = CGFloat(size - 1)
+        let col = min(max(((location.x - margin) / step).rounded(), 0), last)
+        let row = min(max(((location.y - margin) / step).rounded(), 0), last)
+        return Point(row: Int(row), col: Int(col))
+    }
+
     /// Star points for the usual board sizes; empty for anything unconventional.
     public var starPoints: [Point] {
         let lines: [Int]

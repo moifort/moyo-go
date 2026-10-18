@@ -1,18 +1,29 @@
 import SwiftUI
 
-/// Draws the board and reports clicks. Holds no rules and no state of its own.
+/// Draws the board and reports clicks. Holds no rules and no game state of its own:
+/// only what the pointer is doing, until it is handed over.
 public struct BoardView: View {
     public let state: GameState
     public let isInteractive: Bool
     public let onPlay: (Point) -> Void
+    /// Set in review: a drag across the board draws the zone of the local reading.
+    public let onDrawZone: ((LocalZone) -> Void)?
 
     /// The intersection under the pointer, for the caption of a proposed move.
     @State private var hovered: Point?
+    /// The corners of the drag under way, snapped to the intersections.
+    @State private var draft: (start: Point, end: Point)?
 
-    public init(state: GameState, isInteractive: Bool, onPlay: @escaping (Point) -> Void) {
+    public init(
+        state: GameState,
+        isInteractive: Bool,
+        onPlay: @escaping (Point) -> Void,
+        onDrawZone: ((LocalZone) -> Void)? = nil
+    ) {
         self.state = state
         self.isInteractive = isInteractive
         self.onPlay = onPlay
+        self.onDrawZone = onDrawZone
     }
 
     public var body: some View {
@@ -43,6 +54,7 @@ public struct BoardView: View {
                                     onPlay(point)
                                 }
                         )
+                        .simultaneousGesture(zoneDrag(geometry), including: onDrawZone == nil ? .none : .all)
                         .onContinuousHover(coordinateSpace: .local) { phase in
                             switch phase {
                             case .active(let location): hovered = geometry.intersection(at: location)
@@ -79,6 +91,26 @@ public struct BoardView: View {
             .allowsHitTesting(false)
     }
 
+    /// A rectangle snapped to the intersections as it is dragged, sent once let go.
+    ///
+    /// A drag that starts and ends on the same point draws nothing: a stray click
+    /// would otherwise shrink the reading to a single intersection.
+    private func zoneDrag(_ geometry: BoardGeometry) -> some Gesture {
+        DragGesture(minimumDistance: geometry.step / 3, coordinateSpace: .local)
+            .onChanged { drag in
+                draft = (
+                    geometry.nearestIntersection(to: drag.startLocation),
+                    geometry.nearestIntersection(to: drag.location)
+                )
+            }
+            .onEnded { _ in
+                guard let corners = draft else { return }
+                draft = nil
+                guard corners.start != corners.end else { return }
+                onDrawZone?(LocalZone(spanning: corners.start, corners.end))
+            }
+    }
+
     private var accessibilityValue: String {
         var description = "\(state.stones.count) pierres, coup \(state.moveNumber)"
         if let count = state.moveCount {
@@ -94,7 +126,9 @@ public struct BoardView: View {
     }
 
     private func draw(in context: inout GraphicsContext, geometry: BoardGeometry) {
-        if let zone = state.localZone {
+        if let draft {
+            drawLocalZone(in: &context, geometry: geometry, zone: LocalZone(spanning: draft.start, draft.end), emphasis: 2)
+        } else if let zone = state.localZone {
             drawLocalZone(in: &context, geometry: geometry, zone: zone)
         }
         drawGrid(in: &context, geometry: geometry)
@@ -121,7 +155,11 @@ public struct BoardView: View {
     /// Half a cell past its outer lines, so the stones on its edge sit inside it.
     /// Faint on purpose: it says where the reading looks, and the board stays the
     /// thing being read.
-    private func drawLocalZone(in context: inout GraphicsContext, geometry: BoardGeometry, zone: LocalZone) {
+    ///
+    /// The zone being dragged is drawn `emphasis` times stronger, so the hand sees it.
+    private func drawLocalZone(
+        in context: inout GraphicsContext, geometry: BoardGeometry, zone: LocalZone, emphasis: Double = 1
+    ) {
         let topLeft = geometry.position(row: zone.top, col: zone.left)
         let bottomRight = geometry.position(row: zone.bottom, col: zone.right)
         let inset = geometry.stoneRadius * 1.05
@@ -131,10 +169,10 @@ public struct BoardView: View {
             height: bottomRight.y - topLeft.y + inset * 2
         )
         let path = Path(roundedRect: rect, cornerRadius: geometry.stoneRadius * 0.5)
-        context.fill(path, with: .color(Theme.localMove.opacity(0.10)))
+        context.fill(path, with: .color(Theme.localMove.opacity(0.10 * emphasis)))
         context.stroke(
             path,
-            with: .color(Theme.localMove.opacity(0.55)),
+            with: .color(Theme.localMove.opacity(min(1, 0.55 * emphasis))),
             style: StrokeStyle(lineWidth: max(1, geometry.lineWidth * 1.5), dash: [geometry.stoneRadius * 0.4])
         )
     }
