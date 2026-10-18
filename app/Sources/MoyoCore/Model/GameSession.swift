@@ -118,6 +118,8 @@ public final class GameSession {
     /// The player asked to connect while a game was under way: the sidebar asks
     /// whether to save it first.
     public var isConfirmingFollow = false
+    /// The sheet listing the phones in sight is open, for the player to pick one.
+    public var isChoosingPhone = false
     /// The game is being saved before following starts; the save panel's answer
     /// starts it.
     private var followsAfterExport = false
@@ -280,16 +282,30 @@ public final class GameSession {
         return state.status == .scoring || (state.status == .playing && state.moveNumber > 0)
     }
 
-    /// The player clicked the phone's button. A game under way is not dropped
-    /// without asking: the sidebar offers to save it, or to give it up.
+    /// The player clicked "Connecter". A game under way is not dropped without
+    /// asking: the sidebar first offers to save it, or to give it up. Then the
+    /// phones in sight are listed, for the player to pick one.
     public func connectPhone() {
         if isFollowing {
             phone.connect()  // the link dropped or failed: the game followed goes on
         } else if hasGameInProgress {
             isConfirmingFollow = true
         } else {
-            startFollowing()
+            choosePhone()
         }
+    }
+
+    /// Opens the list of phones running Kifu.
+    public func choosePhone() {
+        isConfirmingFollow = false
+        phone.startDiscovery()
+        isChoosingPhone = true
+    }
+
+    /// The player picked a phone: follow the game it records.
+    public func follow(phoneNamed name: String) {
+        isChoosingPhone = false
+        startFollowing(phoneNamed: name)
     }
 
     /// Saves the game under way, then follows the real board whatever the panel's answer.
@@ -298,15 +314,15 @@ public final class GameSession {
         exportRecord()
     }
 
-    /// Starts following: an empty game with no AI, and the phone's link opened.
+    /// Starts following: an empty game with no AI, and the chosen phone's link opened.
     /// The phone sends its position on connecting, which the bridge takes as the
     /// start — a game recorded halfway is joined where it stands.
-    public func startFollowing() {
+    func startFollowing(phoneNamed name: String) {
         guard phase == .running else { return }
         isConfirmingFollow = false
         isFollowing = true
-        beginFollowedGame(size: phone.latest?.size ?? 19)
-        phone.connect()
+        beginFollowedGame(size: 19)
+        phone.connect(to: name)
     }
 
     /// Stops following. The game followed so far opens as a record, its analyses
@@ -508,7 +524,7 @@ public final class GameSession {
         pendingExport = nil
         if followsAfterExport {
             followsAfterExport = false
-            startFollowing()
+            choosePhone()
         }
     }
 

@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The phone running Kifu, at the foot of the sidebar.
+/// "Connecter", at the foot of the sidebar: follows a game recorded by Kifu.
 ///
-/// It shows up by itself once Kifu is open on the network, named after the phone,
-/// and says where the link stands. Connecting follows the game on the real board;
-/// a game under way here is not dropped without asking.
+/// Several phones may run Kifu on the same network, so the button opens the list
+/// of those in sight and the player picks one. A game under way here is not
+/// dropped without asking.
 struct PhoneButton: View {
     @Bindable var session: GameSession
     @State private var isConfirmingStop = false
@@ -12,17 +12,14 @@ struct PhoneButton: View {
     var body: some View {
         Group {
             switch session.phone.status {
-            case .idle, .searching:
-                EmptyView()
-            case .available(let name):
+            case .idle:
                 Button {
                     session.connectPhone()
                 } label: {
-                    Label("Connecter à \(name)", systemImage: "iphone")
-                        .lineLimit(1)
+                    Label("Connecter", systemImage: "iphone")
                         .frame(maxWidth: .infinity)
                 }
-                .help("Suivre la partie que Kifu enregistre sur \(name)")
+                .help("Suivre la partie qu'enregistre Kifu sur un iPhone")
             case .connecting(let name):
                 Button {
                     session.stopFollowing()
@@ -58,6 +55,13 @@ struct PhoneButton: View {
         }
         .buttonStyle(.glass)
         .controlSize(.large)
+        .sheet(isPresented: $session.isChoosingPhone) {
+            PhonePicker(phones: session.phone.phones) { name in
+                session.follow(phoneNamed: name)
+            } cancel: {
+                session.isChoosingPhone = false
+            }
+        }
         .confirmationDialog(
             "Arrêter de suivre la partie ?",
             isPresented: $isConfirmingStop,
@@ -78,10 +82,65 @@ struct PhoneButton: View {
             titleVisibility: .visible
         ) {
             Button("Enregistrer, puis suivre") { session.saveThenFollow() }
-            Button("Abandonner et suivre", role: .destructive) { session.startFollowing() }
+            Button("Abandonner et suivre", role: .destructive) { session.choosePhone() }
             Button("Annuler", role: .cancel) {}
         } message: {
             Text("Suivre la partie du plateau remplace celle-ci.")
         }
+    }
+}
+
+/// The phones running Kifu in sight, to pick the one whose game to follow. The
+/// list fills in as phones appear; while it is empty, it says what it waits for.
+private struct PhonePicker: View {
+    let phones: [String]
+    let pick: (String) -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Connecter un iPhone")
+                .font(.system(size: 17, weight: .medium))
+            if phones.isEmpty {
+                VStack(spacing: 12) {
+                    ProgressView().controlSize(.large)
+                    Text("Attente de connexion d'une application Kifu sur un iPhone")
+                        .font(.system(size: 13, weight: .medium))
+                        .multilineTextAlignment(.center)
+                    Text("Ouvrez Kifu sur l'iPhone, connecté au même réseau Wi-Fi que ce Mac.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 7) {
+                    ForEach(phones, id: \.self) { name in
+                        Button {
+                            pick(name)
+                        } label: {
+                            Label(name, systemImage: "iphone")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
+                    }
+                }
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Recherche d'autres iPhone…")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Annuler", action: cancel)
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
     }
 }

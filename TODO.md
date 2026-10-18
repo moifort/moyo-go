@@ -93,6 +93,11 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   behind one button would have needed a choice before every connection. Bringing it
   back means a second entry, most likely in the new-game sheet.
 
+- **No automatic connection.** Several phones may run Kifu on the same network, so
+  "Connecter" always lists them and the player picks one, even when only one is in
+  sight. Remembering the last phone and connecting to it on its own would save a
+  click, at the risk of following someone else's game.
+
 - **Kifu does not announce the end yet.** Moyo opens a followed game as a record
   when the phone sends `{"end":true,"result":"B+R"}` (result optional, SGF form).
   Kifu's "Fin de partie" writes its SGF but sends nothing, and it has no resign

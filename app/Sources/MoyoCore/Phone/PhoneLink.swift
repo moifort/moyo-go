@@ -2,22 +2,19 @@ import Foundation
 import Network
 import Observation
 
-/// Finds the phone on the local network over Bonjour and streams the board it sees.
+/// Finds the phones on the local network over Bonjour and streams the board of
+/// the one the player picks.
 ///
-/// The phone runs Kifu, which advertises `_goboard._tcp` while it is open and writes
-/// one JSON line per change of the position, and one when the game ends. The link
-/// keeps looking from launch, so the sidebar can offer the phone by name as soon as
-/// it shows up; it connects only when asked. This class owns nothing about the game.
+/// Kifu advertises `_goboard._tcp` while it is open and writes one JSON line per
+/// change of the position, and one when the game ends. Several phones may run it
+/// at once, so the link keeps the list of every one in sight from launch, and
+/// connects only to the one chosen. This class owns nothing about the game.
 @Observable
 @MainActor
 public final class PhoneLink {
     public enum Status: Equatable {
-        /// Not looking.
+        /// Not connected; the phones in sight are in `phones`.
         case idle
-        /// Looking, and no phone in sight.
-        case searching
-        /// A phone is there, not connected.
-        case available(String)
         case connecting(String)
         case connected(String)
         case failed(String)
@@ -26,15 +23,17 @@ public final class PhoneLink {
     public static let serviceType = "_goboard._tcp"
 
     public private(set) var status: Status = .idle
+    /// The phones running Kifu in sight right now, by name, sorted.
+    public private(set) var phones: [String] = []
     public private(set) var latest: PhoneBoard?
     public var onBoard: ((PhoneBoard) -> Void)?
     public var onGameEnd: ((PhoneGameEnd) -> Void)?
 
     private var browser: NWBrowser?
-    private var found: NWBrowser.Result?
+    private var found: [String: NWBrowser.Result] = [:]
     private var connection: NWConnection?
-    /// The player asked to connect: a dropped link is opened again on its own.
-    private var wantsConnection = false
+    /// The phone the player chose: a dropped link to it is opened again on its own.
+    private var chosen: String?
     private var buffer = Data()
     private let queue = DispatchQueue(label: "Moyo.phone")
 
@@ -53,10 +52,9 @@ public final class PhoneLink {
         return service
     }
 
-    /// Starts looking for the phone, without connecting. Does nothing if already looking.
+    /// Starts looking for phones, without connecting. Does nothing if already looking.
     public func startDiscovery() {
         guard browser == nil else { return }
-        if status == .idle { status = .searching }
         let browser = NWBrowser(for: .bonjour(type: Self.serviceType, domain: nil), using: .tcp)
         browser.stateUpdateHandler = { [weak self] state in
             Task { @MainActor [weak self] in
@@ -64,40 +62,41 @@ public final class PhoneLink {
             }
         }
         browser.browseResultsChangedHandler = { [weak self] results, _ in
-            Task { @MainActor [weak self] in self?.resultsChanged(results.first) }
+            Task { @MainActor [weak self] in self?.resultsChanged(Array(results)) }
         }
         self.browser = browser
         browser.start(queue: queue)
     }
 
-    public func connect() {
-        wantsConnection = true
+    /// Connects to the phone of that name, or to the one chosen last.
+    public func connect(to name: String? = nil) {
+        if let name { chosen = name }
         startDiscovery()
-        if let found { open(found) }
-    }
-
-    /// Closes the link and goes back to offering the phone; the search goes on.
-    public func disconnect() {
-        wantsConnection = false
-        connection?.cancel(); connection = nil
-        buffer.removeAll()
-        latest = nil
-        showFound()
-    }
-
-    private func resultsChanged(_ result: NWBrowser.Result?) {
-        found = result
-        if connection != nil { return }
-        if wantsConnection, let result {
-            open(result)
+        guard connection == nil, let chosen else { return }
+        if let result = found[chosen] {
+            open(result, name: chosen)
         } else {
-            showFound()
+            status = .connecting(chosen)  // opened as soon as it shows up again
         }
     }
 
-    private func showFound() {
-        guard browser != nil else { status = .idle; return }
-        status = found.map { .available(name(of: $0)) } ?? .searching
+    /// Closes the link; the search goes on.
+    public func disconnect() {
+        chosen = nil
+        connection?.cancel(); connection = nil
+        buffer.removeAll()
+        latest = nil
+        status = .idle
+    }
+
+    private func resultsChanged(_ results: [NWBrowser.Result]) {
+        var byName: [String: NWBrowser.Result] = [:]
+        for result in results { byName[name(of: result)] = result }
+        found = byName
+        phones = byName.keys.sorted()
+        if connection == nil, let chosen, let result = byName[chosen] {
+            open(result, name: chosen)
+        }
     }
 
     private func name(of result: NWBrowser.Result) -> String {
@@ -105,9 +104,8 @@ public final class PhoneLink {
         return "iPhone"
     }
 
-    private func open(_ result: NWBrowser.Result) {
+    private func open(_ result: NWBrowser.Result, name: String) {
         guard connection == nil else { return }
-        let name = name(of: result)
         status = .connecting(name)
         let connection = NWConnection(to: result.endpoint, using: .tcp)
         connection.stateUpdateHandler = { [weak self, weak connection] state in
@@ -119,7 +117,6 @@ public final class PhoneLink {
                     self.receive()
                 case .failed(let error):
                     self.connection = nil
-                    self.wantsConnection = false
                     self.status = .failed(error.localizedDescription)
                 case .cancelled:
                     self.connectionDropped()
@@ -135,16 +132,12 @@ public final class PhoneLink {
     private func connectionDropped() {
         connection = nil
         buffer.removeAll()
-        guard wantsConnection else { showFound(); return }
-        if let found {
-            status = .connecting(name(of: found))
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(1))
-                guard let self, self.wantsConnection, self.connection == nil, let found = self.found else { return }
-                self.open(found)
-            }
-        } else {
-            status = .searching
+        guard let chosen else { status = .idle; return }
+        status = .connecting(chosen)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard let self, self.connection == nil, self.chosen == chosen, let result = self.found[chosen] else { return }
+            self.open(result, name: chosen)
         }
     }
 
