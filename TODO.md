@@ -73,6 +73,12 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   Reading several would mean one more KataGo query per zone and a way to tell their
   markers apart.
 
+- **Nothing says the local reading is on its way.** The sidebar legend that read
+  "Lecture du combat local…" went when the legends moved to a hover caption on the
+  discs. The dashed zone shows before the blue disc does, which is the only hint that
+  a reading is coming. A small spinner in the zone's corner would say it, if the
+  wait ever turns out to be long enough to be noticed.
+
 - **The local sequence stops where KataGo leaves the zone.** Both colours are kept
   inside for twelve moves; past that, or at the first pass, the walk ends. A fight
   that needs a ko threat elsewhere is therefore cut at the threat. Following the
@@ -81,9 +87,10 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 ## Design
 
 - **A record under review is read-only.** Clicking the board does nothing, not even
-  on the green marker; dragging across it draws the zone of the local reading. Playing the marked move with a click would be the obvious
-  gesture, but it collides with the arrow keys owning navigation, and it wants a
-  decision about what happens to the branch afterwards.
+  on the green marker; dragging across it draws the zone of the local reading.
+  Playing the marked move with a click would be the obvious gesture, but it
+  collides with the arrow keys owning navigation, and it wants a decision about
+  what happens to the branch afterwards.
 
 - **Revisit the icon at 16 px.** Generated with Gemini 3 Pro Image, then masked to
   the macOS squircle by `app/Scripts/make-icon.py`. The wood grain and the grid
