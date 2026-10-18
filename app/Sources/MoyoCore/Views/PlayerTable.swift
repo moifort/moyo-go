@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// Used both while playing and while counting so the sidebar keeps a single shape:
 /// figures right-aligned in tabular digits, so columns read vertically and a total
-/// can be checked against the rows above it.
+/// can be checked against the rows above it. Each column is headed by the stone
+/// and its name, and by who holds it when that is known — a dot alone did not say.
 public struct PlayerTable: View {
     public struct Row: Identifiable, Sendable {
         public let id: String
@@ -27,21 +28,25 @@ public struct PlayerTable: View {
     }
 
     public let rows: [Row]
+    /// The colour the person at the keyboard plays; nil for a record, where the
+    /// names are shown elsewhere.
+    public let humanColor: PlayerColor?
 
-    public init(rows: [Row]) {
+    public init(rows: [Row], humanColor: PlayerColor? = nil) {
         self.rows = rows
+        self.humanColor = humanColor
     }
 
     /// Number columns are fixed so the label column keeps whatever is left; letting
     /// all three share the width squeezed "Prisonniers" onto two lines.
-    private static let figureWidth: CGFloat = 38
+    private static let figureWidth: CGFloat = 56
 
     public var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-            GridRow {
+            GridRow(alignment: .lastTextBaseline) {
                 Color.clear.frame(height: 0)
-                stoneHeader(.black)
-                stoneHeader(.white)
+                header(.black)
+                header(.white)
             }
 
             ForEach(rows) { row in
@@ -64,13 +69,25 @@ public struct PlayerTable: View {
         }
     }
 
-    private func stoneHeader(_ color: PlayerColor) -> some View {
-        Circle()
-            .fill(Theme.stone(color))
-            .strokeBorder(Theme.primaryText.opacity(color == .black ? 0.25 : 0), lineWidth: 0.5)
-            .frame(width: 10, height: 10)
-            .frame(width: Self.figureWidth, alignment: .trailing)
-            .accessibilityLabel(Theme.name(color))
+    private func header(_ color: PlayerColor) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Theme.stone(color))
+                    .strokeBorder(Theme.primaryText.opacity(color == .black ? 0.3 : 0), lineWidth: 0.5)
+                    .frame(width: 9, height: 9)
+                Text(Theme.name(color))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.primaryText.opacity(0.85))
+            }
+            if let humanColor {
+                Text(humanColor == color ? "vous" : "KataGo")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+        .frame(width: Self.figureWidth, alignment: .trailing)
+        .accessibilityElement(children: .combine)
     }
 
     /// A right-aligned number, or a dash when the quantity does not apply to that

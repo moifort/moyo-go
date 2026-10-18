@@ -19,10 +19,18 @@ public enum Theme {
 
     /// The chart is read from the human player's side: white when they are ahead,
     /// red when they are behind, the way Stocks colours a move against you.
-    public static let chartAhead = Color.white.opacity(0.85)
-    public static let chartBehind = Color(red: 0.847, green: 0.271, blue: 0.247).opacity(0.85)
-    public static let chartAheadCurrent = Color.white
-    public static let chartBehindCurrent = Color(red: 0.847, green: 0.271, blue: 0.247)
+    public static let chartAhead = Color.white
+    public static let chartBehind = Color(red: 0.847, green: 0.271, blue: 0.247)
+    /// The area between the line and the midline: present, but well behind the line.
+    public static let chartAheadFill = Color.white.opacity(0.22)
+    public static let chartBehindFill = Color(red: 0.847, green: 0.271, blue: 0.247).opacity(0.3)
+    public static let chartMidline = Color.white.opacity(0.25)
+
+    /// A small capsule that names a setting: the level of the opponent, the
+    /// phone that is connected.
+    public static let tagBackground = Color.white.opacity(0.12)
+    /// The phone is live: the one green in the sidebar, so it is seen.
+    public static let connected = Color(red: 0.30, green: 0.78, blue: 0.42)
 
     public static func stone(_ color: PlayerColor) -> Color {
         color == .black ? blackStone : whiteStone

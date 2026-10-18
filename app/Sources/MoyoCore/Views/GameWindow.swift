@@ -16,7 +16,7 @@ public struct GameWindow: View {
     public var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(session: session)
-                .navigationSplitViewColumnWidth(206)
+                .navigationSplitViewColumnWidth(240)
         } detail: {
             board
         }
@@ -173,7 +173,7 @@ public struct GameWindow: View {
                     // No arrow: the colour already says which way it goes.
                     Text(ScoreChart.label(for: lead))
                         .font(.system(size: 13))
-                        .foregroundStyle(lead > 0 ? Theme.chartAheadCurrent : Theme.chartBehindCurrent)
+                        .foregroundStyle(lead > 0 ? Theme.chartAhead : Theme.chartBehind)
                         .monospacedDigit()
                 }
                 ScoreChart(scores: session.scoresFromPlayerSide, moveNumber: state.moveNumber, height: 22)

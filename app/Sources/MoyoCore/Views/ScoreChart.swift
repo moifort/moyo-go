@@ -1,146 +1,131 @@
 import SwiftUI
 
-/// The score graph: capsule bars above and below a midline, one hue, two weights.
+/// The score curve: a line around a midline, with the area between them filled.
 ///
-/// Read from the human player's side: above the middle they are ahead and the bar
-/// is white, below it they are behind and it turns red. No axis, no midline, no
-/// legend — the current value is written small just past the last bar.
+/// Read from the human player's side: above the middle they are ahead and the area
+/// is white, below it they are behind and it turns red. The midline is drawn, so
+/// an even game reads as a flat line on it rather than as an empty chart. Under
+/// review the part of the game not yet reached is dimmed, and a hairline marks
+/// the position on screen — the way lichess marks the move being looked at.
 public struct ScoreChart: View {
     public let scores: [Int: Double]
     public let moveNumber: Int
-    /// Value to write next to the last bar. Nil leaves the chart bare.
-    public let annotation: Double?
+    /// Moves in the record under review, nil while a game is being played.
+    public let moveCount: Int?
     public let height: CGFloat
-
-    private static let labelHeight: CGFloat = 12
-    /// Wide enough for the longest figure a game can produce, e.g. "132,5".
-    static let labelWidth: CGFloat = 32
-    /// Breathing room between the last bar and the figure.
-    static let labelGap: CGFloat = 4
 
     public init(
         scores: [Int: Double],
         moveNumber: Int,
-        annotation: Double? = nil,
-        height: CGFloat = 40
+        moveCount: Int? = nil,
+        height: CGFloat = 56
     ) {
         self.scores = scores
         self.moveNumber = moveNumber
-        self.annotation = annotation
+        self.moveCount = moveCount
         self.height = height
     }
 
+    private var lineWidth: CGFloat { height < 30 ? 1 : 1.5 }
+
     public var body: some View {
-        GeometryReader { proxy in
-            // The bars stop short of the right edge so the figure always has room of
-            // its own; drawn over them it was unreadable.
-            let chartWidth = annotation == nil
-                ? proxy.size.width
-                : max(1, proxy.size.width - Self.labelWidth - Self.labelGap)
-            let bars = ScoreChartLayout.bars(scores: scores, upTo: moveNumber, width: chartWidth)
-            let scale = ScoreChartLayout.scale(for: bars)
-            let half = proxy.size.height / 2
+        Canvas { context, size in
+            let span = ScoreCurve.span(moveNumber: moveNumber, moveCount: moveCount)
+            // Under review the whole record is drawn, so the scale does not jump as
+            // the position moves through it.
+            let allPoints = ScoreCurve.points(scores: scores, upTo: moveCount ?? moveNumber)
+            let scale = ScoreCurve.scale(for: allPoints)
+            let half = size.height / 2
+            let currentX = ScoreCurve.x(move: moveNumber, span: span, width: size.width)
 
-            ZStack(alignment: .topLeading) {
-                HStack(alignment: .center, spacing: ScoreChartLayout.spacing) {
-                    ForEach(Array(bars.enumerated()), id: \.offset) { _, bar in
-                        BarShape(bar: bar, scale: scale, half: half)
-                    }
-                }
-                .frame(width: chartWidth, height: proxy.size.height, alignment: .leading)
+            context.stroke(
+                Path { $0.move(to: CGPoint(x: 0, y: half)); $0.addLine(to: CGPoint(x: size.width, y: half)) },
+                with: .color(Theme.chartMidline),
+                lineWidth: 0.5
+            )
 
-                if let annotation {
-                    Text(Self.label(for: annotation))
-                        .font(.system(size: 10))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .foregroundStyle(
-                            annotation >= 0 ? Theme.chartAheadCurrent : Theme.chartBehindCurrent
-                        )
-                        .frame(width: Self.labelWidth, height: Self.labelHeight, alignment: .leading)
-                        .offset(
-                            x: Self.labelX(barCount: bars.count, total: proxy.size.width),
-                            y: Self.labelOffset(
-                                value: bars.last?.value ?? annotation,
-                                scale: scale,
-                                half: half,
-                                total: proxy.size.height
-                            )
-                        )
-                        .animation(.smooth(duration: 0.3), value: annotation)
-                }
+            guard let first = allPoints.first, let last = allPoints.last else { return }
+            let position = { (point: ScoreCurve.Point) in
+                CGPoint(
+                    x: ScoreCurve.x(move: point.move, span: span, width: size.width),
+                    y: ScoreCurve.y(value: point.value, scale: scale, height: size.height)
+                )
+            }
+            var line = Path()
+            line.move(to: position(first))
+            for point in allPoints.dropFirst() { line.addLine(to: position(point)) }
+
+            var area = line
+            area.addLine(to: CGPoint(x: position(last).x, y: half))
+            area.addLine(to: CGPoint(x: position(first).x, y: half))
+            area.closeSubpath()
+
+            let above = CGRect(x: 0, y: 0, width: size.width, height: half)
+            let below = CGRect(x: 0, y: half, width: size.width, height: half)
+            // What lies past the position on screen is still the game, only not yet
+            // reached: drawn, but faded.
+            let reached = CGRect(x: 0, y: 0, width: currentX, height: size.height)
+            let ahead = CGRect(x: currentX, y: 0, width: size.width - currentX, height: size.height)
+
+            for (region, dim) in [(reached, false), (ahead, true)] where region.width > 0 {
+                var layer = context
+                layer.clip(to: Path(region))
+                layer.opacity = dim ? 0.3 : 1
+                layer.fill(area.clipped(to: above), with: .color(Theme.chartAheadFill))
+                layer.fill(area.clipped(to: below), with: .color(Theme.chartBehindFill))
+                layer.stroke(line.clipped(to: above), with: .color(Theme.chartAhead), style: stroke)
+                layer.stroke(line.clipped(to: below), with: .color(Theme.chartBehind), style: stroke)
+            }
+
+            if let moveCount, moveNumber < moveCount {
+                context.stroke(
+                    Path { $0.move(to: CGPoint(x: currentX, y: 0)); $0.addLine(to: CGPoint(x: currentX, y: size.height)) },
+                    with: .color(Theme.primaryText.opacity(0.5)),
+                    lineWidth: 1
+                )
+            }
+
+            // The point at the position on screen, so the eye finds the current
+            // value without hunting for the end of the line.
+            if let current = allPoints.last(where: { $0.move <= moveNumber }), height >= 30 {
+                let centre = position(current)
+                let dot = CGRect(x: centre.x - 2.5, y: centre.y - 2.5, width: 5, height: 5)
+                context.fill(Path(ellipseIn: dot), with: .color(current.value >= 0 ? Theme.chartAhead : Theme.chartBehind))
             }
         }
         .frame(height: height)
         .accessibilityLabel("Graphe de l'avantage au score")
     }
 
-    /// Just past the right edge of the last bar, never over it.
-    static func labelX(barCount: Int, total: CGFloat) -> CGFloat {
-        let step = ScoreChartLayout.minimumBarWidth + ScoreChartLayout.spacing
-        let rightEdge = CGFloat(max(0, barCount - 1)) * step + ScoreChartLayout.minimumBarWidth
-        return min(max(0, rightEdge + labelGap), max(0, total - labelWidth))
-    }
-
-    /// Level with the tip of the last bar, kept inside the chart.
-    static func labelOffset(value: Double, scale: Double, half: CGFloat, total: CGFloat) -> CGFloat {
-        let magnitude = CGFloat(min(1, abs(value) / scale)) * half
-        let length = max(ScoreChartLayout.minimumBarWidth, magnitude)
-        let tip = value >= 0 ? half - length : half + length
-        return min(max(0, tip - labelHeight / 2), max(0, total - labelHeight))
+    private var stroke: StrokeStyle {
+        StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
     }
 
     /// The bare magnitude, with a French decimal comma. No sign: the colour already
-    /// says which way it goes — white ahead, red behind — and the bar says it twice.
+    /// says which way it goes — white ahead, red behind.
     public static func label(for value: Double) -> String {
         let rounded = (value * 10).rounded() / 10
         if abs(rounded) < 0.05 { return "0" }
         return String(format: "%.1f", abs(rounded)).replacingOccurrences(of: ".", with: ",")
     }
 
-    /// One bar, split into the half above the midline and the half below it, so a
-    /// positive value grows upward from the line and a negative one downward.
-    private struct BarShape: View {
-        let bar: ScoreChartLayout.Bar
-        let scale: Double
-        let half: CGFloat
+    /// The same figure with its sign, for the readout above the chart, where it is
+    /// read on its own. A true minus sign, not a hyphen.
+    public static func signedLabel(for value: Double) -> String {
+        let bare = label(for: value)
+        if bare == "0" { return bare }
+        return (value > 0 ? "+" : "−") + bare
+    }
+}
 
-        private var value: Double { bar.value ?? 0 }
+private extension Path {
+    /// The part of the path inside a rectangle, for painting one half of a curve in
+    /// one colour and the other half in another.
+    func clipped(to rect: Path) -> Path {
+        intersection(rect)
+    }
 
-        /// Positive means the human player is ahead, so the bar grows upward.
-        private var isAhead: Bool { value >= 0 }
-
-        private var length: CGFloat {
-            let magnitude = CGFloat(min(1, abs(value) / scale)) * half
-            return max(ScoreChartLayout.minimumBarWidth, magnitude)
-        }
-
-        private var color: Color {
-            if bar.isCurrent { return isAhead ? Theme.chartAheadCurrent : Theme.chartBehindCurrent }
-            return isAhead ? Theme.chartAhead : Theme.chartBehind
-        }
-
-        var body: some View {
-            VStack(spacing: 0) {
-                ZStack(alignment: .bottom) {
-                    Color.clear
-                    if isAhead { capsule }
-                }
-                .frame(height: half)
-
-                ZStack(alignment: .top) {
-                    Color.clear
-                    if !isAhead { capsule }
-                }
-                .frame(height: half)
-            }
-            .frame(width: ScoreChartLayout.minimumBarWidth)
-            .opacity(bar.value == nil ? 0 : 1)
-            .animation(.smooth(duration: 0.3), value: length)
-        }
-
-        private var capsule: some View {
-            Capsule().fill(color).frame(width: ScoreChartLayout.minimumBarWidth, height: length)
-        }
+    func clipped(to rect: CGRect) -> Path {
+        clipped(to: Path(rect))
     }
 }

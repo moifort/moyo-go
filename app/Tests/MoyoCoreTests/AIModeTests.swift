@@ -38,6 +38,15 @@ struct AIModeTests {
         #expect(describe(-8) == "9 dan")
     }
 
+    @Test("Le tag dit le niveau nu, et nomme tout autre réglage")
+    func tag() {
+        #expect(AIMode.mode(for: "ai:human").tag(for: 8) == "8 kyu")
+        #expect(AIMode.mode(for: "ai:pro").tag(for: 1950) == "époque 1950")
+        #expect(AIMode.mode(for: "ai:scoreloss").tag(for: 0.5) == "faiblesse 0,50")
+        #expect(AIMode.mode(for: "ai:default").tag(for: 3) == nil)
+        #expect(AIMode.mode(for: "ai:human").tag(for: nil) == nil)
+    }
+
     @Test("Le rang humain couvre du débutant au haut niveau")
     func humanRankRange() {
         let setting = AIMode.mode(for: "ai:human").setting!

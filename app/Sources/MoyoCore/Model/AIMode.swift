@@ -19,6 +19,14 @@ public struct AIMode: Identifiable, Sendable {
     public let summary: String
     public let setting: Setting?
 
+    /// The setting as a tag next to the name: "8 kyu", "époque 1950". A rank needs
+    /// no label, it is one; anything else says what the figure is.
+    public func tag(for value: Double?) -> String? {
+        guard let setting, let value else { return nil }
+        let figure = setting.describe(value)
+        return setting.label == "Niveau" ? figure : "\(setting.label.lowercased()) \(figure)"
+    }
+
     /// Ranks run from 20 kyu up through the dan grades, the way KaTrain stores them:
     /// positive is kyu, zero and below is dan.
     @Sendable static func rank(_ value: Double) -> String {

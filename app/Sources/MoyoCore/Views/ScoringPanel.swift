@@ -8,17 +8,20 @@ import SwiftUI
 /// nothing up on its own.
 public struct ScoringPanel: View {
     public let detail: ScoringDetail
+    /// The colour the person played, so the columns say "vous" and "KataGo".
+    public let humanColor: PlayerColor?
     public let onNewGame: () -> Void
 
-    public init(detail: ScoringDetail, onNewGame: @escaping () -> Void) {
+    public init(detail: ScoringDetail, humanColor: PlayerColor? = nil, onNewGame: @escaping () -> Void) {
         self.detail = detail
+        self.humanColor = humanColor
         self.onNewGame = onNewGame
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            PlayerTable(rows: rows)
+            PlayerTable(rows: rows, humanColor: humanColor)
             outcome
             Spacer(minLength: 0)
             Button("Nouvelle partie", action: onNewGame)

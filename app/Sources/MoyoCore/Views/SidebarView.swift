@@ -3,32 +3,36 @@ import SwiftUI
 public struct SidebarView: View {
     @Bindable public var session: GameSession
     @State private var isConfirmingResignation = false
+    @State private var isConfiguringAI = false
 
     public init(session: GameSession) {
         self.session = session
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             if let state = session.state, state.isReviewing {
                 ReviewPanel(session: session, state: state)
             } else if let state = session.state, let scoring = state.scoring {
-                ScoringPanel(detail: scoring) {
+                ScoringPanel(detail: scoring, humanColor: state.humanColor) {
                     NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
                 }
             } else if let state = session.state {
-                if let winner = state.winnerByResignation {
-                    resignationRow(winner)
-                } else {
-                    turnRow(state)
+                statusRow(state)
+                divider
+                ScoreSection(
+                    scores: session.scoresFromPlayerSide,
+                    moveNumber: state.moveNumber,
+                    lead: session.currentLead,
+                    caption: leadCaption
+                )
+                divider
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionTitle("Joueurs")
+                    PlayerTable(rows: playingRows(state), humanColor: state.humanColor)
                 }
                 divider
-                scoreSection(state)
-                divider
-                PlayerTable(rows: playingRows(state))
-                divider
                 opponentSection
-                divider
                 phoneSection
                 Spacer(minLength: 0)
                 if state.status == .finished {
@@ -54,45 +58,55 @@ public struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Theme.sidebarVeil)
         .help(session.engineDescription ?? "")
+        .sheet(isPresented: $isConfiguringAI) {
+            AISettingsSheet(session: session)
+        }
     }
 
     private var divider: some View {
         Rectangle().fill(Theme.hairline).frame(height: 0.5)
     }
 
-    private func turnRow(_ state: GameState) -> some View {
-        HStack(spacing: 8) {
+    /// Whose move it is, said to the player rather than by colour: the stone
+    /// already shows the colour, the words say what it means for them. Once the
+    /// game is over the same line says how it ended.
+    private func statusRow(_ state: GameState) -> some View {
+        HStack(spacing: 10) {
             TurnIndicator(color: state.toPlay, isThinking: session.thinking.isVisible)
-            Text(Theme.name(state.toPlay))
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.primaryText)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(statusTitle(state))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                Text(statusDetail(state))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
         }
     }
 
-    /// Takes the place of the turn once a player has given up: the stone says who
-    /// won, the words say how.
-    private func resignationRow(_ winner: PlayerColor) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(Theme.stone(winner))
-                .frame(width: 13, height: 13)
-            Text("\(Theme.name(winner)) gagne par abandon")
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.primaryText)
-                .lineLimit(1)
-            Spacer(minLength: 0)
+    private func statusTitle(_ state: GameState) -> String {
+        if let winner = state.winnerByResignation {
+            return "\(Theme.name(winner)) gagne par abandon"
         }
+        if state.status == .finished { return "Partie terminée" }
+        if session.thinking.isVisible { return "KataGo réfléchit…" }
+        return state.isHumanTurn ? "À vous de jouer" : "Au tour de KataGo"
     }
 
-    /// The chart carries its own figure, written small at the tip of the last bar,
-    /// so there is no separate readout.
-    private func scoreSection(_ state: GameState) -> some View {
-        ScoreChart(
-            scores: session.scoresFromPlayerSide,
-            moveNumber: state.moveNumber,
-            annotation: session.currentLead
-        )
+    private func statusDetail(_ state: GameState) -> String {
+        if state.status == .finished, let result = state.result, state.winnerByResignation == nil {
+            return result
+        }
+        return "Coup \(state.moveNumber) · \(Theme.name(state.toPlay)) au trait"
+    }
+
+    private func leadCaption(_ lead: Double) -> String {
+        guard abs(lead) >= 0.05 else { return "Égalité" }
+        return lead > 0 ? "Vous menez" : "KataGo mène"
     }
 
     /// What is already known per player while the game is on. Territory only exists
@@ -108,57 +122,94 @@ public struct SidebarView: View {
         ]
     }
 
-    /// The opponent, and the way to change it: the line that shows the mode is the
-    /// line that switches it. Its setting belongs to the new-game sheet, not here —
-    /// the sidebar states who you are playing, it is not a control panel.
+    /// Who you are playing: the mode by name, its level as a tag, and the one
+    /// button that changes either. The setting itself lives in a sheet — the
+    /// sidebar states who you are playing, it is not a control panel.
     private var opponentSection: some View {
-        Menu {
-            ForEach(session.modes) { mode in
-                Button {
-                    session.setAI(mode: mode, value: session.settingValue(for: mode))
-                } label: {
-                    Text(mode.name)
-                    if mode.id == session.currentMode.id { Image(systemName: "checkmark") }
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle("Adversaire")
+            HStack(spacing: 8) {
+                Text(session.currentMode.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                if let tag = session.currentMode.tag(for: session.settingValue(for: session.currentMode)) {
+                    Tag(tag)
                 }
+                Spacer(minLength: 0)
             }
-        } label: {
-            Text(session.currentMode.name)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.primaryText.opacity(0.85))
-                .lineLimit(1)
+            .help(session.currentMode.summary)
+            Button {
+                isConfiguringAI = true
+            } label: {
+                Label("Configurer l'IA", systemImage: "slider.horizontal.3")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
         }
-        // The borderless style draws its own indicator; adding one put a second
-        // chevron ahead of the label.
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help(session.currentMode.summary)
     }
 
-    /// The phone that watches the real board. One line: the button to connect it,
-    /// or what it is doing once connected.
+    /// The phone that watches the real board. One button to connect it; once it is
+    /// looking for or has found the phone, the same place says so.
     private var phoneSection: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "iphone")
-                .foregroundStyle(Theme.secondaryText)
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle("Téléphone")
             switch session.phone.status {
             case .idle:
-                Button("Connecter le téléphone") { session.phone.connect() }
-                    .buttonStyle(.link)
-                    .font(.system(size: 13))
-            case .searching:
-                Text("Recherche du téléphone…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
-                Button("Arrêter") { session.phone.disconnect() }.buttonStyle(.link).font(.system(size: 12))
-            case .connecting(let name):
-                Text("Connexion à \(name)…").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
+                Button {
+                    session.phone.connect()
+                } label: {
+                    Label("Connecter le téléphone", systemImage: "iphone")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+            case .searching, .connecting:
+                Button {
+                    session.phone.disconnect()
+                } label: {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text(phoneProgress)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .help("Arrêter la recherche")
             case .connected(let name):
-                Text(name).font(.system(size: 13)).foregroundStyle(Theme.primaryText).lineLimit(1)
-                Button("Déconnecter") { session.phone.disconnect() }.buttonStyle(.link).font(.system(size: 12))
+                HStack(spacing: 8) {
+                    Image(systemName: "iphone")
+                        .foregroundStyle(Theme.connected)
+                    Text(name)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.primaryText)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Button("Déconnecter") { session.phone.disconnect() }
+                        .buttonStyle(.link)
+                        .font(.system(size: 12))
+                }
             case .failed(let message):
-                Text("Échec : \(message)").font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(2)
-                Button("Réessayer") { session.phone.connect() }.buttonStyle(.link).font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Échec : \(message)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(2)
+                    Button {
+                        session.phone.connect()
+                    } label: {
+                        Label("Réessayer", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                }
             }
-            Spacer(minLength: 0)
         }
+    }
+
+    private var phoneProgress: String {
+        if case .connecting(let name) = session.phone.status { return "Connexion à \(name)…" }
+        return "Recherche du téléphone…"
     }
 
     private func actions(_ state: GameState) -> some View {
@@ -202,6 +253,25 @@ public struct SidebarView: View {
     }
 }
 
+/// A small capsule holding one word about a thing: the opponent's level.
+struct Tag: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Theme.primaryText.opacity(0.9))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(Theme.tagBackground, in: Capsule())
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
 /// What the sidebar shows while a record is being read.
 ///
 /// A review has no turn to announce and no action to offer: what it has is a
@@ -218,15 +288,18 @@ struct ReviewPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             divider
-            ScoreChart(
+            ScoreSection(
                 scores: session.scoresFromPlayerSide,
                 moveNumber: state.moveNumber,
-                annotation: session.currentLead
+                moveCount: state.moveCount,
+                lead: session.currentLead,
+                caption: { leadCaption($0, perspective: state.humanColor) }
             )
             if let progress = session.analysisProgress {
                 gauge(done: progress.done, total: progress.total)
             }
             divider
+            SectionTitle("Joueurs")
             players
             PlayerTable(rows: rows)
             Spacer(minLength: 0)
@@ -236,6 +309,12 @@ struct ReviewPanel: View {
 
     private var divider: some View {
         Rectangle().fill(Theme.hairline).frame(height: 0.5)
+    }
+
+    /// A record has no "you": the lead is named after the colour that holds it.
+    private func leadCaption(_ lead: Double, perspective: PlayerColor) -> String {
+        guard abs(lead) >= 0.05 else { return "Égalité" }
+        return "\(Theme.name(lead > 0 ? perspective : perspective.opponent)) mène"
     }
 
     private var header: some View {

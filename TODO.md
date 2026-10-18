@@ -89,6 +89,17 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 
 ## Design
 
+- **The score curve does not animate.** The old bars grew with `.animation`; the
+  curve is a `Canvas`, which redraws in place. Animating it would mean an
+  `Animatable` path through every point of the game, and the readout above it
+  already moves with `numericText`. Worth doing if the jump at each analysis ever
+  reads as a glitch.
+
+- **The curve compresses past sixty moves.** Its width covers the game so far, with
+  a floor of sixty moves so the opening is not stretched across the chart. Beyond
+  the floor, every move squeezes the curve a little more; a scrolling window would
+  keep the last moves readable at the cost of losing the opening from view.
+
 - **A record under review is read-only.** Clicking the board does nothing, not even
   on the green marker; dragging across it draws the zone of the local reading.
   Playing the marked move with a click would be the obvious gesture, but it
