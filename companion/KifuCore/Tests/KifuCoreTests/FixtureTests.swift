@@ -5,7 +5,7 @@ import ImageIO
 
 /// Real photos: `name.jpg` next to `name.json` holding the tapped corners and the expected position.
 ///
-///     { "corners": [[x, y], [x, y], [x, y], [x, y]], "lines": 19, "stoneHeight": 0,
+///     { "corners": [[x, y], [x, y], [x, y], [x, y]], "lines": 19, "stoneHeight": 0.4,
 ///       "expected": ["...", "..."], "ignore": [[col, row], ...] }
 ///
 /// `ignore` lists intersections whose truth is unknown (stones dropped off-grid).
@@ -46,7 +46,7 @@ final class FixtureTests: XCTestCase {
                 failures.append("\(name): degenerate corners"); continue
             }
             var settings = ReaderSettings()
-            settings.stoneHeight = fixture.stoneHeight ?? 0
+            if let height = fixture.stoneHeight { settings.stoneHeight = height }
             let readings = IntersectionReader(geometry: geometry, settings: settings).read(image, previous: nil)
             let expected = Position(parsing: fixture.expected.joined(separator: "\n"))
             let ignored = Set((fixture.ignore ?? []).map { Intersection(col: $0[0], row: $0[1]) })

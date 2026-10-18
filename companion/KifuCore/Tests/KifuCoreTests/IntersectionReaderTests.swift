@@ -50,10 +50,12 @@ final class IntersectionReaderTests: XCTestCase {
 
     func testStoneLiftGrowsTowardsTheFarEdge() {
         let r = reader(for: SyntheticScene(), height: 0.35)
-        let near = r.stoneLift(at: at(9, 18)), far = r.stoneLift(at: at(9, 0))
+        let near = r.stoneLift(at: at(9, 18)), far = r.stoneLift(at: at(9, 1))
         XCTAssertGreaterThan(far, near)
         XCTAssertGreaterThanOrEqual(near, 0)
-        XCTAssertLessThan(far, 1.0)
+        XCTAssertLessThanOrEqual(far, ReaderSettings().maxLift)
+        // On the far line itself the lifted disk would leave the board.
+        XCTAssertEqual(r.stoneLift(at: at(9, 0)), 0)
     }
 
     func testGradientAndHardShadowDoNotChangeTheReading() {

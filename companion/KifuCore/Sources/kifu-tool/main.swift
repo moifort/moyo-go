@@ -6,7 +6,9 @@ import KifuCore
 
 // kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--rough] [--overlay out.png]
 //   Prints the (fitted) corners, the position read and per-intersection measures on demand,
-//   and writes an overlay image showing the grid and the stones read.
+//   and writes an overlay image showing the grid and the stones read. `--height` overrides the
+//   reader's stone thickness; `--lifts` prints the disk lift per row; `--debug col,row` prints
+//   every measure of one intersection (flat, lifted, with neighbours, as a lone stone).
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write((message + "\n").data(using: .utf8)!)
@@ -15,18 +17,20 @@ func fail(_ message: String) -> Never {
 
 var args = Array(CommandLine.arguments.dropFirst())
 guard args.first == "read", args.count >= 2 else {
-    fail("usage: kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--rough] [--overlay out.png] [--measures]")
+    fail("usage: kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--rough] [--overlay out.png] [--measures] [--lifts] [--debug col,row]")
 }
 args.removeFirst()
 let photo = URL(fileURLWithPath: args.removeFirst())
 var corners: [Point] = []
 var anchors: [(Point, Point)] = []
 var lines = 19
-var height = 0.0
+var height: Double?
 var fitRadius = 0
 var rough = false
 var overlay: URL?
 var printMeasures = false
+var printLifts = false
+var debugged: Set<String> = []
 while !args.isEmpty {
     let flag = args.removeFirst()
     switch flag {
@@ -45,6 +49,8 @@ while !args.isEmpty {
     case "--rough": rough = true
     case "--overlay": overlay = URL(fileURLWithPath: args.removeFirst())
     case "--measures": printMeasures = true
+    case "--lifts": printLifts = true
+    case "--debug": debugged.insert("(" + args.removeFirst() + ")")
     default: fail("unknown flag \(flag)")
     }
 }
@@ -76,11 +82,18 @@ guard let geometry = BoardGeometry(calibration: Calibration(lines: lines, corner
 print(String(format: "min spacing %.1f px, away from camera (%.0f, %.0f)", geometry.minSpacing, geometry.awayFromCamera.0, geometry.awayFromCamera.1))
 
 var settings = ReaderSettings()
-settings.stoneHeight = height
+if let height { settings.stoneHeight = height }
 let reader = IntersectionReader(geometry: geometry, settings: settings)
 let readings = reader.read(image, previous: nil)
 print(readings.position)
 if !readings.unreadable.isEmpty { print("unreadable: \(readings.unreadable.sorted())") }
+if printLifts {
+    for row in 0..<lines { print(String(format: "row %d lift %.2f", row, reader.stoneLift(at: Intersection(col: lines / 2, row: row)))) }
+}
+for i in readings.position.all where debugged.contains(i.description) {
+    let occupied = Set(readings.position.stones.keys)
+    print("debug \(i): flat \(reader.measure(image, at: i, lift: 0)) lifted \(reader.measure(image, at: i)) withOccupied \(reader.measure(image, at: i, occupied: occupied)) lone \(String(describing: reader.loneStone(image, at: i, previous: nil)))")
+}
 if printMeasures {
     for i in readings.position.all {
         let m = reader.measure(image, at: i)

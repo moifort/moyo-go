@@ -247,3 +247,15 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   KifuCore; the iOS app is only built by hand, because it needs XcodeGen and an iOS
   platform on the runner for a target that ships to one phone.
 
+- **Kifu tracks the grid, not the camera.** During a game the corners are refitted
+  within 8 px every two seconds, which follows a stand that gets nudged a few pixels
+  at a time; the 18 October trial drifted 20 px in a few seconds and was caught up
+  over three refits. A bump that moves the grid by a whole far-row pitch at once
+  (about 45 px) would be read one row off until "Recalibrer". Detecting the grid
+  afresh from the last corners is not the answer: on that trial the detector landed
+  100 px off, pulled by the board's edges.
+
+- **Stone height is a constant.** The reader lifts its disk by 0.4 spacings of stone
+  thickness (a 9 mm stone on a 22 mm grid), scaled by the local viewing angle and capped
+  at 0.45. Thinner stones or a bigger board would want another value; measuring it from
+  the calibration frame (a stone's rim against its intersection) is the day it matters.

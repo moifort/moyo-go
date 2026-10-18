@@ -107,6 +107,11 @@ public struct Recorder {
         clearPending()
     }
 
+    /// The grid moved a little: read with `reader` from now on, keeping everything pending.
+    public mutating func follow(reader: BoardReader) {
+        self.reader = reader
+    }
+
     private mutating func clearPending() {
         status = .inSync
         pendingSince = nil

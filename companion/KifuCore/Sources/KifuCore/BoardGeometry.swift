@@ -147,7 +147,9 @@ public struct BoardGeometry: Sendable {
     }
 
     /// Moves the four corners, within `radius` pixels each, to maximise the darkness along all
-    /// grid lines. Robust to stones on the corners since every line contributes.
+    /// grid lines. Robust to stones on the corners since every line contributes. Besides one
+    /// corner at a time, the whole grid is tried shifted as one: a nudged stand moves all four
+    /// together, and no single corner improves the score on its own.
     public static func fitCorners(_ taps: [Point], lines: Int, in image: GrayImage, radius: Int) -> [Point] {
         guard taps.count == 4 else { return taps }
         var best = taps
@@ -157,12 +159,11 @@ public struct BoardGeometry: Sendable {
             var improved = true
             while improved {
                 improved = false
-                for k in 0..<4 {
-                    for (dx, dy) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
+                for (dx, dy) in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
+                    for moved in [[0], [1], [2], [3], [0, 1, 2, 3]] {
                         var candidate = best
-                        candidate[k] = Point(x: best[k].x + dx, y: best[k].y + dy)
-                        guard abs(candidate[k].x - taps[k].x) <= Double(radius),
-                              abs(candidate[k].y - taps[k].y) <= Double(radius) else { continue }
+                        for k in moved { candidate[k] = Point(x: best[k].x + dx, y: best[k].y + dy) }
+                        guard moved.allSatisfy({ abs(candidate[$0].x - taps[$0].x) <= Double(radius) && abs(candidate[$0].y - taps[$0].y) <= Double(radius) }) else { continue }
                         let score = gridScore(candidate, lines: lines, in: image)
                         if score > bestScore + 1e-9 { bestScore = score; best = candidate; improved = true }
                     }

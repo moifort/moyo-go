@@ -180,14 +180,35 @@ final class GameSession {
         }
         engine.reader = IntersectionReader(geometry: geometry)
         engine.calibration = calibration
-        let points = (0..<Self.lines).map { row in
-            (0..<Self.lines).map { col in geometry.imagePoint(of: Intersection(col: col, row: row)) }
-        }
+        engine.tracker = GridTracker(calibration: calibration)
+        let points = Self.gridPoints(of: geometry)
         Task { @MainActor in
             self.calibration = calibration
             self.gridPoints = points
             self.minSpacing = geometry.minSpacing
             self.frozen = nil
+        }
+    }
+
+    private nonisolated static func gridPoints(of geometry: BoardGeometry) -> [[Point]] {
+        (0..<lines).map { row in (0..<lines).map { col in geometry.imagePoint(of: Intersection(col: col, row: row)) } }
+    }
+
+    /// Worker side, while recording: refits the corners now and then and hands the recorder a
+    /// reader on the grid as it sits now.
+    private nonisolated func track(_ frame: CameraFrame) {
+        guard var tracker = engine.tracker, let moved = tracker.update(frame.gray, at: frame.time) else { return }
+        engine.tracker = tracker
+        guard let geometry = BoardGeometry(calibration: moved) else { return }
+        let reader = IntersectionReader(geometry: geometry)
+        engine.reader = reader
+        engine.calibration = moved
+        engine.recorder?.follow(reader: reader)
+        let points = Self.gridPoints(of: geometry)
+        Task { @MainActor in
+            self.calibration = moved
+            self.gridPoints = points
+            self.minSpacing = geometry.minSpacing
         }
     }
 
@@ -298,6 +319,8 @@ final class GameSession {
         var recording = false
         var fileURL: URL?
         var calibration: Calibration?
+        /// Follows the grid while recording, in case the stand gets nudged.
+        var tracker: GridTracker?
         var trial: TrialLog?
         var result: GameResult?
     /// A game has started in this session: calibrating again resumes it.
@@ -316,6 +339,7 @@ final class GameSession {
                 self.frameSize = size
                 if let full = frame.full { self.frozen = full }
             }
+            if engine.recording, engine.recorder != nil { track(frame) }
             if var recorder = engine.recorder, engine.reader != nil, engine.recording {
                 let update = recorder.process(frame.gray, at: frame.time)
                 engine.recorder = recorder
