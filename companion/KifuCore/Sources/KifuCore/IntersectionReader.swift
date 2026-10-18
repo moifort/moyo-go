@@ -103,35 +103,68 @@ public struct IntersectionReader: Sendable {
     /// that no stone of `occupied` touches, minus the two just beyond `i`.
     public func measure(_ image: GrayImage, at i: Intersection, occupied: Set<Intersection>) -> Measure {
         let base = measure(image, at: i)
-        let n = Double(geometry.lines - 1)
-        func touched(_ x: Double, _ y: Double) -> Bool {
-            for cx in [x - 0.5, x + 0.5] {
-                for cy in [y - 0.5, y + 0.5] {
-                    let corner = Intersection(col: Int(cx.rounded()), row: Int(cy.rounded()))
-                    if corner != i, occupied.contains(corner) { return true }
-                }
-            }
-            return false
-        }
         let near = [-0.5, 0.5]
-        guard near.contains(where: { dy in near.contains { dx in touched(Double(i.col) + dx, Double(i.row) + dy) } }) else {
-            return base
+        guard near.contains(where: { dy in near.contains { dx in touched(Double(i.col) + dx, Double(i.row) + dy, by: occupied, except: i) } }),
+              let wood = blockWood(image, at: i, occupied: occupied) else { return base }
+        return Measure(stone: base.stone, wood: wood, deviation: base.deviation)
+    }
+
+    /// A stone alone, set a little off its intersection, covers one of the four adjacent cells:
+    /// that cell then reads as bright, or as dark, as the stone and lifts the wood reference.
+    /// Nil unless both the 4×4 block and the adjacent cells without the one most like the stone
+    /// say there is a stone.
+    public func loneStone(_ image: GrayImage, at i: Intersection, previous: Stone?) -> Stone? {
+        let base = measure(image, at: i)
+        guard let block = blockWood(image, at: i, occupied: []) else { return nil }
+        let byBlock = Self.classify(Measure(stone: base.stone, wood: block, deviation: base.deviation), previous: previous, settings: settings)
+        guard byBlock != .empty else { return nil }
+        let n = Double(geometry.lines - 1)
+        var adjacent: [Double] = []
+        for dy in [-0.5, 0.5] {
+            for dx in [-0.5, 0.5] {
+                let x = Double(i.col) + dx, y = Double(i.row) + dy
+                guard x > 0, y > 0, x < n, y < n else { continue }
+                let s = disk(image, cx: x, cy: y, radius: settings.woodRadius)
+                adjacent.append(s.reduce(0, +) / Double(s.count))
+            }
         }
+        guard adjacent.count >= 3 else { return nil }
+        adjacent.sort()
+        if byBlock == .white { adjacent.removeLast() } else { adjacent.removeFirst() }
+        let wood = adjacent[adjacent.count / 2]
+        let byAdjacent = Self.classify(Measure(stone: base.stone, wood: wood, deviation: base.deviation), previous: previous, settings: settings)
+        return byAdjacent == byBlock ? byBlock : nil
+    }
+
+    /// True when a stone of `occupied` other than `except` sits at a corner of the cell centred at (x, y).
+    private func touched(_ x: Double, _ y: Double, by occupied: Set<Intersection>, except: Intersection) -> Bool {
+        for cx in [x - 0.5, x + 0.5] {
+            for cy in [y - 0.5, y + 0.5] {
+                let corner = Intersection(col: Int(cx.rounded()), row: Int(cy.rounded()))
+                if corner != except, occupied.contains(corner) { return true }
+            }
+        }
+        return false
+    }
+
+    /// Median wood of the 4×4 block of cells around `i`, leaving out the cells a stone of
+    /// `occupied` touches and the two just beyond `i`. Nil with fewer than three cells left.
+    private func blockWood(_ image: GrayImage, at i: Intersection, occupied: Set<Intersection>) -> Double? {
         let away = geometry.awayFromCamera
+        let n = Double(geometry.lines - 1)
         var woods: [Double] = []
         for dy in [-1.5, -0.5, 0.5, 1.5] {
             for dx in [-1.5, -0.5, 0.5, 1.5] {
                 let x = Double(i.col) + dx, y = Double(i.row) + dy
-                guard x > 0, y > 0, x < n, y < n, !touched(x, y) else { continue }
+                guard x > 0, y > 0, x < n, y < n, !touched(x, y, by: occupied, except: i) else { continue }
                 let beyond = abs(dx) == 0.5 && abs(dy) == 0.5 && dx * away.0 + dy * away.1 > 0
                 if beyond { continue }
                 let s = disk(image, cx: x, cy: y, radius: settings.woodRadius)
                 woods.append(s.reduce(0, +) / Double(s.count))
             }
         }
-        guard woods.count >= 3 else { return base }
-        let sorted = woods.sorted()
-        return Measure(stone: base.stone, wood: sorted[sorted.count / 2], deviation: base.deviation)
+        guard woods.count >= 3 else { return nil }
+        return woods.sorted()[woods.count / 2]
     }
 
     public func measure(_ image: GrayImage, at i: Intersection) -> Measure {
@@ -199,7 +232,6 @@ public struct IntersectionReader: Sendable {
 
         var occupied = Set(position.stones.keys)
         if let previous { occupied.formUnion(previous.stones.keys) }
-        guard !occupied.isEmpty else { return Readings(position: position, unreadable: unreadable) }
         let first = position
         for i in first.all where !unreadable.contains(i) {
             let hasNeighbour = (-1...1).contains { dy in
@@ -207,9 +239,12 @@ public struct IntersectionReader: Sendable {
                     (dx != 0 || dy != 0) && occupied.contains(Intersection(col: i.col + dx, row: i.row + dy))
                 }
             }
-            guard hasNeighbour else { continue }
-            let m = measure(image, at: i, occupied: occupied)
-            if m != measures[i] { position[i] = Self.classify(m, previous: previous?[i], settings: settings) }
+            if hasNeighbour {
+                let m = measure(image, at: i, occupied: occupied)
+                if m != measures[i] { position[i] = Self.classify(m, previous: previous?[i], settings: settings) }
+            } else if first[i] == .empty, let stone = loneStone(image, at: i, previous: previous?[i]) {
+                position[i] = stone
+            }
         }
         return Readings(position: position, unreadable: unreadable)
     }

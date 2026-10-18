@@ -89,7 +89,10 @@ cohérence. Trois filtres successifs, chacun indépendant des deux autres :
    des pierres et une blanche entourée de blanches se lit vide. Une seconde
    passe relit donc les intersections voisines d'une pierre avec le bois pris
    dans le bloc de 4×4 cases, hors cases touchées par une pierre et hors les
-   deux cases juste au-delà de l'intersection.
+   deux cases juste au-delà de l'intersection. Une pierre seule posée un peu à côté
+   de son intersection couvre l'une des quatre cases : elle est retenue si le
+   bloc de 4×4 cases et les cases adjacentes privées de la plus semblable à la
+   pierre la voient tous deux.
 2. **Stabilité temporelle.** Un changement sur une intersection n'est retenu
    que s'il est lu identique sur plusieurs images consécutives. Une main qui
    passe ne tient pas en place.

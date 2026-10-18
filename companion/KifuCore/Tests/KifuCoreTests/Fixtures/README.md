@@ -29,3 +29,5 @@ Recommended set: empty board, a few stones, a dense position, a hand over the bo
 - `rasante-coin-serre`: iPhone 15 Pro on the stand, 18 October 2026. Two white stones side by
   side behind two black ones in the far right corner: the white stone at (16,2) is hidden by
   its neighbours from the four adjacent cells, so the wood reference must come from further out.
+- `rasante-pierre-seule-au-fond`: same setup. A lone white stone at (3,2), near the far edge:
+  its own top covers the two cells just beyond it, which then read as bright as the stone.
