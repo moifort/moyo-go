@@ -20,11 +20,15 @@ deux côtés.
 | Analyse | Requête séparée, rangée hors du nœud | Sinon elle se mêle aux candidats de KaTrain et fausse la pastille verte |
 | Coût | `points_lost` contre l'analyse globale du nœud | Souvent la leçon elle-même |
 | Coup global déjà dans la zone | Il est aussi le coup local, coût nul | La recherche locale ne pourrait différer que par le bruit |
-| Quand | Seule la position affichée est lue, une fois | Ne pas doubler le travail de KataGo sur tout le record |
+| Quand | À la demande : maintenir ⌥ lance la lecture de la position affichée, une fois | Ne pas doubler le travail de KataGo sur les positions seulement traversées |
+| Affichage | Rien de local par défaut ; zone, pastille bleue et chargement tant que ⌥ est tenue ou que la séquence est déroulée ; une zone tracée reste visible | Le goban montre d'abord le meilleur coup, le local est une question qu'on pose |
+| ⌥→ trop tôt | Le pont garde l'appui et joue le premier coup dès que la lecture arrive | Sinon l'appui se perd et le goban semble bloqué |
 | Rendu | Cadre pointillé bleu sous la grille, pastille bleue ; anneau bleu autour de la verte si elles coïncident | Les deux propositions ne se confondent jamais |
 
 ## Protocole
 
+- `read_local` — demande la lecture locale de la position affichée ; l'état dit
+  `local_pending` tant qu'elle n'est pas revenue, et `local_wanted` si ⌥→ attend.
 - `variation {step, kind}` — `kind` vaut `best` (défaut) ou `local`. Passer de l'une
   à l'autre revient d'abord au record.
 - L'état de revue gagne `variation_kind` (`best`, `local` ou `null`), `local_zone`

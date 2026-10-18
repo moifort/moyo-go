@@ -68,6 +68,10 @@ class BridgeSession(KaTrainHost):
         #: The zone the player drew, in place of the inferred one. It stays while
         #: the record is walked — a fight is read over several moves — until cleared.
         self._drawn_zone: Optional[Dict[str, int]] = None
+        #: The player asked for the local sequence before KataGo had read it. The
+        #: first move is played as soon as the reading lands, rather than the press
+        #: being lost and the board looking stuck.
+        self._local_wanted = False
         self._game_info: Dict[str, Any] = {}
         #: Nodes already pushed to the front of the queue, by id. `request_analysis`
         #: has no guard against duplicates, and the tree holds every node for the
@@ -394,6 +398,7 @@ class BridgeSession(KaTrainHost):
         self._variation_kind = "best"
         self._local = {}
         self._drawn_zone = None
+        self._local_wanted = False
         self._game_info = {}
         self._boosted = set()
         self._emitted_best = None
@@ -457,6 +462,7 @@ class BridgeSession(KaTrainHost):
         """Jumps to a position in the main line. Out-of-range asks are clamped."""
         self._require_review()
         self._prune_variation()
+        self._local_wanted = False
         self._index = max(0, min(int(move_number), len(self._line) - 1))
         self.game.set_current_node(self._line[self._index])
         self._emitted_best = None
@@ -474,10 +480,17 @@ class BridgeSession(KaTrainHost):
         self._require_review()
         if kind not in ("best", "local"):
             raise CommandError("bad_arguments", f"unknown variation kind '{kind}'")
+        self._local_wanted = False
         if int(step) > 0:
             if self._variation and kind != self._variation_kind:
                 self._prune_variation()
                 self.game.set_current_node(self._line[self._index])
+            if kind == "local" and not self._variation:
+                self._request_local(ask=True)
+            if kind == "local" and not self._variation and self._local_pending():
+                self._local_wanted = True
+                self._emit_state(command_id)
+                return
             self._variation_kind = kind
             self._push_variation(command_id)
         else:
@@ -623,14 +636,34 @@ class BridgeSession(KaTrainHost):
             except (KeyError, TypeError, ValueError) as exc:
                 raise CommandError("bad_arguments", str(exc)) from exc
         self._drawn_zone = zone
+        self._local_wanted = False
         if self._variation:
             self._prune_variation()
             self.game.set_current_node(self._line[self._index])
-        self._request_local()
+        # A zone just drawn is a question asked: read it straight away.
+        self._request_local(ask=True)
         self._emit_state(command_id)
 
-    def _request_local(self) -> None:
-        """Asks for the local reading of the position on screen, once per position and zone."""
+    def read_local(self, command_id):
+        """The player holds Option: have KataGo read the zone of the position on screen.
+
+        Nothing local is read until then. Most positions of a record are only passed
+        through, and a query per position would double KataGo's work for readings
+        nobody looks at. Inside a variation the anchor's reading is the one that
+        counts, and it was asked for on the way in.
+        """
+        self._require_review()
+        if not self._variation:
+            self._request_local(ask=True)
+        self._emit_state(command_id)
+
+    def _request_local(self, ask: bool = False) -> None:
+        """Places the zone of the position on screen; `ask` also has KataGo read it.
+
+        The zone costs nothing and is placed on every move, so the keys and buttons
+        know whether there is a fight to read. The reading is asked for once per
+        position and zone.
+        """
         node = self._line[self._index]
         if self._engine is None:
             return
@@ -638,12 +671,12 @@ class BridgeSession(KaTrainHost):
             serialize.stone_map(self.game), self._size(), serialize.last_move(self.game)
         )
         reading = self._local.get(id(node))
-        if reading is not None and reading["zone"] == zone:
-            return
-        self._local[id(node)] = {"zone": zone, "analysis": None}
-        if zone is None:
-            return
-        self._send_local_query(node, zone)
+        if reading is None or reading["zone"] != zone:
+            reading = {"zone": zone, "analysis": None, "asked": False}
+            self._local[id(node)] = reading
+        if ask and zone is not None and not reading["asked"]:
+            reading["asked"] = True
+            self._send_local_query(node, zone)
 
     def _send_local_query(self, node, zone) -> None:
         """The only call that reaches KataGo for a local reading; tests replace it."""
@@ -654,7 +687,9 @@ class BridgeSession(KaTrainHost):
             self._size(),
             on_result=lambda analysis: self.submit(self._on_local_analysis, node, analysis, zone),
             on_error=lambda analysis: self._log_stderr(f"local analysis failed: {analysis}"),
-            priority=PRIORITY_DEFAULT,
+            # Ahead of the neighbours `_boost_window` queues at the default priority:
+            # the player is looking at this position, and may already be waiting.
+            priority=PRIORITY_DEFAULT + 1,
         )
 
     def _on_local_analysis(self, node, analysis, zone=None) -> None:
@@ -664,8 +699,24 @@ class BridgeSession(KaTrainHost):
         if zone is not None and reading["zone"] != zone:
             return  # the answer to a zone redrawn since
         reading["analysis"] = analysis
-        if node is self._line[self._index]:
-            self._emit_state()
+        if node is not self._line[self._index]:
+            return
+        if self._local_wanted and not self._variation:
+            self._local_wanted = False
+            self._variation_kind = "local"
+            try:
+                self._push_variation(None)
+                return
+            except CommandError:
+                self._variation_kind = "best"  # nothing to walk after all: just show it
+        self._emit_state()
+
+    def _local_pending(self) -> bool:
+        """KataGo has been asked about the zone on screen and has not answered yet."""
+        if self._variation:
+            return False
+        reading = self._local.get(id(self._line[self._index]))
+        return bool(reading and reading.get("asked") and reading["analysis"] is None)
 
     def _local_reading(self) -> Optional[Dict[str, Any]]:
         if self._variation and self._variation_kind != "local":
@@ -708,6 +759,8 @@ class BridgeSession(KaTrainHost):
                     "local_move": self._local_move(),
                     "local_zone": self._local_zone(),
                     "local_zone_drawn": self._drawn_zone is not None,
+                    "local_pending": self._local_pending(),
+                    "local_wanted": self._local_wanted,
                 },
             ),
         )

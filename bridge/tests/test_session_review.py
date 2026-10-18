@@ -245,10 +245,18 @@ def local_answer(pv, score_lead=0.0):
     return {"moveInfos": [{"move": pv[0], "order": 0, "scoreLead": score_lead, "pv": list(pv)}]}
 
 
-def test_only_the_position_on_screen_is_read_locally(reviewing):
-    assert [node for node, _ in reviewing._local_queries] == [reviewing._line[5]]
+def test_nothing_is_read_locally_until_the_player_asks(reviewing):
+    # Opening and walking the record places zones but asks KataGo nothing.
     run(reviewing, reviewing.goto, 2, 2)
     run(reviewing, reviewing.goto, 3, 5)
+    assert reviewing._local_queries == []
+    assert last_state(reviewing)["local_zone"] is not None
+
+    run(reviewing, reviewing.read_local, 4)
+    run(reviewing, reviewing.goto, 5, 2)
+    run(reviewing, reviewing.read_local, 6)
+    run(reviewing, reviewing.goto, 7, 5)
+    run(reviewing, reviewing.read_local, 8)
     # Coming back to a position already read does not ask again.
     assert [node for node, _ in reviewing._local_queries] == [reviewing._line[5], reviewing._line[2]]
 
@@ -316,9 +324,6 @@ def test_switching_lines_starts_again_from_the_record(reviewing):
     assert last_state(reviewing)["local_zone"] is not None
 
 
-def test_a_local_walk_waits_for_its_answer(reviewing):
-    run(reviewing, reviewing.step_variation, 2, 1, "local")
-    assert errors(reviewing)[-1]["message"] == "l'analyse locale n'est pas encore revenue"
 
 
 def test_the_first_position_has_no_fight(reviewing):
@@ -370,6 +375,7 @@ def test_a_drawn_zone_replaces_the_inferred_one(reviewing):
 
 def test_an_answer_for_a_replaced_zone_is_dropped(reviewing):
     node = reviewing._line[5]
+    run(reviewing, reviewing.read_local, 2)
     inferred = reviewing._local_queries[-1][1]
     run(reviewing, reviewing.set_local_zone, 2, DRAWN)
     run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]), inferred)
@@ -379,12 +385,13 @@ def test_an_answer_for_a_replaced_zone_is_dropped(reviewing):
 def test_a_drawn_zone_follows_the_player_through_the_record(reviewing):
     run(reviewing, reviewing.set_local_zone, 2, DRAWN)
     run(reviewing, reviewing.goto, 3, 0)  # no fight to infer there
+    run(reviewing, reviewing.read_local, 4)
     assert reviewing._local_queries[-1] == (reviewing._line[0], DRAWN)
     assert last_state(reviewing)["local_zone"] == DRAWN
 
 
 def test_clearing_the_drawn_zone_brings_the_inferred_one_back(reviewing):
-    inferred = reviewing._local_queries[-1][1]
+    inferred = last_state(reviewing)["local_zone"]
     run(reviewing, reviewing.set_local_zone, 2, DRAWN)
     run(reviewing, reviewing.set_local_zone, 3, None)
     assert reviewing._local_queries[-1] == (reviewing._line[5], inferred)
@@ -421,3 +428,36 @@ def test_a_new_record_forgets_the_drawn_zone(reviewing):
 def test_a_zone_is_drawn_in_review_only(session):
     run(session, session.set_local_zone, 1, DRAWN)
     assert errors(session)[-1]["code"] == "not_reviewing"
+
+
+def test_the_local_reading_says_when_it_is_still_coming(reviewing):
+    assert last_state(reviewing)["local_pending"] is False
+    run(reviewing, reviewing.read_local, 2)
+    assert last_state(reviewing)["local_pending"] is True
+    node = reviewing._line[5]
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]), reviewing._local[id(node)]["zone"])
+    assert last_state(reviewing)["local_pending"] is False
+
+
+def test_a_local_walk_asked_too_early_starts_when_the_reading_lands(reviewing):
+    node = reviewing._line[5]
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    assert errors(reviewing) == []
+    assert last_state(reviewing)["variation_depth"] == 0
+    assert last_state(reviewing)["local_pending"] is True
+    assert last_state(reviewing)["local_wanted"] is True
+
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6"]), reviewing._local[id(node)]["zone"])
+    state = last_state(reviewing)
+    assert state["variation_kind"] == "local"
+    assert state["variation_depth"] == 1
+    assert state["local_pending"] is False
+
+
+def test_moving_on_forgets_an_early_press(reviewing):
+    node = reviewing._line[5]
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    run(reviewing, reviewing.goto, 3, 4)
+    run(reviewing, reviewing.goto, 4, 5)
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6"]), reviewing._local[id(node)]["zone"])
+    assert last_state(reviewing)["variation_depth"] == 0

@@ -8,6 +8,9 @@ public struct BoardView: View {
     public let onPlay: (Point) -> Void
     /// Set in review: a drag across the board draws the zone of the local reading.
     public let onDrawZone: ((LocalZone) -> Void)?
+    /// The local reading is on show: Option held, or its sequence being walked.
+    /// A zone the player drew stays visible either way.
+    public let showsLocal: Bool
 
     /// The intersection under the pointer, for the caption of a proposed move.
     @State private var hovered: Point?
@@ -18,12 +21,14 @@ public struct BoardView: View {
         state: GameState,
         isInteractive: Bool,
         onPlay: @escaping (Point) -> Void,
-        onDrawZone: ((LocalZone) -> Void)? = nil
+        onDrawZone: ((LocalZone) -> Void)? = nil,
+        showsLocal: Bool = true
     ) {
         self.state = state
         self.isInteractive = isInteractive
         self.onPlay = onPlay
         self.onDrawZone = onDrawZone
+        self.showsLocal = showsLocal
     }
 
     public var body: some View {
@@ -63,7 +68,12 @@ public struct BoardView: View {
                         }
                 }
                 .overlay {
-                    if let hovered, let caption = state.proposalCaption(at: hovered) {
+                    if showsLocal, state.isReadingLocally, let zone = state.localZone {
+                        readingBadge(in: zone, geometry: geometry)
+                    }
+                }
+                .overlay {
+                    if let hovered, let caption = state.proposalCaption(at: hovered, showingLocal: showsLocal) {
                         captionView(caption, at: hovered, geometry: geometry)
                     }
                 }
@@ -73,6 +83,26 @@ public struct BoardView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
+    }
+
+    /// Says the zone is being read, in its top-left corner, until the blue disc
+    /// comes: without it a press on ⌥→ looks lost while KataGo is still at work.
+    private func readingBadge(in zone: LocalZone, geometry: BoardGeometry) -> some View {
+        let corner = geometry.position(row: zone.top, col: zone.left)
+        return HStack(spacing: 5) {
+            ProgressView().controlSize(.mini)
+            Text("Lecture du combat…")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.primaryText)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Theme.windowBackground.opacity(0.92)))
+        .fixedSize()
+        .alignmentGuide(.leading) { _ in 0 }
+        .position(x: corner.x + geometry.stoneRadius * 4.2, y: corner.y)
+        .allowsHitTesting(false)
+        .accessibilityLabel("Lecture du combat local en cours")
     }
 
     /// A small dark label just above the disc, below it on the top rows where above
@@ -119,7 +149,7 @@ public struct BoardView: View {
         if state.bestMove != nil {
             description += ", meilleur coup proposé"
         }
-        if state.localMove != nil {
+        if showsLocal, state.localMove != nil {
             description += ", coup local proposé"
         }
         return description
@@ -128,7 +158,7 @@ public struct BoardView: View {
     private func draw(in context: inout GraphicsContext, geometry: BoardGeometry) {
         if let draft {
             drawLocalZone(in: &context, geometry: geometry, zone: LocalZone(spanning: draft.start, draft.end), emphasis: 2)
-        } else if let zone = state.localZone {
+        } else if let zone = state.localZone, showsLocal || state.localZoneDrawn == true {
             drawLocalZone(in: &context, geometry: geometry, zone: zone)
         }
         drawGrid(in: &context, geometry: geometry)
@@ -139,12 +169,12 @@ public struct BoardView: View {
         } else {
             drawLastMove(in: &context, geometry: geometry)
         }
-        if let nearby = state.localMove, nearby.point != state.bestMove?.point {
+        if showsLocal, let nearby = state.localMove, nearby.point != state.bestMove?.point {
             drawProposal(in: &context, geometry: geometry, at: nearby.point, color: Theme.localMove)
         }
         if let best = state.bestMove {
             drawProposal(in: &context, geometry: geometry, at: best.point, color: Theme.bestMove)
-            if state.localMove?.point == best.point {
+            if showsLocal, state.localMove?.point == best.point {
                 drawLocalRing(in: &context, geometry: geometry, at: best.point)
             }
         }

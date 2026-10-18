@@ -79,6 +79,12 @@ public struct BridgeCommand: Encodable, Sendable {
 
     /// Reads the fight inside a zone the player drew. nil goes back to the zone the
     /// bridge infers around the last move.
+    /// Has KataGo read the zone of the position on screen. Nothing local is read
+    /// until the player asks, by holding Option.
+    public static func readLocal(id: Int) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "read_local")
+    }
+
     public static func setLocalZone(id: Int, zone: LocalZone?) -> BridgeCommand {
         BridgeCommand(id: id, cmd: "set_local_zone", zone: zone)
     }

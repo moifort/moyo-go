@@ -5,10 +5,11 @@ extension GameState {
     ///
     /// The sidebar used to carry a legend for both colours; the board says it in
     /// place instead, on the one disc the player is looking at. nil anywhere else,
-    /// stones and empty points alike.
-    public func proposalCaption(at point: Point) -> String? {
+    /// stones and empty points alike. `showingLocal` false leaves the blue disc out,
+    /// as the board does until Option is held.
+    public func proposalCaption(at point: Point, showingLocal: Bool = true) -> String? {
         let best = bestMove?.point == point
-        let nearby = localMove?.point == point
+        let nearby = showingLocal && localMove?.point == point
         guard best || nearby else { return nil }
         if let depth = variationDepth, depth > 0 {
             return variationKind == .local

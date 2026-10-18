@@ -271,6 +271,13 @@ public struct GameState: Codable, Sendable {
     public let localZone: LocalZone?
     /// Whether the zone is the player's own rather than the bridge's.
     public let localZoneDrawn: Bool?
+    /// KataGo is still reading the zone on screen. A press on ⌥→ meanwhile is kept
+    /// by the bridge and played once the reading lands.
+    public let localPending: Bool?
+    /// ⌥→ was pressed before the reading came back; the first move is on its way.
+    public let localWanted: Bool?
+
+    public var isReadingLocally: Bool { localPending == true }
 
     public var isReviewing: Bool { status == .review }
 

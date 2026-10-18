@@ -109,3 +109,52 @@ struct ProposalCaptionTests {
         #expect(s.proposalCaption(at: Point(row: 4, col: 4)) == "Coup suivant de la séquence locale")
     }
 }
+
+@Suite("L'attente de la lecture locale")
+struct LocalPendingTests {
+    @Test("Le pont dit quand la lecture locale est encore en cours")
+    func pendingDecodes() throws {
+        let line = """
+            {"event":"state","id":1,"size":19,"stones":[],"to_play":"B","move_number":3,\
+            "last_move":null,"captures":{"by_black":0,"by_white":0},"score_history":[null],\
+            "score_lead":null,"human_color":"B","status":"review","result":null,\
+            "move_count":9,"variation_depth":0,"best_move":null,"local_move":null,\
+            "local_zone":{"top":0,"left":0,"bottom":6,"right":6},"local_pending":true}
+            """
+        guard case .state(_, let state) = try BridgeEvent.decode(line: line) else {
+            Issue.record("attendu un événement state")
+            return
+        }
+        #expect(state.isReadingLocally)
+    }
+}
+
+@Suite("La lecture locale ne se montre qu'à la demande")
+struct LocalOnDemandTests {
+    @Test("La commande de lecture locale ne porte que son nom")
+    func readLocalEncoding() throws {
+        let line = try BridgeCommand.readLocal(id: 4).encodedLine()
+        let object = try #require(try JSONSerialization.jsonObject(with: line) as? [String: Any])
+        #expect(object["cmd"] as? String == "read_local")
+        #expect(object.count == 2)
+    }
+
+    @Test("Sans Option, la pastille bleue n'a pas de libellé")
+    func hiddenLocalHasNoCaption() throws {
+        let line = """
+            {"event":"state","id":1,"size":19,"stones":[],"to_play":"B","move_number":3,\
+            "last_move":null,"captures":{"by_black":0,"by_white":0},"score_history":[null],\
+            "score_lead":null,"human_color":"B","status":"review","result":null,\
+            "move_count":9,"variation_depth":0,"best_move":{"row":3,"col":3,"points_lost":0},\
+            "local_move":{"row":5,"col":5,"points_lost":1.5},\
+            "local_zone":{"top":0,"left":0,"bottom":6,"right":6},"local_wanted":false}
+            """
+        guard case .state(_, let state) = try BridgeEvent.decode(line: line) else {
+            Issue.record("attendu un événement state")
+            return
+        }
+        #expect(state.proposalCaption(at: Point(row: 5, col: 5), showingLocal: false) == nil)
+        #expect(state.proposalCaption(at: Point(row: 3, col: 3), showingLocal: false) == "Meilleur coup selon KataGo")
+        #expect(state.proposalCaption(at: Point(row: 5, col: 5)) == "Meilleur coup local, coûte 1,5 point")
+    }
+}

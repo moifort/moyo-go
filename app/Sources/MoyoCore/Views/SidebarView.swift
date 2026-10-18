@@ -364,7 +364,10 @@ struct ReviewPanel: View {
                 ) {
                     session.stepVariation(-1, kind: .local)
                 }
-                step("Dérouler la séquence locale", systemImage: "scope", enabled: session.canWalkLocal) {
+                step(
+                    "Dérouler la séquence locale", systemImage: "scope", enabled: session.canWalkLocal,
+                    busy: state.isReadingLocally && session.showsLocalReading
+                ) {
                     session.stepVariation(1, kind: .local)
                 }
                 // Drawing has no button: it is a drag across the board, which the line
@@ -386,12 +389,21 @@ struct ReviewPanel: View {
     /// An icon wide enough to hit, named above the buttons on hover and for
     /// VoiceOver: four labels would not fit across the sidebar. The system tooltip
     /// waits too long, and not at all on a disabled button, to explain an icon.
+    /// `busy` swaps the icon for a spinner while what the button asks for is still
+    /// being worked out; the button stays live, and the bridge keeps the press.
     private func step(
-        _ title: String, systemImage: String, enabled: Bool, action: @escaping () -> Void
+        _ title: String, systemImage: String, enabled: Bool, busy: Bool = false,
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .frame(maxWidth: .infinity)
+            Group {
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: systemImage)
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
         .accessibilityLabel(title)
         .disabled(!enabled)

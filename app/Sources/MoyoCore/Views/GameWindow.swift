@@ -22,6 +22,9 @@ public struct GameWindow: View {
         }
         .navigationTitle(title)
         .navigationSubtitle(subtitle)
+        .onModifierKeysChanged(mask: .option, initial: false) { _, keys in
+            session.isOptionHeld = keys.contains(.option)
+        }
         .toolbar {
             if columnVisibility == .detailOnly {
                 ToolbarItem(placement: .primaryAction) { compactStatus }
@@ -113,7 +116,8 @@ public struct GameWindow: View {
                             session.play(row: point.row, col: point.col)
                         }
                     },
-                    onDrawZone: state.isReviewing ? { session.drawLocalZone($0) } : nil
+                    onDrawZone: state.isReviewing ? { session.drawLocalZone($0) } : nil,
+                    showsLocal: session.showsLocalReading
                 )
                 .padding(20)
             } else {

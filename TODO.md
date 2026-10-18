@@ -73,11 +73,12 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   Reading several would mean one more KataGo query per zone and a way to tell their
   markers apart.
 
-- **Nothing says the local reading is on its way.** The sidebar legend that read
-  "Lecture du combat local…" went when the legends moved to a hover caption on the
-  discs. The dashed zone shows before the blue disc does, which is the only hint that
-  a reading is coming. A small spinner in the zone's corner would say it, if the
-  wait ever turns out to be long enough to be noticed.
+- **The first local reading of a record can be slow.** It is asked for only when
+  Option is held, at a priority above the whole-board analyses, but KataGo finishes
+  the queries already running first. Just after a record is opened, while every
+  position is being analysed, the loader can stay up for ten to twenty seconds.
+  Pausing the background analysis while a local reading is waited on would cut
+  that, at the cost of a gauge that stalls; not done until the wait is felt again.
 
 - **The local sequence stops where KataGo leaves the zone.** Both colours are kept
   inside for twelve moves; past that, or at the first pass, the walk ends. A fight

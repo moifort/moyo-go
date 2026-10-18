@@ -433,6 +433,22 @@ public final class GameSession {
         bridge.send(.variation(id: nextID(), step: delta > 0 ? 1 : -1, kind: kind))
     }
 
+    /// Option is held down. The local layer — zone, blue disc, loader — shows only
+    /// then, or while its sequence is walked: by default the board shows the best
+    /// move alone. The first press of a position asks KataGo to read it.
+    public var isOptionHeld = false {
+        didSet {
+            guard isOptionHeld, !oldValue, let state, state.isReviewing, state.localZone != nil else { return }
+            bridge.send(.readLocal(id: nextID()))
+        }
+    }
+
+    /// Whether the board shows the local reading right now.
+    public var showsLocalReading: Bool {
+        guard let state, state.isReviewing else { return false }
+        return isOptionHeld || state.variationKind == .local || state.localWanted == true
+    }
+
     /// Reads the fight inside a zone drawn on the board, until it is cleared.
     public func drawLocalZone(_ zone: LocalZone) {
         guard isReviewing else { return }
