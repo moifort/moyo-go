@@ -31,6 +31,10 @@ MIN_SPAN = 7
 #: line would cut off the very points where a group lives or dies.
 EDGE_REACH = 3
 
+#: The longest local sequence walked, readings put end to end. A ko fight could
+#: otherwise be read on and on.
+LONGEST = 60
+
 #: How many moves deep both colours are kept inside the zone. Past it KataGo may
 #: leave, and the sequence handed to the app stops where it does.
 DEPTH = 12

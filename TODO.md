@@ -80,10 +80,12 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   Pausing the background analysis while a local reading is waited on would cut
   that, at the cost of a gauge that stalls; not done until the wait is felt again.
 
-- **The local sequence stops where KataGo leaves the zone.** Both colours are kept
-  inside for twelve moves; past that, or at the first pass, the walk ends. A fight
-  that needs a ko threat elsewhere is therefore cut at the threat. Following the
-  reading out of the zone would need a rule for when it is still "local".
+- **The local sequence stops where KataGo leaves the zone.** Each reading keeps both
+  colours inside for twelve moves, and a new one is asked from the end of the last,
+  so the fight is followed until KataGo passes or plays elsewhere, sixty moves at
+  most. A fight that needs a ko threat elsewhere is therefore cut at the threat.
+  Following the reading out of the zone would need a rule for when it is still
+  "local".
 
 ## Design
 

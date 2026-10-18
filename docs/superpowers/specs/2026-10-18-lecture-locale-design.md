@@ -18,6 +18,7 @@ deux côtés.
 | Zone couvrant tout le goban | Pas de lecture locale | Elle ne dirait rien de plus que la pastille verte |
 | Contrainte | `avoidMoves` pour les deux couleurs sur 12 coups | KaTrain ne contraint que le premier coup ; sa suite repart ailleurs |
 | Analyse | Requête séparée, rangée hors du nœud | Sinon elle se mêle aux candidats de KaTrain et fausse la pastille verte |
+| Fin de séquence | Une nouvelle lecture est demandée depuis le dernier coup lu, dès qu'on l'atteint, dans la même zone ; fin quand KataGo passe ou sort de la zone, 60 coups au plus | Suivre le combat jusqu'au bout, pas jusqu'au bout d'une ligne de KataGo |
 | Coût | `points_lost` contre l'analyse globale du nœud | Souvent la leçon elle-même |
 | Coup global déjà dans la zone | Il est aussi le coup local, coût nul | La recherche locale ne pourrait différer que par le bruit |
 | Quand | À la demande : maintenir ⌥ lance la lecture de la position affichée, une fois | Ne pas doubler le travail de KataGo sur les positions seulement traversées |

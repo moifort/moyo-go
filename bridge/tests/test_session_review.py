@@ -301,6 +301,10 @@ def test_the_local_sequence_is_walked_and_stops_at_the_zone(reviewing):
     assert state["local_move"] == {"row": 3, "col": 7, "points_lost": None}
 
     run(reviewing, reviewing.step_variation, 3, 1, "local")
+    assert last_state(reviewing)["variation_depth"] == 2
+    # The rest of the fight is read from here; KataGo's next move leaves the zone.
+    end = reviewing.game.current_node
+    run(reviewing, reviewing._on_local_analysis, end, local_answer(["A1"]), reviewing._local[id(node)]["zone"])
     run(reviewing, reviewing.step_variation, 4, 1, "local")
     assert errors(reviewing)[-1]["message"] == "la séquence locale s'arrête là"
     assert last_state(reviewing)["variation_depth"] == 2
@@ -461,3 +465,70 @@ def test_moving_on_forgets_an_early_press(reviewing):
     run(reviewing, reviewing.goto, 4, 5)
     run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6"]), reviewing._local[id(node)]["zone"])
     assert last_state(reviewing)["variation_depth"] == 0
+
+
+# -- reading on to the end of the fight ---------------------------------------
+
+
+def walk_local_to_the_end_of(reviewing, pv):
+    node = reviewing._line[5]
+    zone = reviewing._local.get(id(node), {}).get("zone") or last_state(reviewing)["local_zone"]
+    run(reviewing, reviewing.read_local, 90)
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(pv), zone)
+    for step in range(len(pv)):
+        run(reviewing, reviewing.step_variation, 91 + step, 1, "local")
+    return zone
+
+
+def test_the_last_move_read_asks_for_the_rest_of_the_fight(reviewing):
+    zone = walk_local_to_the_end_of(reviewing, ["G6", "H6"])
+    end = reviewing.game.current_node
+    assert reviewing._local_queries[-1] == (end, zone)
+    state = last_state(reviewing)
+    assert state["variation_depth"] == 2
+    assert state["local_pending"] is True
+    assert state["local_move"] is None
+
+    run(reviewing, reviewing._on_local_analysis, end, local_answer(["J7", "H7"]), zone)
+    assert last_state(reviewing)["local_move"] == {"row": 2, "col": 8, "points_lost": None}
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    assert last_state(reviewing)["variation_depth"] == 3
+    assert errors(reviewing) == []
+
+
+def test_a_press_at_the_end_is_played_once_the_rest_is_read(reviewing):
+    zone = walk_local_to_the_end_of(reviewing, ["G6", "H6"])
+    end = reviewing.game.current_node
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    assert errors(reviewing) == []
+    assert last_state(reviewing)["local_wanted"] is True
+
+    run(reviewing, reviewing._on_local_analysis, end, local_answer(["J7"]), zone)
+    state = last_state(reviewing)
+    assert state["variation_depth"] == 3
+    assert state["local_wanted"] is False
+
+
+def test_the_fight_ends_when_katago_has_nothing_left_to_play_there(reviewing):
+    zone = walk_local_to_the_end_of(reviewing, ["G6", "H6"])
+    end = reviewing.game.current_node
+    run(reviewing, reviewing._on_local_analysis, end, local_answer(["pass"]), zone)
+    assert last_state(reviewing)["local_pending"] is False
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    assert errors(reviewing)[-1]["message"] == "la séquence locale s'arrête là"
+
+
+def test_stepping_back_drops_a_reading_on_its_way(reviewing):
+    zone = walk_local_to_the_end_of(reviewing, ["G6", "H6"])
+    end = reviewing.game.current_node
+    run(reviewing, reviewing.step_variation, 2, -1, "local")
+    run(reviewing, reviewing._on_local_analysis, end, local_answer(["J7"]), zone)
+    assert last_state(reviewing)["variation_depth"] == 1
+    assert reviewing._local_extension is None
+
+
+def test_a_refused_reading_ends_the_fight_instead_of_hanging(reviewing):
+    walk_local_to_the_end_of(reviewing, ["G6", "H6"])
+    end = reviewing.game.current_node
+    run(reviewing, reviewing._on_local_failure, end, {"error": "boom"})
+    assert last_state(reviewing)["local_pending"] is False

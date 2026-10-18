@@ -72,6 +72,11 @@ class BridgeSession(KaTrainHost):
         #: first move is played as soon as the reading lands, rather than the press
         #: being lost and the board looking stuck.
         self._local_wanted = False
+        #: A further local reading asked from the end of the sequence being walked,
+        #: so the fight can be followed to its end rather than to the end of one
+        #: KataGo line: {"node", "depth", "wanted", "done"}. `done` once KataGo
+        #: has nothing left to play in the zone.
+        self._local_extension: Optional[Dict[str, Any]] = None
         self._game_info: Dict[str, Any] = {}
         #: Nodes already pushed to the front of the queue, by id. `request_analysis`
         #: has no guard against duplicates, and the tree holds every node for the
@@ -399,6 +404,7 @@ class BridgeSession(KaTrainHost):
         self._local = {}
         self._drawn_zone = None
         self._local_wanted = False
+        self._local_extension = None
         self._game_info = {}
         self._boosted = set()
         self._emitted_best = None
@@ -533,6 +539,9 @@ class BridgeSession(KaTrainHost):
         depth = len(self._variation)
         if depth >= len(self._anchor_pv):
             if self._variation_kind == "local":
+                if self._extend_local(wanted=True):
+                    self._emit_state(command_id)
+                    return
                 self._refuse_local_end(anchor)
             # Worth telling apart: one is a wait, the other is the end of the line.
             if not anchor.analysis_complete:
@@ -551,7 +560,64 @@ class BridgeSession(KaTrainHost):
             raise CommandError("illegal_move", str(exc)) from exc
         created = all(child is not played for child in before)
         self._variation.append((node, played, created))
+        if self._variation_kind == "local" and len(self._variation) >= len(self._anchor_pv):
+            # The last move KataGo read: read on now, so the next press finds it ready.
+            self._extend_local(wanted=False)
         self._emit_state(command_id)
+
+    def _extend_local(self, wanted: bool) -> bool:
+        """Has KataGo read on from the end of the local sequence, in the same zone.
+
+        True when a reading is on its way, its first move to be played on arrival if
+        `wanted`; False when there is nothing more to read: KataGo already passed or
+        left the zone from here, or the sequence is as long as it is allowed to get.
+        """
+        depth = len(self._variation)
+        if self._variation_kind != "local" or depth == 0 or depth >= local.LONGEST:
+            return False
+        extension = self._local_extension
+        if extension is not None and extension["depth"] == depth:
+            if extension["done"]:
+                return False
+            extension["wanted"] = extension["wanted"] or wanted
+            return True
+        reading = self._local.get(id(self._line[self._index]))
+        if not reading or reading["zone"] is None:
+            return False
+        node = self.game.current_node
+        self._local_extension = {"node": node, "depth": depth, "wanted": wanted, "done": False}
+        self._send_local_query(node, reading["zone"])
+        return True
+
+    def _on_local_failure(self, node, analysis) -> None:
+        """KataGo refused a local query: a reading on from the end stops there."""
+        self._log_stderr(f"local analysis failed: {analysis}")
+        extension = self._local_extension
+        if extension is not None and node is extension["node"]:
+            extension["done"] = True
+            extension["wanted"] = False
+            self._emit_state()
+
+    def _on_local_extension(self, analysis, zone) -> None:
+        """A reading from the end of the sequence: append it, and play on if asked."""
+        extension = self._local_extension
+        if extension is None or self.game.current_node is not extension["node"]:
+            return  # the walk has moved since; its answer no longer fits the board
+        line = local.variation(analysis, zone, self._size()) if zone is not None else []
+        if not line:
+            extension["done"] = True
+            extension["wanted"] = False
+            self._emit_state()
+            return
+        self._anchor_pv = self._anchor_pv[: extension["depth"]] + line
+        self._local_extension = None
+        if extension["wanted"]:
+            try:
+                self._push_variation(None)
+                return
+            except CommandError:
+                pass
+        self._emit_state()
 
     def _refuse_local_end(self, anchor) -> None:
         reading = self._local.get(id(anchor))
@@ -568,6 +634,7 @@ class BridgeSession(KaTrainHost):
         self.game.set_current_node(parent)
         if created:
             parent.children = [child for child in parent.children if child is not node]
+        self._local_extension = None
         if not self._variation:
             self._anchor_pv = []
             self._variation_kind = "best"
@@ -581,6 +648,7 @@ class BridgeSession(KaTrainHost):
                 parent.children = [child for child in parent.children if child is not node]
         self._anchor_pv = []
         self._variation_kind = "best"
+        self._local_extension = None
 
     def _boost_window(self) -> None:
         """Pushes the current node and the ones just behind it to the front of the queue."""
@@ -686,13 +754,17 @@ class BridgeSession(KaTrainHost):
             zone,
             self._size(),
             on_result=lambda analysis: self.submit(self._on_local_analysis, node, analysis, zone),
-            on_error=lambda analysis: self._log_stderr(f"local analysis failed: {analysis}"),
+            on_error=lambda analysis: self.submit(self._on_local_failure, node, analysis),
             # Ahead of the neighbours `_boost_window` queues at the default priority:
             # the player is looking at this position, and may already be waiting.
             priority=PRIORITY_DEFAULT + 1,
         )
 
     def _on_local_analysis(self, node, analysis, zone=None) -> None:
+        extension = self._local_extension
+        if extension is not None and node is extension["node"]:
+            self._on_local_extension(analysis, zone)
+            return
         reading = self._local.get(id(node))
         if reading is None or self._status != "review":
             return  # another record has been opened since
@@ -712,9 +784,18 @@ class BridgeSession(KaTrainHost):
         self._emit_state()
 
     def _local_pending(self) -> bool:
-        """KataGo has been asked about the zone on screen and has not answered yet."""
+        """KataGo has been asked about the zone on screen and has not answered yet.
+
+        Inside the local sequence, that is the reading on from its end.
+        """
         if self._variation:
-            return False
+            extension = self._local_extension
+            return bool(
+                self._variation_kind == "local"
+                and extension is not None
+                and not extension["done"]
+                and extension["depth"] == len(self._variation)
+            )
         reading = self._local.get(id(self._line[self._index]))
         return bool(reading and reading.get("asked") and reading["analysis"] is None)
 
@@ -760,7 +841,8 @@ class BridgeSession(KaTrainHost):
                     "local_zone": self._local_zone(),
                     "local_zone_drawn": self._drawn_zone is not None,
                     "local_pending": self._local_pending(),
-                    "local_wanted": self._local_wanted,
+                    "local_wanted": self._local_wanted
+                    or bool(self._local_extension and self._local_extension["wanted"]),
                 },
             ),
         )
