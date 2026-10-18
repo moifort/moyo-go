@@ -4,6 +4,7 @@ struct HomeView: View {
     @State private var games: [URL] = []
     @State private var showGame = false
     @AppStorage(TrialLog.defaultsKey) private var trialMode = false
+    @AppStorage(CameraSession.ultraWideDefaultsKey) private var ultraWide = false
 
     var body: some View {
         NavigationStack {
@@ -14,6 +15,11 @@ struct HomeView: View {
                     } label: {
                         Label("Nouvelle partie", systemImage: "camera.viewfinder").font(.headline)
                     }
+                }
+                Section {
+                    Toggle("Grand-angle (0,5×)", isOn: $ultraWide)
+                } footer: {
+                    Text("Objectif 13 mm, pour le support imprimé posé au bord du goban. Sinon l'objectif principal 24 mm.")
                 }
                 Section {
                     Toggle("Mode d'essai", isOn: $trialMode)

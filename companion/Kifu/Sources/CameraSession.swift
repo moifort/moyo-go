@@ -12,11 +12,16 @@ struct CameraFrame {
     let full: CGImage?
 }
 
-/// Back wide camera, largest 4:3 format, 2 frames per second, frames rotated upright for the
-/// current interface orientation until `lockRotation()` is called.
+/// Back camera (wide, or ultra wide when `useUltraWide` is set), largest 4:3 format, 2 frames
+/// per second, frames rotated upright for the current interface orientation until
+/// `lockForGame()` is called.
 final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     static let frameRate: Int32 = 2
     static let previewDownscale = 4
+    /// UserDefaults key: prefer the 13 mm ultra wide lens, as the printed stand expects
+    /// (hardware/stand). Falls back to the wide lens on phones without one.
+    static let ultraWideDefaultsKey = "ultraWideLens"
+    static var useUltraWide: Bool { UserDefaults.standard.bool(forKey: ultraWideDefaultsKey) }
 
     private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "Kifu.camera")
@@ -41,8 +46,10 @@ final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         case .notDetermined: granted = await AVCaptureDevice.requestAccess(for: .video)
         default: granted = false
         }
+        let ultraWide = Self.useUltraWide
+            ? AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) : nil
         guard granted,
-              let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+              let device = ultraWide ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: device) else { return false }
         self.device = device
 
