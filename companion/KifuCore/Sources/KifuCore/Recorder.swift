@@ -10,12 +10,13 @@ extension IntersectionReader: BoardReader {}
 public struct RecorderSettings: Sendable, Equatable {
     /// Identical consecutive readings before a change is considered.
     public var requiredFrames = 3
-    /// Seconds a stable, unexplained position may last before the referee asks for help.
-    public var lostAfter: TimeInterval = 8
+    /// Seconds a stable, unexplained position may last before it is taken as seen.
+    public var acceptAfter: TimeInterval = 8
     public init() {}
 }
 
-/// The referee: reads images, keeps only what the rules explain, and writes the record.
+/// The referee: reads images, keeps what the rules explain, and writes the record. A position
+/// they cannot explain is taken as seen once it has held for a while: nobody is asked to arbitrate.
 public struct Recorder {
     public enum Status: Sendable, Equatable {
         /// The board matches the record.
@@ -24,13 +25,13 @@ public struct Recorder {
         case pending
         /// A legal move was seen whose captured stones are still on the board.
         case awaitingCaptureRemoval
-        /// The pending change lasted too long: the user is asked to arbitrate.
-        case lost
     }
 
     public struct Update: Sendable, Equatable {
         public var moves: [Move] = []
         public var takenBack = 0
+        /// The moves came from a position taken as seen, not from the rules.
+        public var forced = false
         public var status: Status = .inSync
         public init() {}
     }
@@ -79,15 +80,20 @@ public struct Recorder {
                 pendingPosition = candidate
                 pendingSince = time
             }
-            if status != .lost {
-                status = time - (pendingSince ?? time) >= settings.lostAfter ? .lost : .pending
+            if time - (pendingSince ?? time) >= settings.acceptAfter {
+                let before = record.moves.count
+                accept()
+                update.moves = record.moves.dropFirst(before).map(\.move)
+                update.forced = true
+            } else {
+                status = .pending
             }
         }
         update.status = status
         return update
     }
 
-    /// "C'est bon": the board as seen becomes the record.
+    /// The board as seen becomes the record.
     public mutating func accept() {
         record.force(to: candidate)
         clearPending()

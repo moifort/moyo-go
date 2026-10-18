@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import KifuCore
 
 /// Trial mode: saves raw frames with what the recorder made of them under Documents/Essai/<game>,
-/// at the start, on each accepted move or take-back, on each alert and every 10 s, so that a real
+/// at the start, on each move, take-back or position taken as seen, and every 10 s, so that a real
 /// game can be replayed on a Mac and turned into fixtures. Lives on the session's worker queue.
 final class TrialLog: @unchecked Sendable {
     static let defaultsKey = "trialMode"
@@ -12,7 +12,7 @@ final class TrialLog: @unchecked Sendable {
     /// Periodic frames are skipped while this many images are still being encoded.
     static let maxPending = 2
 
-    enum Reason: String { case start = "debut", move = "coup", takeBack = "retour", alert = "alerte", accepted = "accepte", periodic = "periodique" }
+    enum Reason: String { case start = "debut", move = "coup", takeBack = "retour", accepted = "accepte", periodic = "periodique" }
 
     static var enabled: Bool { UserDefaults.standard.bool(forKey: defaultsKey) }
 

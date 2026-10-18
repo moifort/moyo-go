@@ -50,10 +50,12 @@ Conséquences de la vue rasante, à garder en tête partout :
 
 - Produire un SGF exact : coups dans l'ordre, couleurs justes, captures
   déduites par la règle, pierres de handicap en position de départ.
-- Ne jamais écrire dans le SGF quelque chose qui ne s'explique pas par la règle
-  du jeu.
-- Tenir une partie entière sans intervention, et demander un arbitrage humain
-  sur le moment dans les rares cas où l'app perd le fil.
+- Ne rien écrire dans le SGF qui ne s'explique pas par la règle du jeu sans le
+  marquer `C[ordre incertain]`.
+- Tenir une partie entière sans intervention, ni arbitrage humain : quand l'app
+  perd le fil, elle prend le plateau tel qu'elle le lit et continue
+  (décidé le 18 octobre 2026, une erreur de lecture tenace bloquait le suivi
+  de Moyo pendant dix minutes).
 - Ne rien perdre si l'app est tuée en cours de partie.
 
 ## Non-objectifs
@@ -104,8 +106,8 @@ cohérence. Trois filtres successifs, chacun indépendant des deux autres :
    « pose » trois pierres noires d'un coup : ça ne s'explique pas, donc ça
    n'entre pas.
 
-Ce qui ne passe pas le troisième filtre attend. Si l'attente dure, l'app alerte
-(vibration, bandeau) et demande un arbitrage sur place.
+Ce qui ne passe pas le troisième filtre attend. Si l'attente dure, l'app prend
+le plateau tel qu'elle le lit, sans alerte ni question.
 
 ## Pipeline
 
@@ -224,21 +226,17 @@ Cas particuliers gérés :
 
 ### Perte du fil
 
-Si la position candidate reste stable 8 s sans s'expliquer, l'app vibre et
-affiche un bandeau : « Je ne comprends pas la position ». L'écran montre le
-plateau tel qu'elle le lit, les intersections en désaccord en orange, et deux
-boutons :
+Si la position candidate reste stable 8 s sans s'expliquer, l'état lu devient
+l'état accepté, sans vibration ni bandeau : personne n'arbitre, et Moyo reçoit
+la position. Les pierres ajoutées sont enregistrées comme coups dans l'ordre
+d'alternance (et, à couleur égale, par coordonnées croissantes), chaque coup
+ainsi forcé portant un commentaire SGF `C[ordre incertain]` pour qu'on le
+retrouve à la relecture ; les pierres retirées sans capture s'écrivent en
+retrait manuel (`AE`). Une erreur de lecture ainsi acceptée s'efface comme un
+coup repris dès que le plateau se lit de nouveau juste.
 
-- « C'est bon » : l'état lu devient l'état accepté, les pierres ajoutées sont
-  enregistrées comme coups dans l'ordre d'alternance (et, à couleur égale, par
-  coordonnées croissantes), chaque coup ainsi forcé portant un commentaire SGF
-  `C[ordre incertain]` pour qu'on le retrouve à la relecture ; les pierres
-  retirées sans capture s'écrivent en retrait manuel (`AE`) ;
-- « Recalibrer » : retour au calibrage, la partie enregistrée est conservée.
-
-Un heurt du téléphone est détecté par le même mécanisme : la grille ne
-correspond plus, beaucoup d'intersections deviennent illisibles ou changent
-ensemble. Le bandeau propose alors « Recalibrer » en premier.
+Un heurt du téléphone fait de même accepter un plateau faux ; le bouton
+« Recalibrer », toujours à l'écran, ramène au calibrage en gardant la partie.
 
 ### Écriture du SGF
 
@@ -252,8 +250,8 @@ coup en cours.
 
 Avec handicap : `HA[n]`, `AB[..][..]`, `KM[0.5]`, blanc joue en premier. Si
 des pierres des deux couleurs sont présentes au départ (reprise d'une
-position), elles vont dans `AB` et `AW`, sans `HA`, et noir joue en premier. Un retrait manuel validé
-par « C'est bon » s'écrit `AE[..]` dans le nœud du coup suivant.
+position), elles vont dans `AB` et `AW`, sans `HA`, et noir joue en premier. Un retrait manuel accepté
+tel que lu s'écrit `AE[..]` dans le nœud du coup suivant.
 
 La partie se ferme par « Noir abandonne » (`RE[W+R]`), « Blanc abandonne »
 (`RE[B+R]`) ou « Partie terminée » (pas de `RE` : le décompte se fait à la relecture),
@@ -290,9 +288,8 @@ de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie
 3. **Partie** : image caméra en direct, grille, pierres acceptées (disques
    pleins) et dernier coup marqué, compteur de coups, bandeau d'état, boutons
    « Noir abandonne », « Blanc abandonne » et « Partie terminée ». Pas de bouton d'annulation : un coup repris sur le
-   plateau est détecté comme retour en arrière, et un désaccord passe par le
-   bandeau « Je ne comprends pas la position », qui apparaît par-dessus avec
-   ses deux boutons.
+   plateau est détecté comme retour en arrière, et une position inexpliquée
+   est acceptée telle que lue au bout de 8 s.
 
 Textes en français. Portrait et paysage acceptés : le téléphone est posé comme
 il tombe.
@@ -344,9 +341,9 @@ fixtures.
 
 Une partie complète jouée à deux, téléphone sur son support actuel, sans
 toucher à l'app entre « Commencer » et « Fin de partie », et le SGF rejoué
-dans KaTrain est identique à la partie, coup pour coup. Au plus une alerte
-« Je ne comprends pas la position » par partie est tolérée pendant la mise au
-point, zéro à terme.
+dans KaTrain est identique à la partie, coup pour coup. Au plus une position
+acceptée sans s'expliquer par partie est tolérée pendant la mise au point, zéro à
+terme.
 
 ## Ce qui est laissé au bâtisseur
 

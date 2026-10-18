@@ -3,7 +3,7 @@ import Foundation
 /// A move as written in the record, with what the referee had to force alongside it.
 public struct RecordedMove: Sendable, Equatable {
     public let move: Move
-    /// Stones removed from the board without a capture, accepted by the user ("C'est bon").
+    /// Stones removed from the board without a capture, accepted as seen when the rules could not explain the position.
     public let erased: [Intersection]
     /// True when the order was imposed by the referee rather than observed.
     public let uncertain: Bool

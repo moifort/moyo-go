@@ -55,6 +55,5 @@ final class BoardBroadcastTests: XCTestCase {
         XCTAssertEqual(BoardBroadcast.statusName(.inSync), "locked")
         XCTAssertEqual(BoardBroadcast.statusName(.pending), "uncertain")
         XCTAssertEqual(BoardBroadcast.statusName(.awaitingCaptureRemoval), "uncertain")
-        XCTAssertEqual(BoardBroadcast.statusName(.lost), "uncertain")
     }
 }

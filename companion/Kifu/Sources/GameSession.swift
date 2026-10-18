@@ -224,16 +224,6 @@ final class GameSession {
 
     // MARK: Recording
 
-    /// "C'est bon": the board as seen becomes the record.
-    func acceptCandidate() {
-        worker.async {
-            self.engine.recorder?.accept()
-            self.writeFile()
-            self.logTrial([.accepted])
-            self.publishRecorder()
-        }
-    }
-
     /// Back to the corners, keeping the game.
     func recalibrate() {
         taps = []
@@ -327,19 +317,13 @@ final class GameSession {
                 if let full = frame.full { self.frozen = full }
             }
             if var recorder = engine.recorder, engine.reader != nil, engine.recording {
-                let before = recorder.status
                 let update = recorder.process(frame.gray, at: frame.time)
                 engine.recorder = recorder
                 if !update.moves.isEmpty || update.takenBack > 0 { writeFile() }
-                let alert = update.status == .lost && before != .lost
-                if alert {
-                    Task { @MainActor in UINotificationFeedbackGenerator().notificationOccurred(.warning) }
-                }
                 if let trial = engine.trial {
                     var reasons: [TrialLog.Reason] = []
-                    if !update.moves.isEmpty { reasons.append(.move) }
+                    if update.forced { reasons.append(.accepted) } else if !update.moves.isEmpty { reasons.append(.move) }
                     if update.takenBack > 0 { reasons.append(.takeBack) }
-                    if alert { reasons.append(.alert) }
                     if reasons.isEmpty, trial.isDue(at: frame.time) { reasons.append(.periodic) }
                     if !reasons.isEmpty { logTrial(reasons, frame: frame) }
                 }

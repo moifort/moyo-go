@@ -21,7 +21,7 @@ final class RecorderTests: XCTestCase {
         let reader = ScriptedReader()
         var settings = RecorderSettings()
         settings.requiredFrames = required
-        settings.lostAfter = 8
+        settings.acceptAfter = 8
         return (Recorder(reader: reader, start: start, settings: settings), reader)
     }
 
@@ -79,18 +79,33 @@ final class RecorderTests: XCTestCase {
         XCTAssertEqual(rec.status, .inSync)
     }
 
-    func testUnexplainedStablePositionBecomesLostAfterDelayAndResumes() {
+    /// Nobody is asked to arbitrate: a position the rules cannot explain is taken as seen
+    /// once it has held long enough, and the game goes on from there.
+    func testUnexplainedStablePositionIsAcceptedAfterDelay() {
         var (rec, reader) = make()
-        let hand = Readings(position: position([at(3, 3): .black, at(4, 3): .black, at(5, 3): .black]))
-        reader.queue = [Readings](repeating: hand, count: 20) + [Readings](repeating: Readings(position: Position(size: 9)), count: 3)
-        var statuses: [Recorder.Status] = []
-        for k in 0..<20 { statuses.append(rec.process(blank, at: Double(k) * 0.5).status) }
-        XCTAssertEqual(statuses[0], .inSync)
-        XCTAssertEqual(statuses[2], .pending)             // stable after 3 frames, unexplained
-        XCTAssertEqual(statuses[10], .pending)            // 4 s later, still waiting
-        XCTAssertEqual(statuses[19], .lost)               // > 8 s after it became stable
+        let two = Readings(position: position([at(3, 3): .white, at(3, 2): .white]))
+        reader.queue = [Readings](repeating: two, count: 20)
+        var updates: [Recorder.Update] = []
+        for k in 0..<20 { updates.append(rec.process(blank, at: Double(k) * 0.5)) }
+        XCTAssertEqual(updates[0].status, .inSync)
+        XCTAssertEqual(updates[2].status, .pending)       // stable after 3 frames, unexplained
+        XCTAssertEqual(updates[17].status, .pending)      // 7.5 s later, still waiting
+        XCTAssertEqual(updates[18].status, .inSync)       // 8 s: taken as seen
+        XCTAssertEqual(updates[18].moves.count, 2)
+        XCTAssertTrue(updates[18].forced)
+        XCTAssertEqual(rec.record.position, two.position)
+        XCTAssertTrue(rec.record.moves.allSatisfy(\.uncertain))
+        XCTAssertTrue(updates[19].moves.isEmpty)
+    }
+
+    /// A misreading taken as seen is undone like a move taken back once the board reads right.
+    func testAcceptedMisreadingIsTakenBackWhenTheBoardReadsRight() {
+        var (rec, reader) = make()
+        let wrong = Readings(position: position([at(3, 3): .white, at(3, 2): .white]))
+        let clear = Readings(position: Position(size: 9))
+        reader.queue = [Readings](repeating: wrong, count: 19) + [Readings](repeating: clear, count: 3)
+        for k in 0..<22 { _ = rec.process(blank, at: Double(k) * 0.5) }
         XCTAssertTrue(rec.record.moves.isEmpty)
-        for k in 20..<23 { _ = rec.process(blank, at: Double(k) * 0.5) }
         XCTAssertEqual(rec.status, .inSync)
     }
 

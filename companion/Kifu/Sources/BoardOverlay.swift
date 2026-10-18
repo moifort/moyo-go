@@ -8,7 +8,6 @@ struct BoardOverlay: View {
     var stones: Position?
     var ghosts: Position?            // candidate stones not yet in the record, drawn hollow
     var lastMove: Intersection?
-    var highlighted: Set<Intersection> = []
     var taps: [Point] = []
 
     var body: some View {
@@ -51,9 +50,6 @@ struct BoardOverlay: View {
                         ctx.stroke(Path(ellipseIn: rect), with: .color(.red.opacity(0.9)), lineWidth: 1.5)
                     } else if ghost != .empty {
                         ctx.stroke(Path(ellipseIn: rect), with: .color(ghost == .black ? .black : .white), style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
-                    }
-                    if highlighted.contains(i) {
-                        ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -3, dy: -3)), with: .color(.orange), lineWidth: 3)
                     }
                     if lastMove == i {
                         let m = CGRect(x: c.x - r / 2, y: c.y - r / 2, width: r, height: r)
