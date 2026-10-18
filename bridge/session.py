@@ -53,6 +53,9 @@ class BridgeSession(KaTrainHost):
         self._follow_fresh = False
         #: False when the last position seen could not be reached by any move.
         self._follow_in_sync = True
+        #: KataGo's suggestions on the board while following: the best move, and
+        #: the best move in the zone of the last move with what it costs.
+        self._follow_hints = False
         self._dead: set = set()
         # -- review state, all empty outside a review
         #: The main line of the record, cached once. A variation adds nodes to the
@@ -106,6 +109,9 @@ class BridgeSession(KaTrainHost):
         if self._status == "review":
             self._on_review_advanced()
             return
+        if self._status == "following":
+            self._on_following_advanced()
+            return
         if self._status == "scoring" and not self._dead:
             # The ownership map often lands after the second pass; take it when it
             # arrives rather than leaving the player with nothing proposed.
@@ -128,6 +134,23 @@ class BridgeSession(KaTrainHost):
         if key != self._emitted_best:
             self._emitted_best = key
             self._emit_state()
+
+    def _on_following_advanced(self) -> None:
+        """An analysis came back while following: move the markers, if they are shown."""
+        if not self._follow_hints:
+            return
+        key = (self._hint_key(), id(self.game.current_node))
+        if key != self._emitted_best:
+            self._emitted_best = key
+            self._emit_state()
+
+    def _hint_key(self):
+        best = review.best_move(self.game.current_node, self._size())
+        nearby = self._local_move()
+        return (
+            None if best is None else (best["row"], best["col"]),
+            None if nearby is None else (nearby["row"], nearby["col"], nearby["points_lost"]),
+        )
 
     #: Score changes smaller than this are not worth an event. KataGo keeps refining
     #: an analysis while it ponders, and without a threshold every node would emit a
@@ -206,9 +229,7 @@ class BridgeSession(KaTrainHost):
             self._writer.emit(
                 "state",
                 command_id,
-                **serialize.game_state(
-                    self.game, self._human_color, status="following", extra={"in_sync": self._follow_in_sync}
-                ),
+                **serialize.game_state(self.game, self._human_color, status="following", extra=self._follow_extra()),
             )
             return
         result = self.game.current_node.end_state if self._status == "finished" else None
@@ -741,6 +762,10 @@ class BridgeSession(KaTrainHost):
             self._request_local(ask=True)
         self._emit_state(command_id)
 
+    def _focus_node(self):
+        """The position the local reading is about: the record's, or the game's own."""
+        return self._line[self._index] if self._status == "review" else self.game.current_node
+
     def _request_local(self, ask: bool = False) -> None:
         """Places the zone of the position on screen; `ask` also has KataGo read it.
 
@@ -748,7 +773,7 @@ class BridgeSession(KaTrainHost):
         know whether there is a fight to read. The reading is asked for once per
         position and zone.
         """
-        node = self._line[self._index]
+        node = self._focus_node()
         if self._engine is None:
             return
         zone = self._drawn_zone or local.region(
@@ -782,12 +807,12 @@ class BridgeSession(KaTrainHost):
             self._on_local_extension(analysis, zone)
             return
         reading = self._local.get(id(node))
-        if reading is None or self._status != "review":
+        if reading is None or self._status not in ("review", "following"):
             return  # another record has been opened since
         if zone is not None and reading["zone"] != zone:
             return  # the answer to a zone redrawn since
         reading["analysis"] = analysis
-        if node is not self._line[self._index]:
+        if node is not self._focus_node():
             return
         if self._local_wanted and not self._variation:
             self._local_wanted = False
@@ -812,13 +837,13 @@ class BridgeSession(KaTrainHost):
                 and not extension["done"]
                 and extension["depth"] == len(self._variation)
             )
-        reading = self._local.get(id(self._line[self._index]))
+        reading = self._local.get(id(self._focus_node()))
         return bool(reading and reading.get("asked") and reading["analysis"] is None)
 
     def _local_reading(self) -> Optional[Dict[str, Any]]:
         if self._variation and self._variation_kind != "local":
             return None
-        return self._local.get(id(self._line[self._index]))
+        return self._local.get(id(self._focus_node()))
 
     def _local_zone(self) -> Optional[Dict[str, int]]:
         """The zone on screen: on the record itself, and while its sequence is walked."""
@@ -832,7 +857,7 @@ class BridgeSession(KaTrainHost):
             return None
         if self._variation:
             return self._next_in_variation(None)
-        node = self._line[self._index]
+        node = self._focus_node()
         prefer = local.whole_board_choice(node, reading["zone"], self._size())
         return local.best_move(reading["analysis"], node, self._size(), prefer)
 
@@ -882,7 +907,7 @@ class BridgeSession(KaTrainHost):
 
     # -- following a game on a real board ------------------------------------
 
-    def follow_start(self, command_id, size, komi, rules):
+    def follow_start(self, command_id, size, komi, rules, hints=False):
         """Starts following a game between two people, seen by the phone.
 
         Nobody is to move on the Mac: both players are human, the AI never plays,
@@ -900,6 +925,7 @@ class BridgeSession(KaTrainHost):
         self._status = "following"
         self._follow_fresh = True
         self._follow_in_sync = True
+        self._follow_hints = bool(hints)
         self.game = Game(self, self._engine, game_properties={"SZ": size, "KM": komi, "RU": rules})
         self._writer.emit("thinking", None, value=False)
         self._emit_state(command_id)
@@ -923,6 +949,25 @@ class BridgeSession(KaTrainHost):
             self._emit_state(command_id)
             return
         self._follow_in_sync = self._reach(target)
+        self._request_local(ask=self._follow_hints)
+        self._emit_state(command_id)
+
+    def _follow_extra(self) -> Dict[str, Any]:
+        extra: Dict[str, Any] = {"in_sync": self._follow_in_sync, "hints": self._follow_hints}
+        if self._follow_hints:
+            extra.update(
+                best_move=review.best_move(self.game.current_node, self._size()),
+                local_move=self._local_move(),
+                local_zone=self._local_zone(),
+                local_pending=self._local_pending(),
+            )
+        return extra
+
+    def follow_hints(self, command_id, on):
+        """Shows or hides KataGo's suggestions while following."""
+        self._require_following()
+        self._follow_hints = bool(on)
+        self._request_local(ask=self._follow_hints)
         self._emit_state(command_id)
 
     def _join_halfway(self, target, size) -> None:

@@ -25,6 +25,9 @@ public final class GameSession {
         public var humanColor: PlayerColor
         public var aiStrategy: String
         public var aiSettingValues: [String: Double]
+        /// KataGo's suggestions while following a real board. Optional so settings
+        /// saved before it existed still load; absent means on.
+        public var followHints: Bool?
 
         public init(
             size: Int = 19,
@@ -331,7 +334,20 @@ public final class GameSession {
         recordName = nil
         analysisProgress = nil
         thinking.ended()
-        bridge.send(.followStart(id: nextID(), size: size, komi: settings.komi, rules: settings.rules))
+        bridge.send(
+            .followStart(id: nextID(), size: size, komi: settings.komi, rules: settings.rules, hints: showsFollowHints)
+        )
+    }
+
+    /// Whether KataGo's suggestions show while following: the best move, and the
+    /// best move near the last one with what it costs.
+    public var showsFollowHints: Bool {
+        get { settings.followHints ?? true }
+        set {
+            settings.followHints = newValue
+            store.save(settings)
+            if state?.isFollowing == true { bridge.send(.followHints(id: nextID(), on: newValue)) }
+        }
     }
 
     /// The real board changed. While following, the position goes to the bridge;
@@ -527,6 +543,7 @@ public final class GameSession {
 
     /// Whether the board shows the local reading right now.
     public var showsLocalReading: Bool {
+        if state?.isFollowing == true { return state?.hints == true }
         guard let state, state.isReviewing else { return false }
         return isOptionHeld || state.variationKind == .local || state.localWanted == true
     }

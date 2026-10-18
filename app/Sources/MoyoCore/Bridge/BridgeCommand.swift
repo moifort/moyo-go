@@ -24,6 +24,8 @@ public struct BridgeCommand: Encodable, Sendable {
     var zone: LocalZone?
     var rows: [String]?
     var result: String?
+    var hints: Bool?
+    var on: Bool?
 
     public static func newGame(
         id: Int,
@@ -93,8 +95,13 @@ public struct BridgeCommand: Encodable, Sendable {
 
     /// Starts following a game between two people on a real board. Nobody plays
     /// on the Mac; KataGo only analyses.
-    public static func followStart(id: Int, size: Int, komi: Double, rules: String) -> BridgeCommand {
-        BridgeCommand(id: id, cmd: "follow_start", size: size, komi: komi, rules: rules)
+    public static func followStart(id: Int, size: Int, komi: Double, rules: String, hints: Bool) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "follow_start", size: size, komi: komi, rules: rules, hints: hints)
+    }
+
+    /// Shows or hides KataGo's suggestions on the board while following.
+    public static func followHints(id: Int, on: Bool) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "follow_hints", on: on)
     }
 
     /// The position the phone sees, as it wrote it. The bridge finds the moves.

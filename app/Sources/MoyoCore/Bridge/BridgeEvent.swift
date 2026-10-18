@@ -284,6 +284,8 @@ public struct GameState: Codable, Sendable {
 
     /// False when the last position the phone sent could not be reached by any move.
     public let inSync: Bool?
+    /// KataGo's suggestions are on the board: the best move, and the local one.
+    public let hints: Bool?
 
     public var isFollowing: Bool { status == .following }
 

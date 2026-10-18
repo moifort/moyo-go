@@ -134,4 +134,19 @@ struct FollowingTests {
         #expect(PhoneGameEnd(line: #"{"end":false}"#) == nil)
         #expect(PhoneGameEnd(line: #"{"size":3}"#) == nil)
     }
+
+    @Test("Les suggestions de KataGo s'allument et s'éteignent, et le suivi suivant s'en souvient")
+    func hints() throws {
+        let (session, sent) = session()
+        #expect(session.showsFollowHints)
+        session.connectPhone()
+        #expect(sent.commands.last?.hints == true)
+        session.handle(try state(status: "following", moveNumber: 3))
+        session.showsFollowHints = false
+        #expect(sent.names.last == "follow_hints")
+        #expect(sent.commands.last?.on == false)
+        session.stopFollowing()
+        session.connectPhone()
+        #expect(sent.commands.last?.hints == false)
+    }
 }

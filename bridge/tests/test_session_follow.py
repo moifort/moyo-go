@@ -181,3 +181,62 @@ def test_candidates_list_the_likely_sequences():
 def test_rows_of_the_wrong_size_are_refused():
     with pytest.raises(CommandError):
         follow.read_rows(["..."], SIZE)
+
+
+# -- KataGo's suggestions while following -------------------------------------
+
+
+@pytest.fixture
+def hinted(stream):
+    bridge = BridgeSession(EventWriter(stream))
+    bridge._engine = FakeEngine()
+    bridge._local_queries = []
+    bridge._send_local_query = lambda node, zone: bridge._local_queries.append((node, zone))
+    bridge.follow_start(1, SIZE, 6.5, "japanese", hints=True)
+    bridge.follow_board(2, rows())
+    return bridge
+
+
+def test_without_suggestions_nothing_is_read_locally(session, stream):
+    session._local_queries = []
+    session._send_local_query = lambda node, zone: session._local_queries.append((node, zone))
+    session.follow_board(3, rows((2, 2, "B")))
+    assert session._local_queries == []
+    state = last_state(stream)
+    assert state["hints"] is False
+    assert "best_move" not in state
+
+
+def test_with_suggestions_every_move_is_read_around_it(hinted, stream):
+    hinted.follow_board(3, rows((2, 2, "B")))
+    hinted.follow_board(4, rows((2, 2, "B"), (6, 6, "W")))
+    assert [node for node, _ in hinted._local_queries] == [
+        hinted.game.current_node.parent,
+        hinted.game.current_node,
+    ]
+    state = last_state(stream)
+    assert state["hints"] is True
+    assert state["local_zone"] is not None
+    assert state["local_pending"] is True
+
+
+def test_the_local_answer_lands_on_the_board(hinted, stream):
+    hinted.follow_board(3, rows((2, 2, "B")))
+    node = hinted.game.current_node
+    zone = hinted._local_queries[-1][1]
+    answer = {"moveInfos": [{"move": "D7", "order": 0, "scoreLead": 0.0, "pv": ["D7"]}]}
+    hinted._on_local_analysis(node, answer, zone)
+    state = last_state(stream)
+    assert state["local_move"]["row"] == 2 and state["local_move"]["col"] == 3
+    assert state["local_pending"] is False
+
+
+def test_suggestions_can_be_switched_on_mid_game(session, stream):
+    session._local_queries = []
+    session._send_local_query = lambda node, zone: session._local_queries.append((node, zone))
+    session.follow_board(3, rows((2, 2, "B")))
+    session.follow_hints(4, True)
+    assert len(session._local_queries) == 1
+    assert last_state(stream)["hints"] is True
+    session.follow_hints(5, False)
+    assert "local_zone" not in last_state(stream)

@@ -194,6 +194,14 @@ public struct SidebarView: View {
                 return "\(Theme.name(lead > 0 ? state.humanColor : state.humanColor.opponent)) mène"
             }
         )
+        Toggle(isOn: $session.showsFollowHints) {
+            Text("Suggestions de KataGo")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.primaryText)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .help("Le meilleur coup en vert ; en bleu, le meilleur coup près du dernier joué, et ce qu'il coûte au survol")
         divider
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle("Joueurs")

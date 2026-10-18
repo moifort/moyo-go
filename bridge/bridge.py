@@ -72,7 +72,10 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
             int(command.get("size", 19)),
             float(command.get("komi", 6.5)),
             command.get("rules", "japanese"),
+            bool(command.get("hints", False)),
         )
+    elif name == "follow_hints":
+        session.submit(session.follow_hints, command_id, bool(command["on"]))
     elif name == "follow_board":
         session.submit(session.follow_board, command_id, list(command["rows"]))
     elif name == "follow_end":
