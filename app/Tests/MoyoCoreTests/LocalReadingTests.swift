@@ -62,3 +62,50 @@ struct LocalReadingTests {
         #expect(plain["kind"] as? String == "best")
     }
 }
+
+@Suite("Le libellé d'une pastille, au survol")
+struct ProposalCaptionTests {
+    private func state(variation: String = #"0,"variation_kind":null"#, best: String, local: String) throws -> GameState {
+        let line = """
+            {"event":"state","id":1,"size":19,"stones":[],"to_play":"B","move_number":3,\
+            "last_move":null,"captures":{"by_black":0,"by_white":0},"score_history":[null],\
+            "score_lead":null,"human_color":"B","status":"review","result":null,\
+            "move_count":9,"variation_depth":\(variation),"best_move":\(best),"local_move":\(local),\
+            "local_zone":{"top":0,"left":0,"bottom":6,"right":6}}
+            """
+        guard case .state(_, let state) = try BridgeEvent.decode(line: line) else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return state
+    }
+
+    @Test("Chaque pastille dit ce qu'elle est, et rien ailleurs")
+    func eachDiscSaysWhatItIs() throws {
+        let s = try state(
+            best: #"{"row":10,"col":10,"points_lost":0}"#,
+            local: #"{"row":3,"col":3,"points_lost":2.5}"#
+        )
+        #expect(s.proposalCaption(at: Point(row: 10, col: 10)) == "Meilleur coup selon KataGo")
+        #expect(s.proposalCaption(at: Point(row: 3, col: 3)) == "Meilleur coup local, coûte 2,5 points")
+        #expect(s.proposalCaption(at: Point(row: 0, col: 0)) == nil)
+    }
+
+    @Test("Une seule pastille quand le meilleur coup est déjà local")
+    func sharedDisc() throws {
+        let s = try state(
+            best: #"{"row":3,"col":3,"points_lost":0}"#,
+            local: #"{"row":3,"col":3,"points_lost":0}"#
+        )
+        #expect(s.proposalCaption(at: Point(row: 3, col: 3)) == "Meilleur coup selon KataGo, et meilleur coup local")
+    }
+
+    @Test("Pendant le déroulé, la pastille annonce le coup suivant")
+    func duringAWalk() throws {
+        let s = try state(
+            variation: #"2,"variation_kind":"local""#,
+            best: "null",
+            local: #"{"row":4,"col":4,"points_lost":null}"#
+        )
+        #expect(s.proposalCaption(at: Point(row: 4, col: 4)) == "Coup suivant de la séquence locale")
+    }
+}

@@ -6,6 +6,9 @@ public struct BoardView: View {
     public let isInteractive: Bool
     public let onPlay: (Point) -> Void
 
+    /// The intersection under the pointer, for the caption of a proposed move.
+    @State private var hovered: Point?
+
     public init(state: GameState, isInteractive: Bool, onPlay: @escaping (Point) -> Void) {
         self.state = state
         self.isInteractive = isInteractive
@@ -40,6 +43,17 @@ public struct BoardView: View {
                                     onPlay(point)
                                 }
                         )
+                        .onContinuousHover(coordinateSpace: .local) { phase in
+                            switch phase {
+                            case .active(let location): hovered = geometry.intersection(at: location)
+                            case .ended: hovered = nil
+                            }
+                        }
+                }
+                .overlay {
+                    if let hovered, let caption = state.proposalCaption(at: hovered) {
+                        captionView(caption, at: hovered, geometry: geometry)
+                    }
                 }
                 .accessibilityElement()
                 .accessibilityLabel("Goban \(state.size) sur \(state.size)")
@@ -47,6 +61,22 @@ public struct BoardView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
+    }
+
+    /// A small dark label just above the disc, below it on the top rows where above
+    /// would leave the board. It never takes the pointer, so the hover holds.
+    private func captionView(_ text: String, at point: Point, geometry: BoardGeometry) -> some View {
+        let center = geometry.position(of: point)
+        let offset = geometry.stoneRadius * 2.1
+        return Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Theme.primaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Theme.windowBackground.opacity(0.92)))
+            .fixedSize()
+            .position(x: center.x, y: point.row < 2 ? center.y + offset : center.y - offset)
+            .allowsHitTesting(false)
     }
 
     private var accessibilityValue: String {

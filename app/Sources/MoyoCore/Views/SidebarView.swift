@@ -325,28 +325,6 @@ struct ReviewPanel: View {
         ]
     }
 
-    /// The local proposal, with what it costs against the whole board: often the
-    /// lesson itself, when the fight is worth less than the big point elsewhere.
-    private var localLegend: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Circle()
-                .fill(Theme.localMove)
-                .frame(width: 9, height: 9)
-            Group {
-                if let cost = state.localMove?.costLabel, state.variationKind != .local {
-                    Text("Meilleur coup local, \(cost)")
-                } else if state.localMove == nil, state.variationKind != .local {
-                    Text("Lecture du combat local…")
-                } else {
-                    Text("Meilleur coup local")
-                }
-            }
-            .font(.system(size: 11))
-            .foregroundStyle(Theme.secondaryText)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
     /// The same moves as the Revue menu and its arrow keys, within reach of the mouse:
     /// a record dropped on the window is read with the pointer as often as with keys.
     private var navigation: some View {
@@ -408,17 +386,6 @@ struct ReviewPanel: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Theme.bestMove)
-                    .frame(width: 9, height: 9)
-                Text("Meilleur coup selon KataGo")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.secondaryText)
-            }
-            if state.localZone != nil {
-                localLegend
-            }
             navigation
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
