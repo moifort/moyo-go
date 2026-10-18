@@ -44,7 +44,7 @@ struct FollowingTests {
         #expect(session.isChoosingPhone)
         #expect(!session.isFollowing)
         #expect(sent.names.isEmpty)
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         #expect(!session.isChoosingPhone)
         #expect(session.isFollowing)
         #expect(sent.names == ["follow_start"])
@@ -64,14 +64,14 @@ struct FollowingTests {
         // Saved: now the phone is picked, and only then is the game replaced.
         #expect(session.isChoosingPhone)
         #expect(!session.isFollowing)
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         #expect(sent.names == ["export_sgf", "follow_start"])
     }
 
     @Test("Chaque position part au pont telle que le téléphone l'a écrite")
     func relaysPositions() throws {
         let (session, sent) = session()
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         session.handle(try state(status: "following", moveNumber: 0))
         session.phone.consume(line(board))
         #expect(sent.names.last == "follow_board")
@@ -88,7 +88,7 @@ struct FollowingTests {
     @Test("La fin annoncée par le téléphone ouvre la partie, la suivante repart de zéro")
     func endThenNext() throws {
         let (session, sent) = session()
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         session.handle(try state(status: "following", moveNumber: 0))
         session.phone.consume(line(board))
         session.phone.consume(line(#"{"end":true,"result":"W+R"}"#))
@@ -105,13 +105,13 @@ struct FollowingTests {
     @Test("Arrêter le suivi ouvre la partie suivie, ou une nouvelle partie si rien n'a été vu")
     func stopping() throws {
         let (session, sent) = session()
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         session.handle(try state(status: "following", moveNumber: 0))
         session.stopFollowing()
         #expect(!session.isFollowing)
         #expect(sent.names.last == "new_game")
 
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         session.handle(try state(status: "following", moveNumber: 12))
         session.stopFollowing()
         #expect(sent.names.last == "follow_end")
@@ -120,7 +120,7 @@ struct FollowingTests {
     @Test("Une nouvelle partie arrête le suivi sans ouvrir de revue")
     func newGameStops() throws {
         let (session, sent) = session()
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         session.handle(try state(status: "following", moveNumber: 12))
         session.newGame()
         #expect(!session.isFollowing)
@@ -132,6 +132,13 @@ struct FollowingTests {
     func phoneName() {
         #expect(PhoneLink.displayName("Kifu — iPhone 2") == "iPhone 2")
         #expect(PhoneLink.displayName("GoBoardVision") == "GoBoardVision")
+    }
+
+    @Test("Le téléphone porte le nom de son hôte Bonjour, que iOS ne cache pas")
+    func phoneHostName() {
+        #expect(PhoneLink.hostDisplayName("TiPhone-junior.local.") == "TiPhone junior")
+        #expect(PhoneLink.hostDisplayName("iPhone.local") == "iPhone")
+        #expect(PhoneLink.hostDisplayName(".") == nil)
     }
 
     @Test("La fin de partie se lit, avec ou sans résultat")
@@ -146,14 +153,14 @@ struct FollowingTests {
     func analysisSwitch() throws {
         let (session, sent) = session()
         #expect(session.followsWithAnalysis)
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         #expect(sent.commands.last?.analysis == true)
         session.handle(try state(status: "following", moveNumber: 3))
         session.followsWithAnalysis = false
         #expect(sent.names.last == "follow_analysis")
         #expect(sent.commands.last?.on == false)
         session.stopFollowing()
-        session.follow(phoneNamed: "iPhone 2")
+        session.follow(phone: "iPhone 2")
         #expect(sent.commands.last?.analysis == false)
     }
 }

@@ -98,6 +98,14 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   sight. Remembering the last phone and connecting to it on its own would save a
   click, at the risk of following someone else's game.
 
+- **Phone names come from the Bonjour host, not from Kifu.** iOS gives apps a bare
+  "iPhone" for `UIDevice.current.name` unless they hold the
+  `user-assigned-device-name` entitlement, which Apple grants on request. Kifu
+  therefore advertises "Kifu — iPhone", and Moyo resolves each service to its host
+  ("TiPhone-junior.local." reads "TiPhone junior"). Hyphens all become spaces, so a
+  name with a real hyphen loses it; asking Apple for the entitlement in Kifu would
+  fix it at the source.
+
 - **Kifu does not announce the end yet.** Moyo opens a followed game as a record
   when the phone sends `{"end":true,"result":"B+R"}` (result optional, SGF form).
   Kifu's "Fin de partie" writes its SGF but sends nothing, and it has no resign

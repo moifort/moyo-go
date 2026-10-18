@@ -302,10 +302,10 @@ public final class GameSession {
         isChoosingPhone = true
     }
 
-    /// The player picked a phone: follow the game it records.
-    public func follow(phoneNamed name: String) {
+    /// The player picked a phone, by its Bonjour service: follow the game it records.
+    public func follow(phone service: String) {
         isChoosingPhone = false
-        startFollowing(phoneNamed: name)
+        startFollowing(phone: service)
     }
 
     /// Saves the game under way, then follows the real board whatever the panel's answer.
@@ -317,12 +317,12 @@ public final class GameSession {
     /// Starts following: an empty game with no AI, and the chosen phone's link opened.
     /// The phone sends its position on connecting, which the bridge takes as the
     /// start — a game recorded halfway is joined where it stands.
-    func startFollowing(phoneNamed name: String) {
+    func startFollowing(phone service: String) {
         guard phase == .running else { return }
         isConfirmingFollow = false
         isFollowing = true
         beginFollowedGame(size: 19)
-        phone.connect(to: name)
+        phone.connect(to: service)
     }
 
     /// Stops following. The game followed so far opens as a record, its analyses

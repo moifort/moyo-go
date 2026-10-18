@@ -56,8 +56,8 @@ struct PhoneButton: View {
         .buttonStyle(.glass)
         .controlSize(.large)
         .sheet(isPresented: $session.isChoosingPhone) {
-            PhonePicker(phones: session.phone.phones) { name in
-                session.follow(phoneNamed: name)
+            PhonePicker(phones: session.phone.phones) { phone in
+                session.follow(phone: phone.id)
             } cancel: {
                 session.isChoosingPhone = false
             }
@@ -93,8 +93,8 @@ struct PhoneButton: View {
 /// The phones running Kifu in sight, to pick the one whose game to follow. The
 /// list fills in as phones appear; while it is empty, it says what it waits for.
 private struct PhonePicker: View {
-    let phones: [String]
-    let pick: (String) -> Void
+    let phones: [PhoneLink.Phone]
+    let pick: (PhoneLink.Phone) -> Void
     let cancel: () -> Void
 
     var body: some View {
@@ -116,11 +116,11 @@ private struct PhonePicker: View {
                 .padding(.vertical, 12)
             } else {
                 VStack(spacing: 7) {
-                    ForEach(phones, id: \.self) { name in
+                    ForEach(phones) { phone in
                         Button {
-                            pick(name)
+                            pick(phone)
                         } label: {
-                            Label(name, systemImage: "iphone")
+                            Label(phone.name, systemImage: "iphone")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.glass)
