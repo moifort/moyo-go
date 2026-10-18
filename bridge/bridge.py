@@ -65,6 +65,18 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         session.submit(session.set_local_zone, command_id, command.get("zone"))
     elif name == "read_local":
         session.submit(session.read_local, command_id)
+    elif name == "follow_start":
+        session.submit(
+            session.follow_start,
+            command_id,
+            int(command.get("size", 19)),
+            float(command.get("komi", 6.5)),
+            command.get("rules", "japanese"),
+        )
+    elif name == "follow_board":
+        session.submit(session.follow_board, command_id, list(command["rows"]))
+    elif name == "follow_end":
+        session.submit(session.follow_end, command_id, command.get("result"))
     elif name == "state":
         session.submit(session.state, command_id)
     else:

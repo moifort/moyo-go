@@ -77,6 +77,7 @@ def game_state(
     ai_strategy: Optional[str] = None,
     ai_settings: Optional[Dict[str, Any]] = None,
     review: Optional[Dict[str, Any]] = None,
+    extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     node = game.current_node
     payload = {
@@ -99,6 +100,8 @@ def game_state(
         # the main line rather than the depth of the node on the board, which a
         # variation would otherwise inflate. The session supplies both.
         payload.update(review)
+    if extra is not None:
+        payload.update(extra)
     if scoring is not None:
         # Every component of the total travels with it, so the panel can show a sum
         # that adds up instead of a bare figure.
