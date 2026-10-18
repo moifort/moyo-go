@@ -13,6 +13,12 @@ final class BoardServer: @unchecked Sendable {
     /// Called on the server queue with the number of connected Macs.
     var onClientsChanged: ((Int) -> Void)?
 
+    static let viewpointDefaultsKey = "moyoViewpoint"
+    /// Whose seat Moyo shows the board from, chosen on the home screen.
+    static var viewpoint: BoardBroadcast.Viewpoint {
+        UserDefaults.standard.string(forKey: viewpointDefaultsKey).flatMap(BoardBroadcast.Viewpoint.init) ?? .leftPlayer
+    }
+
     func start() {
         queue.async { [self] in
             guard listener == nil, let listener = try? NWListener(using: .tcp) else { return }
@@ -35,7 +41,7 @@ final class BoardServer: @unchecked Sendable {
 
     /// Sends the position to every Mac, unless it is the line they already have.
     func publish(position: Position, status: Recorder.Status) {
-        let data = BoardBroadcast.line(position: position, status: status)
+        let data = BoardBroadcast.line(position: position, status: status, viewpoint: Self.viewpoint)
         queue.async { [self] in
             guard data != lastLine else { return }
             lastLine = data

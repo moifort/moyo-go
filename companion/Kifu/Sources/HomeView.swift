@@ -1,10 +1,12 @@
 import SwiftUI
+import KifuCore
 
 struct HomeView: View {
     @State private var games: [URL] = []
     @State private var showGame = false
     @AppStorage(TrialLog.defaultsKey) private var trialMode = false
     @AppStorage(CameraSession.ultraWideDefaultsKey) private var ultraWide = false
+    @AppStorage(BoardServer.viewpointDefaultsKey) private var viewpoint = BoardBroadcast.Viewpoint.leftPlayer.rawValue
 
     var body: some View {
         NavigationStack {
@@ -20,6 +22,14 @@ struct HomeView: View {
                     Toggle("Grand-angle (0,5×)", isOn: $ultraWide)
                 } footer: {
                     Text("Objectif 13 mm, pour le support imprimé posé au bord du goban. Sinon l'objectif principal 24 mm.")
+                }
+                Section {
+                    Picker("Moyo montre le plateau vu par", selection: $viewpoint) {
+                        Text("Joueur de gauche").tag(BoardBroadcast.Viewpoint.leftPlayer.rawValue)
+                        Text("Joueur de droite").tag(BoardBroadcast.Viewpoint.rightPlayer.rawValue)
+                    }
+                } footer: {
+                    Text("Gauche et droite de l'image du téléphone, posé sur le troisième côté de la table.")
                 }
                 Section {
                     Toggle("Mode d'essai", isOn: $trialMode)

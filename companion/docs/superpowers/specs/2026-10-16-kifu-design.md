@@ -249,7 +249,9 @@ partage. La liste des parties passées est accessible depuis l'écran d'accueil.
 Pendant toute la session de jeu, l'app s'annonce en Bonjour (`_goboard._tcp`, le service
 que Moyo cherche déjà pour GoBoardVision) et envoie à chaque Mac connecté la **position
 acceptée**, une ligne JSON par changement : `{"size":19,"rows":[...],"status":"locked"}`,
-rangée 0 en haut de l'image. `status` vaut `locked` quand le plateau correspond au kifu,
+vue par le joueur de gauche ou de droite de l'image (réglage de l'écran d'accueil) : le
+téléphone est sur un troisième côté, le plateau pivote donc d'un quart de tour pour que le
+bord du joueur choisi soit en bas. `status` vaut `locked` quand le plateau correspond au kifu,
 `uncertain` quand l'arbitre attend. Jamais de lecture brute : Moyo ne voit que ce que la
 règle a expliqué. La liaison est en lecture seule et facultative ; le SGF reste la source
 de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie.
