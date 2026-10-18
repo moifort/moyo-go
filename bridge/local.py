@@ -26,6 +26,11 @@ MARGIN = 2
 #: The smallest zone, in lines a side: room enough to read a life-and-death fight.
 MIN_SPAN = 7
 
+#: A zone left this many lines or fewer short of an edge runs on to it. Fights
+#: settle against the edges and in the corners: a zone stopping on the second
+#: line would cut off the very points where a group lives or dies.
+EDGE_REACH = 3
+
 #: How many moves deep both colours are kept inside the zone. Past it KataGo may
 #: leave, and the sequence handed to the app stops where it does.
 DEPTH = 12
@@ -35,9 +40,10 @@ def region(stones: Dict[tuple, str], size: int, last: Optional[Dict[str, int]]) 
     """The zone of the fight, in display coordinates, bounds inclusive.
 
     Drawn around the last move and every group touching it, friend or foe, then
-    widened by `MARGIN` and to at least `MIN_SPAN` a side. None without a last move,
-    and None when the zone grows to the whole board: there is nothing local left to
-    say that the best move does not already say.
+    widened by `MARGIN` and to at least `MIN_SPAN` a side, then run on to an edge
+    within `EDGE_REACH`, so a fight near a corner takes the corner in. None without
+    a last move, and None when the zone grows to the whole board: there is nothing
+    local left to say that the best move does not already say.
     """
     if last is None:
         return None
@@ -47,8 +53,8 @@ def region(stones: Dict[tuple, str], size: int, last: Optional[Dict[str, int]]) 
         for neighbour in scoring.neighbours(stone, size):
             if neighbour in stones and neighbour not in fight:
                 fight |= scoring.group_at(stones, size, neighbour)
-    top, bottom = _widen(min(r for r, _ in fight), max(r for r, _ in fight), size)
-    left, right = _widen(min(c for _, c in fight), max(c for _, c in fight), size)
+    top, bottom = _reach_edge(*_widen(min(r for r, _ in fight), max(r for r, _ in fight), size), size)
+    left, right = _reach_edge(*_widen(min(c for _, c in fight), max(c for _, c in fight), size), size)
     if (top, left, bottom, right) == (0, 0, size - 1, size - 1):
         return None
     return {"top": top, "left": left, "bottom": bottom, "right": right}
@@ -64,6 +70,20 @@ def drawn(zone: Dict[str, Any], size: int) -> Dict[str, int]:
     if rows[0] < 0 or cols[0] < 0 or rows[1] >= size or cols[1] >= size:
         raise ValueError(f"zone {zone} is off a {size}×{size} board")
     return {"top": rows[0], "left": cols[0], "bottom": rows[1], "right": cols[1]}
+
+
+def _reach_edge(low: int, high: int, size: int):
+    """Runs one side of the zone on to the edge it nearly touches.
+
+    Both edges within reach happens on a small board: only the nearer one is taken,
+    or a 9×9 zone would cover the whole width and stop being local.
+    """
+    gap_low, gap_high = low, size - 1 - high
+    if gap_low <= EDGE_REACH and (gap_high > EDGE_REACH or gap_low <= gap_high):
+        return 0, high
+    if gap_high <= EDGE_REACH:
+        return low, size - 1
+    return low, high
 
 
 def _widen(low: int, high: int, size: int):

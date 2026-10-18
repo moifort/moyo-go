@@ -11,7 +11,7 @@ deux côtés.
 
 | Sujet | Choix | Raison |
 |---|---|---|
-| Zone | Déduite par le pont : dernier coup + groupes qui le touchent, marge de 2, au moins 7×7 | Demandé ainsi pour commencer |
+| Zone | Déduite par le pont : dernier coup + groupes qui le touchent, marge de 2, au moins 7×7, prolongée jusqu'au bord s'il est à 3 lignes ou moins (le plus proche seulement sur un petit goban) | Demandé ainsi pour commencer |
 | Zone tracée | Un glisser sur le goban trace un rectangle aligné sur les intersections, qui remplace la zone déduite | La déduction se trompe dès que le dernier coup est un tenuki, ou que le combat qui compte n'est pas celui qui vient d'être joué |
 | Zone tracée et navigation | Elle reste en place d'un coup à l'autre, jusqu'à Échap | Un combat se lit sur plusieurs coups ; la retracer à chaque fois serait une corvée |
 | Zone redessinée | La lecture de l'ancienne zone est jetée, la séquence locale en cours revient au record, une réponse tardive pour l'ancienne zone est ignorée | La séquence affichée doit toujours appartenir à la zone affichée |

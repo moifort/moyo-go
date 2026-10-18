@@ -25,7 +25,25 @@ def test_the_zone_takes_in_every_group_touching_the_last_move():
     stones = {(9, 9): "W", (10, 9): "B", (11, 9): "B", (12, 9): "B", (13, 9): "B", (14, 9): "B"}
     stones[(3, 3)] = "B"  # far away, not part of the fight
     zone = local.region(stones, 19, {"row": 9, "col": 9})
-    assert zone == {"top": 7, "left": 6, "bottom": 16, "right": 12}
+    # The chain ends two lines short of the bottom edge, so the zone runs on to it.
+    assert zone == {"top": 7, "left": 6, "bottom": 18, "right": 12}
+
+
+def test_a_fight_near_a_corner_takes_the_corner_in():
+    # A stone on the 5-5 point: margin and minimum size stop one line short.
+    zone = local.region({(4, 4): "B"}, 19, {"row": 4, "col": 4})
+    assert zone == {"top": 0, "left": 0, "bottom": 7, "right": 7}
+
+
+def test_a_fight_on_the_side_reaches_the_edge_only():
+    zone = local.region({(9, 3): "B"}, 19, {"row": 9, "col": 3})
+    assert zone == {"top": 6, "left": 0, "bottom": 12, "right": 6}
+
+
+def test_on_a_small_board_only_the_nearer_edge_is_taken():
+    zone = local.region({(2, 4): "B"}, 9, {"row": 2, "col": 4})
+    # Rows: the top edge is nearer. Columns: both edges equally near, the left wins.
+    assert zone == {"top": 0, "left": 0, "bottom": 6, "right": 7}
 
 
 def test_a_corner_zone_stays_on_the_board():
