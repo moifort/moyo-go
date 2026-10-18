@@ -6,6 +6,7 @@ import Foundation
 /// Two fields go beyond GoBoardVision: `follow` asks Moyo to show this board whatever
 /// game it had open, rather than read it as moves against its AI, and `next` ("B" or "W")
 /// says whose turn it is, which a position alone cannot tell.
+/// The format is specified in docs/protocol.md at the root of the repository.
 public enum BoardBroadcast {
     public static let serviceType = "_goboard._tcp"
 

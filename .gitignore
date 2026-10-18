@@ -14,3 +14,7 @@ vendor/
 
 # Maquettes de brainstorming
 .superpowers/
+
+# Compagnon iPhone : projet Xcode généré par xcodegen, builds SwiftPM
+companion/Kifu/Kifu.xcodeproj/
+companion/KifuCore/.build/

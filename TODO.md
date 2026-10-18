@@ -233,3 +233,17 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 
 - **Intel and universal builds.** Apple Silicon only, by design.
 - **iOS and iPadOS.** macOS only, by design.
+
+## Companion
+
+- **No shared Swift package for the board line.** Kifu encodes it in
+  `BoardBroadcast`, Moyo decodes it in `PhoneBoard`, each with its own tests, and
+  `docs/protocol.md` is the only common ground. A package both depend on would cover
+  two small types, and the two sides do not build alike: Moyo is Swift 6.2 on macOS 26,
+  KifuCore Swift 5.10 on iOS 17. Worth it the day the line grows a third field that
+  has to agree, or a second message type.
+
+- **Kifu is not on CI beyond KifuCore.** The test workflow runs `swift test` on
+  KifuCore; the iOS app is only built by hand, because it needs XcodeGen and an iOS
+  platform on the runner for a target that ships to one phone.
+

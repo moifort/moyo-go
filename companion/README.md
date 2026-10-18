@@ -1,7 +1,9 @@
-# Kifu
+# Kifu, le compagnon iPhone de Moyo
 
 Enregistre une partie de go jouée sur un vrai goban, depuis un iPhone posé sur le côté de la
-table, et produit le SGF à la fin. Design : `docs/superpowers/specs/2026-10-16-kifu-design.md`.
+table, et produit le SGF à la fin. Design : `docs/superpowers/specs/2026-10-16-kifu-design.md`, protocole avec
+Moyo : `docs/protocol.md` (à la racine du dépôt). Les commandes ci-dessous partent de
+`companion/`.
 
 ## Tests du cœur de vision
 

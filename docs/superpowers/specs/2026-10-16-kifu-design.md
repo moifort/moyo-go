@@ -270,7 +270,8 @@ bord du joueur choisi soit en bas. `status` vaut `locked` quand le plateau corre
 demande à Moyo d'afficher ce plateau quelle que soit la partie qu'il avait ouverte, et
 `"next":"B"` ou `"W"`, le trait, qu'une position seule ne dit pas. Jamais de lecture brute : Moyo ne voit que ce que la
 règle a expliqué. La liaison est en lecture seule et facultative ; le SGF reste la source
-de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie.
+de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie. Le format exact
+(transport, champs, deux usages) est dans `docs/protocol.md`.
 
 ## Écrans
 

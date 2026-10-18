@@ -48,6 +48,13 @@ No account, no network, no telemetry. The engine and its neural networks live
 inside the app, so a game never leaves your Mac — and works with no connection at
 all.
 
+## Follow a game played on a real board
+
+Kifu, Moyo's iPhone companion, watches a real goban from the side of the table and
+records the game to SGF. While it records, Moyo can follow along move by move, with
+KataGo's reading and the score curve, and opens the game for review when it ends.
+The two talk over the local network only. Kifu lives in [companion/](companion/).
+
 ## Requirements
 
 macOS 26 or later, on Apple Silicon. Nothing else to install: the engine, its

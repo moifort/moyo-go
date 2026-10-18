@@ -3,6 +3,7 @@ import Foundation
 /// A board position as the phone sees it: one line of JSON per change,
 /// `{"size":19,"rows":["X........", ...],"status":"locked"}`, row 0 at the top and
 /// column 0 on the left, the same orientation the Mac draws.
+/// The format is specified in docs/protocol.md.
 public struct PhoneBoard: Equatable, Sendable {
     public let size: Int
     public let stones: [Stone]
