@@ -141,7 +141,11 @@ public struct SidebarView: View {
                 Button {
                     isConfiguringAI = true
                 } label: {
+                    // A small glyph in a roomier disc: at its natural size the
+                    // icon filled the circle edge to edge.
                     Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
