@@ -87,6 +87,35 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   Following the reading out of the zone would need a rule for when it is still
   "local".
 
+- **Playing KataGo on the real board is gone.** "Connecter" used to let the player
+  answer KataGo on a real board, the phone reading each stone. It now follows a game
+  between two people seen by Kifu, which is what the phone is for; the two modes
+  behind one button would have needed a choice before every connection. Bringing it
+  back means a second entry, most likely in the new-game sheet.
+
+- **Kifu does not announce the end yet.** Moyo opens a followed game as a record
+  when the phone sends `{"end":true,"result":"B+R"}` (result optional, SGF form).
+  Kifu's "Fin de partie" writes its SGF but sends nothing, and it has no resign
+  button: both belong in Kifu. Until then, "Connecté à …" on the Mac stops following
+  and opens the record the same way.
+
+- **A finished game on the real board is not counted.** "Fin" opens the record with
+  no result: the dead stones were never agreed on, and neither side typed a score.
+  The bridge's count from the review would be one more step.
+
+- **A new game whose first board matches the last one is not seen.** Kifu only
+  sends a position when it changes. If the next game starts on a board identical to
+  the end of the previous one, the Mac stays on the record until the first move.
+
+- **A followed record keeps its corrections.** A misread stone corrected a move
+  later leaves the misread branch in KaTrain's tree. The review follows the line
+  actually played, but a save writes the whole tree, the dead branch included.
+
+- **A game joined halfway loses its order.** The stones already on the board are
+  placed as a setup, and who moves first is guessed from the count until the first
+  move settles it. Kifu knows the order when it recorded from the start; sending its
+  SGF at connection would recover it.
+
 ## Design
 
 - **The score curve does not animate.** The old bars grew with `.animation`; the
@@ -99,13 +128,6 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   a floor of sixty moves so the opening is not stretched across the chart. Beyond
   the floor, every move squeezes the curve a little more; a scrolling window would
   keep the last moves readable at the cost of losing the opening from view.
-
-- **No phone button under review.** "Connecter" heads the footer of a game only.
-  Under review the link would do almost nothing: a move seen on the real board is
-  played only when it is the player's turn, which a record never is, and the one
-  thing it does — an empty board of another size starts a new game — is already
-  what "Nouvelle partie" is for. Following a real game move by move from a record
-  would need the review to accept moves, which it does not.
 
 - **A record under review is read-only.** Clicking the board does nothing, not even
   on the green marker; dragging across it draws the zone of the local reading.

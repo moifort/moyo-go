@@ -81,6 +81,9 @@ public enum GameStatus: String, Codable, Sendable {
     case finished
     /// A record is being read rather than played: nothing on the board can be moved.
     case review
+    /// A game between two people on a real board, seen by the phone. Nothing is
+    /// played on the Mac: the board follows the phone, and KataGo analyses.
+    case following
 }
 
 /// KataGo's first choice at the position on screen.
@@ -276,6 +279,13 @@ public struct GameState: Codable, Sendable {
     public let localPending: Bool?
     /// ⌥→ was pressed before the reading came back; the first move is on its way.
     public let localWanted: Bool?
+
+    // -- following only
+
+    /// False when the last position the phone sent could not be reached by any move.
+    public let inSync: Bool?
+
+    public var isFollowing: Bool { status == .following }
 
     public var isReadingLocally: Bool { localPending == true }
 

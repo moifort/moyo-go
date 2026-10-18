@@ -11,7 +11,9 @@ public struct SidebarView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let state = session.state, state.isReviewing {
+            if let state = session.state, state.isFollowing {
+                followingPanel(state)
+            } else if let state = session.state, state.isReviewing {
                 ReviewPanel(session: session, state: state)
             } else if let state = session.state, let scoring = state.scoring {
                 ScoringPanel(detail: scoring, humanColor: state.humanColor) {
@@ -37,7 +39,7 @@ public struct SidebarView: View {
                 // The phone heads the footer: it is how a game on a real board
                 // begins, before any of the moves the buttons below act on.
                 VStack(spacing: 7) {
-                    phoneButton
+                    PhoneButton(session: session)
                     if state.status == .finished {
                         // Nothing left to play: the only way on is the next game.
                         Button("Nouvelle partie") {
@@ -159,60 +161,50 @@ public struct SidebarView: View {
         }
     }
 
-    /// The phone that watches the real board, one of the buttons at the foot of
-    /// the sidebar. The button says where the link stands and does the
-    /// one thing that makes sense from there.
-    @ViewBuilder private var phoneButton: some View {
-        Group {
-            switch session.phone.status {
-            case .idle:
-                Button {
-                    session.phone.connect()
-                } label: {
-                    Label("Connecter", systemImage: "iphone")
-                        .frame(maxWidth: .infinity)
-                }
-                .help("Connecter le téléphone qui filme le plateau")
-            case .searching, .connecting:
-                Button {
-                    session.phone.disconnect()
-                } label: {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text(phoneProgress).lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .help("Arrêter la recherche")
-            case .connected(let name):
-                Button {
-                    session.phone.disconnect()
-                } label: {
-                    Label {
-                        Text("Connecté")
-                    } icon: {
-                        Image(systemName: "iphone").foregroundStyle(Theme.connected)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .help("\(name) — cliquer pour déconnecter")
-            case .failed(let message):
-                Button {
-                    session.phone.connect()
-                } label: {
-                    Label("Réessayer", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                }
-                .help("Échec : \(message)")
+    /// A game played on the real board, followed move by move. Nothing to play
+    /// here: the turn, the lead by colour — both players are people — and the phone.
+    @ViewBuilder private func followingPanel(_ state: GameState) -> some View {
+        HStack(spacing: 10) {
+            TurnIndicator(color: state.toPlay, isThinking: false)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.inSync == false ? "Position non reconnue" : "Partie suivie")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(state.inSync == false ? Theme.warning : Theme.primaryText)
+                    .lineLimit(1)
+                Text(statusDetail(state))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+                    .monospacedDigit()
+                    .lineLimit(1)
             }
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.glass)
-        .controlSize(.large)
-    }
-
-    private var phoneProgress: String {
-        if case .connecting = session.phone.status { return "Connexion…" }
-        return "Recherche…"
+        .help(
+            state.inSync == false
+                ? "Le plateau vu par le téléphone ne découle d'aucun coup : la partie reprend dès qu'il redevient cohérent."
+                : ""
+        )
+        divider
+        ScoreSection(
+            scores: session.scoresFromPlayerSide,
+            moveNumber: state.moveNumber,
+            lead: session.currentLead,
+            caption: { lead in
+                guard abs(lead) >= 0.05 else { return "Égalité" }
+                return "\(Theme.name(lead > 0 ? state.humanColor : state.humanColor.opponent)) mène"
+            }
+        )
+        divider
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle("Joueurs")
+            PlayerTable(rows: playingRows(state))
+        }
+        Spacer(minLength: 0)
+        Text("Les coups joués sur le plateau s'affichent ici. La partie se termine sur Kifu.")
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.secondaryText)
+            .lineLimit(3)
+        PhoneButton(session: session)
     }
 
     private func actions(_ state: GameState) -> some View {
@@ -512,8 +504,15 @@ struct ReviewPanel: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if session.isFollowing {
+                Text("La prochaine partie commencée sur Kifu s'affichera ici.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(3)
+            }
             stepHint
             navigation
+            PhoneButton(session: session)
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
             } label: {

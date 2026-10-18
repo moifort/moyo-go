@@ -22,6 +22,8 @@ public struct BridgeCommand: Encodable, Sendable {
     var blackName: String?
     var whiteName: String?
     var zone: LocalZone?
+    var rows: [String]?
+    var result: String?
 
     public static func newGame(
         id: Int,
@@ -87,6 +89,22 @@ public struct BridgeCommand: Encodable, Sendable {
 
     public static func setLocalZone(id: Int, zone: LocalZone?) -> BridgeCommand {
         BridgeCommand(id: id, cmd: "set_local_zone", zone: zone)
+    }
+
+    /// Starts following a game between two people on a real board. Nobody plays
+    /// on the Mac; KataGo only analyses.
+    public static func followStart(id: Int, size: Int, komi: Double, rules: String) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "follow_start", size: size, komi: komi, rules: rules)
+    }
+
+    /// The position the phone sees, as it wrote it. The bridge finds the moves.
+    public static func followBoard(id: Int, rows: [String]) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "follow_board", rows: rows)
+    }
+
+    /// The game on the real board is over: it opens as a record under review.
+    public static func followEnd(id: Int, result: String?) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "follow_end", result: result)
     }
 
     public static func toggleDead(id: Int, row: Int, col: Int) -> BridgeCommand {

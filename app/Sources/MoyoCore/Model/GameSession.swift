@@ -100,11 +100,24 @@ public final class GameSession {
 
     public let thinking = ThinkingIndicator()
 
-    /// The phone watching the real board, when the player has connected one.
+    /// The phone watching the real board. It is looked for from launch and
+    /// connected when the player asks, to follow the game played there.
     public let phone = PhoneLink()
-    /// The move sent on the phone's behalf and not yet answered by the bridge,
-    /// so the same stone is not played twice while the state is in flight.
-    private var phoneMoveInFlight: Point?
+
+    /// The Mac follows the game on the real board: every position the phone sends
+    /// goes to the bridge, which turns it into moves. True from the moment the
+    /// player connects until they disconnect or start something else.
+    public private(set) var isFollowing = false
+    /// The phone said the game was over; the record is on screen, and the next
+    /// position the phone sends starts the next game.
+    private var followedGameEnded = false
+
+    /// The player asked to connect while a game was under way: the sidebar asks
+    /// whether to save it first.
+    public var isConfirmingFollow = false
+    /// The game is being saved before following starts; the save panel's answer
+    /// starts it.
+    private var followsAfterExport = false
 
     /// Score lead per move number, filled in as analyses come back.
     public private(set) var scoreByMove: [Int: Double] = [:]
@@ -136,6 +149,7 @@ public final class GameSession {
         self.store = store
         self.settings = store.load() ?? Settings()
         phone.onBoard = { [weak self] board in self?.phoneBoardDidChange(board) }
+        phone.onGameEnd = { [weak self] end in self?.phoneGameDidEnd(end) }
     }
 
     // -- lifecycle -----------------------------------------------------------
@@ -145,6 +159,7 @@ public final class GameSession {
     public func start() {
         guard !hasStarted else { return }
         hasStarted = true
+        phone.startDiscovery()
         guard let location = BridgeLocation.resolve() else {
             phase = .failed(
                 "Emplacement du projet inconnu. Définissez MOYO_DEV_ROOT ou reconstruisez l'application."
@@ -236,7 +251,9 @@ public final class GameSession {
     }
 
     /// Refusals the board answers on its own, without a word.
-    private static let silentFailures: Set<String> = ["illegal_move", "no_variation"]
+    ///
+    /// `not_following` is a position the phone sent just as following stopped.
+    private static let silentFailures: Set<String> = ["illegal_move", "no_variation", "not_following"]
 
     private func apply(_ newState: GameState) {
         // Moves beyond the current one no longer exist, typically after an undo —
@@ -250,30 +267,89 @@ public final class GameSession {
         }
         state = newState
         if newState.status != .playing { thinking.ended() }
-        phoneMoveInFlight = nil
-        syncWithPhone()
     }
 
-    // -- phone ----------------------------------------------------------------
+    // -- following a game on a real board ------------------------------------
 
-    /// The real board changed. A board of another size starts a matching game;
-    /// otherwise the board is compared with the game to find the player's move.
-    private func phoneBoardDidChange(_ board: PhoneBoard) {
-        guard phase == .running else { return }
-        if state == nil || state?.size != board.size, board.stones.isEmpty {
-            settings.size = board.size
-            newGame()
-            return
+    /// A game is under way that following would replace: worth asking first.
+    public var hasGameInProgress: Bool {
+        guard let state, !isFollowing else { return false }
+        return state.status == .scoring || (state.status == .playing && state.moveNumber > 0)
+    }
+
+    /// The player clicked the phone's button. A game under way is not dropped
+    /// without asking: the sidebar offers to save it, or to give it up.
+    public func connectPhone() {
+        if isFollowing {
+            phone.connect()  // the link dropped or failed: the game followed goes on
+        } else if hasGameInProgress {
+            isConfirmingFollow = true
+        } else {
+            startFollowing()
         }
-        syncWithPhone()
     }
 
-    private func syncWithPhone() {
-        guard let board = phone.latest, let state, canAct,
-              let point = BoardSync.pendingMove(phone: board, game: state),
-              point != phoneMoveInFlight else { return }
-        phoneMoveInFlight = point
-        play(row: point.row, col: point.col)
+    /// Saves the game under way, then follows the real board whatever the panel's answer.
+    public func saveThenFollow() {
+        followsAfterExport = true
+        exportRecord()
+    }
+
+    /// Starts following: an empty game with no AI, and the phone's link opened.
+    /// The phone sends its position on connecting, which the bridge takes as the
+    /// start — a game recorded halfway is joined where it stands.
+    public func startFollowing() {
+        guard phase == .running else { return }
+        isConfirmingFollow = false
+        isFollowing = true
+        beginFollowedGame(size: phone.latest?.size ?? 19)
+        phone.connect()
+    }
+
+    /// Stops following. The game followed so far opens as a record, its analyses
+    /// kept — unless something else is about to take the window.
+    public func stopFollowing(openingRecord: Bool = true) {
+        guard isFollowing else { return }
+        isFollowing = false
+        phone.disconnect()
+        let ended = followedGameEnded
+        followedGameEnded = false
+        guard openingRecord, !ended, let state, state.isFollowing else { return }
+        // Nothing was seen: there is no record to open, only a game to start.
+        if state.moveNumber == 0, state.stones.isEmpty {
+            newGame()
+        } else {
+            bridge.send(.followEnd(id: nextID(), result: nil))
+        }
+    }
+
+    private func beginFollowedGame(size: Int) {
+        followedGameEnded = false
+        scoreByMove.removeAll()
+        state = nil
+        lastErrorMessage = nil
+        recordName = nil
+        analysisProgress = nil
+        thinking.ended()
+        bridge.send(.followStart(id: nextID(), size: size, komi: settings.komi, rules: settings.rules))
+    }
+
+    /// The real board changed. While following, the position goes to the bridge;
+    /// after a game has ended, the next one starts with it.
+    private func phoneBoardDidChange(_ board: PhoneBoard) {
+        guard phase == .running, isFollowing else { return }
+        if followedGameEnded || (state?.isFollowing == true && state?.size != board.size && state?.moveNumber == 0) {
+            beginFollowedGame(size: board.size)
+        }
+        bridge.send(.followBoard(id: nextID(), rows: board.rows))
+    }
+
+    /// The phone says the game is over: it opens as a record under review, and the
+    /// link stays open for the next game.
+    private func phoneGameDidEnd(_ end: PhoneGameEnd) {
+        guard phase == .running, isFollowing, !followedGameEnded else { return }
+        followedGameEnded = true
+        bridge.send(.followEnd(id: nextID(), result: end.result))
     }
 
     // -- commands ------------------------------------------------------------
@@ -284,6 +360,7 @@ public final class GameSession {
     }
 
     public func newGame() {
+        stopFollowing(openingRecord: false)
         store.save(settings)
         scoreByMove.removeAll()
         state = nil
@@ -373,6 +450,7 @@ public final class GameSession {
 
     /// Hands a record to the bridge, or holds it until the bridge is ready for one.
     private func load(_ record: SGFImport.Record) {
+        stopFollowing(openingRecord: false)
         scoreByMove.removeAll()
         analysisProgress = nil
         lastErrorMessage = nil
@@ -396,7 +474,7 @@ public final class GameSession {
         guard canExport else { return }
         var black: String?
         var white: String?
-        if !isReviewing, let state {
+        if !isReviewing, !isFollowing, let state {
             let mode = currentMode
             let players = SGFExport.players(
                 humanColor: state.humanColor,
@@ -411,6 +489,10 @@ public final class GameSession {
     /// The save panel is done with the document, written or not.
     public func exportHandled() {
         pendingExport = nil
+        if followsAfterExport {
+            followsAfterExport = false
+            startFollowing()
+        }
     }
 
     /// Moves to a position in the record. The bridge clamps anything out of range.
