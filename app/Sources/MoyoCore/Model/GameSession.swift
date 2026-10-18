@@ -256,9 +256,14 @@ public final class GameSession {
 
     // -- phone ----------------------------------------------------------------
 
-    /// The real board changed. A board of another size starts a matching game;
-    /// otherwise the board is compared with the game to find the player's move.
+    /// The real board changed. A phone that records a game of its own is followed;
+    /// otherwise a board of another size starts a matching game, and any other board
+    /// is compared with the game to find the player's move.
     private func phoneBoardDidChange(_ board: PhoneBoard) {
+        if board.follow {
+            follow(board)
+            return
+        }
         guard phase == .running else { return }
         if state == nil || state?.size != board.size, board.stones.isEmpty {
             settings.size = board.size
@@ -266,6 +271,27 @@ public final class GameSession {
             return
         }
         syncWithPhone()
+    }
+
+    /// The board followed on the phone, last loaded into the bridge.
+    private var followedBoard: PhoneBoard?
+
+    /// True while the window shows the board of a phone that records its own game.
+    public var isFollowingPhone: Bool { followedBoard != nil }
+
+    /// Shows the phone's board in place of whatever the window had open — a game
+    /// against the AI, a record, an earlier position of the same game. Only stones
+    /// reach the Mac, so it opens as a record of that one position, which KataGo reads.
+    private func follow(_ board: PhoneBoard) {
+        guard board != followedBoard else { return }
+        let name: String
+        switch phone.status {
+        case .connected(let phoneName), .connecting(let phoneName): name = phoneName
+        default: name = "Téléphone"
+        }
+        let contents = PhoneRecord.sgf(board, komi: settings.komi, event: "En direct — \(name)")
+        load(SGFImport.Record(name: name, contents: contents))
+        followedBoard = board
     }
 
     private func syncWithPhone() {
@@ -284,6 +310,7 @@ public final class GameSession {
     }
 
     public func newGame() {
+        followedBoard = nil
         store.save(settings)
         scoreByMove.removeAll()
         state = nil
@@ -363,6 +390,7 @@ public final class GameSession {
     /// The file is read here and sent as text: the bridge opens nothing, which keeps
     /// the sandbox out of the child process and the encoding guess in AppKit's hands.
     public func openRecord(at url: URL) {
+        followedBoard = nil
         do {
             load(try SGFImport.read(url))
         } catch {

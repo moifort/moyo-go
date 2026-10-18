@@ -106,6 +106,15 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   thing it does — an empty board of another size starts a new game — is already
   what "Nouvelle partie" is for. Following a real game move by move from a record
   would need the review to accept moves, which it does not.
+  The one exception is a board followed from Kifu: it opens as a record, and the
+  button stays below it, since the link is what keeps that board live.
+
+- **A followed board has no history.** Kifu sends the accepted position, not the
+  moves, so the Mac reloads a one-position record (setup stones, `PL` for the turn)
+  on every change: no score curve across the game, no stepping back. Sending the
+  move list would give both, but reloading a whole record on each move makes KataGo
+  read the game again from the start; it wants a bridge command that appends a move
+  to the record under review first.
 
 - **A record under review is read-only.** Clicking the board does nothing, not even
   on the green marker; dragging across it draws the zone of the local reading.

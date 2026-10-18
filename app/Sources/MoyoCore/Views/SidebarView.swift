@@ -13,6 +13,8 @@ public struct SidebarView: View {
         VStack(alignment: .leading, spacing: 16) {
             if let state = session.state, state.isReviewing {
                 ReviewPanel(session: session, state: state)
+                // A followed board stays tied to its phone: the link is what keeps it live.
+                if session.isFollowingPhone { phoneButton }
             } else if let state = session.state, let scoring = state.scoring {
                 ScoringPanel(detail: scoring, humanColor: state.humanColor) {
                     NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
