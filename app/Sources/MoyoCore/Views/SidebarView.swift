@@ -185,24 +185,18 @@ public struct SidebarView: View {
                 : ""
         )
         divider
-        ScoreSection(
-            scores: session.scoresFromPlayerSide,
-            moveNumber: state.moveNumber,
-            lead: session.currentLead,
-            caption: { lead in
-                guard abs(lead) >= 0.05 else { return "Égalité" }
-                return "\(Theme.name(lead > 0 ? state.humanColor : state.humanColor.opponent)) mène"
-            }
-        )
-        Toggle(isOn: $session.showsFollowHints) {
-            Text("Suggestions de KataGo")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.primaryText)
+        if session.followsWithAnalysis {
+            ScoreSection(
+                scores: session.scoresFromPlayerSide,
+                moveNumber: state.moveNumber,
+                lead: session.currentLead,
+                caption: { lead in
+                    guard abs(lead) >= 0.05 else { return "Égalité" }
+                    return "\(Theme.name(lead > 0 ? state.humanColor : state.humanColor.opponent)) mène"
+                }
+            )
+            divider
         }
-        .toggleStyle(.switch)
-        .controlSize(.small)
-        .help("Le meilleur coup en vert ; en bleu, le meilleur coup près du dernier joué, et ce qu'il coûte au survol")
-        divider
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle("Joueurs")
             PlayerTable(rows: playingRows(state))
@@ -213,6 +207,17 @@ public struct SidebarView: View {
             .foregroundStyle(Theme.secondaryText)
             .lineLimit(3)
         PhoneButton(session: session)
+        Toggle(isOn: $session.followsWithAnalysis) {
+            Text("Analyse KataGo")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.primaryText)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .help(
+            "Le score et sa courbe ; sur le plateau, le meilleur coup en vert et, en bleu, "
+                + "le meilleur coup près du dernier joué, avec son coût au survol. Éteinte, KataGo ne calcule rien."
+        )
     }
 
     private func actions(_ state: GameState) -> some View {

@@ -192,7 +192,7 @@ def hinted(stream):
     bridge._engine = FakeEngine()
     bridge._local_queries = []
     bridge._send_local_query = lambda node, zone: bridge._local_queries.append((node, zone))
-    bridge.follow_start(1, SIZE, 6.5, "japanese", hints=True)
+    bridge.follow_start(1, SIZE, 6.5, "japanese", analysis=True)
     bridge.follow_board(2, rows())
     return bridge
 
@@ -203,7 +203,7 @@ def test_without_suggestions_nothing_is_read_locally(session, stream):
     session.follow_board(3, rows((2, 2, "B")))
     assert session._local_queries == []
     state = last_state(stream)
-    assert state["hints"] is False
+    assert state["analysis"] is False
     assert "best_move" not in state
 
 
@@ -215,7 +215,7 @@ def test_with_suggestions_every_move_is_read_around_it(hinted, stream):
         hinted.game.current_node,
     ]
     state = last_state(stream)
-    assert state["hints"] is True
+    assert state["analysis"] is True
     assert state["local_zone"] is not None
     assert state["local_pending"] is True
 
@@ -235,8 +235,39 @@ def test_suggestions_can_be_switched_on_mid_game(session, stream):
     session._local_queries = []
     session._send_local_query = lambda node, zone: session._local_queries.append((node, zone))
     session.follow_board(3, rows((2, 2, "B")))
-    session.follow_hints(4, True)
+    session.follow_analysis(4, True)
     assert len(session._local_queries) == 1
-    assert last_state(stream)["hints"] is True
-    session.follow_hints(5, False)
+    assert last_state(stream)["analysis"] is True
+    session.follow_analysis(5, False)
     assert "local_zone" not in last_state(stream)
+
+
+class CountingEngine(FakeEngine):
+    """Counts what KataGo is asked, and what is called off."""
+
+    def __init__(self):
+        self.asked = []
+        self.terminated = 0
+
+    def request_analysis(self, node, *args, **kwargs):
+        self.asked.append(node)
+
+    def terminate_queries(self, *args, **kwargs):
+        self.terminated += 1
+
+
+def test_with_the_analysis_off_katago_is_asked_nothing(stream):
+    bridge = BridgeSession(EventWriter(stream))
+    bridge._engine = CountingEngine()
+    bridge._send_local_query = lambda node, zone: None
+    bridge.follow_start(1, SIZE, 6.5, "japanese", analysis=False)
+    bridge.follow_board(2, rows())
+    before = len(bridge._engine.asked)
+    bridge.follow_board(3, rows((2, 2, "B")))
+    bridge.follow_board(4, rows((2, 2, "B"), (6, 6, "W")))
+    assert len(bridge._engine.asked) == before
+    # On again: the position on the board first, then the moves played meanwhile.
+    bridge.follow_analysis(5, True)
+    assert bridge._engine.asked[before] is bridge.game.current_node
+    bridge.follow_analysis(6, False)
+    assert bridge._engine.terminated == 1

@@ -111,9 +111,10 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   later leaves the misread branch in KaTrain's tree. The review follows the line
   actually played, but a save writes the whole tree, the dead branch included.
 
-- **Following reads one local fight per move.** With KataGo's suggestions on, every
+- **Following reads one local fight per move.** With "Analyse KataGo" on, every
   move seen on the real board costs a second, zone-bound query on top of the
-  whole-board analysis. A drawn zone, or walking KataGo's line from a live position,
+  whole-board analysis. The switch is all or nothing — score, curve and markers
+  together — because a score without its markers saves almost none of the work. A drawn zone, or walking KataGo's line from a live position,
   is left to the review the game opens into at its end.
 
 - **A game joined halfway loses its order.** The stones already on the board are

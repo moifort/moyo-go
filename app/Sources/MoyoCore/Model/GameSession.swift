@@ -25,9 +25,9 @@ public final class GameSession {
         public var humanColor: PlayerColor
         public var aiStrategy: String
         public var aiSettingValues: [String: Double]
-        /// KataGo's suggestions while following a real board. Optional so settings
-        /// saved before it existed still load; absent means on.
-        public var followHints: Bool?
+        /// KataGo at work while following a real board. Optional so settings saved
+        /// before it existed still load; absent means on.
+        public var followAnalysis: Bool?
 
         public init(
             size: Int = 19,
@@ -335,18 +335,19 @@ public final class GameSession {
         analysisProgress = nil
         thinking.ended()
         bridge.send(
-            .followStart(id: nextID(), size: size, komi: settings.komi, rules: settings.rules, hints: showsFollowHints)
+            .followStart(id: nextID(), size: size, komi: settings.komi, rules: settings.rules, analysis: followsWithAnalysis)
         )
     }
 
-    /// Whether KataGo's suggestions show while following: the best move, and the
-    /// best move near the last one with what it costs.
-    public var showsFollowHints: Bool {
-        get { settings.followHints ?? true }
+    /// Whether KataGo analyses the game followed: the score and its curve, the best
+    /// move, and the best move near the last one with what it costs. Off, KataGo
+    /// computes nothing.
+    public var followsWithAnalysis: Bool {
+        get { settings.followAnalysis ?? true }
         set {
-            settings.followHints = newValue
+            settings.followAnalysis = newValue
             store.save(settings)
-            if state?.isFollowing == true { bridge.send(.followHints(id: nextID(), on: newValue)) }
+            if state?.isFollowing == true { bridge.send(.followAnalysis(id: nextID(), on: newValue)) }
         }
     }
 
@@ -543,7 +544,7 @@ public final class GameSession {
 
     /// Whether the board shows the local reading right now.
     public var showsLocalReading: Bool {
-        if state?.isFollowing == true { return state?.hints == true }
+        if state?.isFollowing == true { return state?.analysis == true }
         guard let state, state.isReviewing else { return false }
         return isOptionHeld || state.variationKind == .local || state.localWanted == true
     }

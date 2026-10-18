@@ -53,9 +53,10 @@ class BridgeSession(KaTrainHost):
         self._follow_fresh = False
         #: False when the last position seen could not be reached by any move.
         self._follow_in_sync = True
-        #: KataGo's suggestions on the board while following: the best move, and
-        #: the best move in the zone of the last move with what it costs.
-        self._follow_hints = False
+        #: KataGo at work while following: each move analysed for the score and the
+        #: curve, plus the best move and, in the zone of the last move, the best
+        #: local move with what it costs. Off, KataGo computes nothing.
+        self._follow_analysis = False
         self._dead: set = set()
         # -- review state, all empty outside a review
         #: The main line of the record, cached once. A variation adds nodes to the
@@ -137,7 +138,7 @@ class BridgeSession(KaTrainHost):
 
     def _on_following_advanced(self) -> None:
         """An analysis came back while following: move the markers, if they are shown."""
-        if not self._follow_hints:
+        if not self._follow_analysis:
             return
         key = (self._hint_key(), id(self.game.current_node))
         if key != self._emitted_best:
@@ -907,7 +908,7 @@ class BridgeSession(KaTrainHost):
 
     # -- following a game on a real board ------------------------------------
 
-    def follow_start(self, command_id, size, komi, rules, hints=False):
+    def follow_start(self, command_id, size, komi, rules, analysis=False):
         """Starts following a game between two people, seen by the phone.
 
         Nobody is to move on the Mac: both players are human, the AI never plays,
@@ -925,7 +926,7 @@ class BridgeSession(KaTrainHost):
         self._status = "following"
         self._follow_fresh = True
         self._follow_in_sync = True
-        self._follow_hints = bool(hints)
+        self._follow_analysis = bool(analysis)
         self.game = Game(self, self._engine, game_properties={"SZ": size, "KM": komi, "RU": rules})
         self._writer.emit("thinking", None, value=False)
         self._emit_state(command_id)
@@ -949,12 +950,12 @@ class BridgeSession(KaTrainHost):
             self._emit_state(command_id)
             return
         self._follow_in_sync = self._reach(target)
-        self._request_local(ask=self._follow_hints)
+        self._request_local(ask=self._follow_analysis)
         self._emit_state(command_id)
 
     def _follow_extra(self) -> Dict[str, Any]:
-        extra: Dict[str, Any] = {"in_sync": self._follow_in_sync, "hints": self._follow_hints}
-        if self._follow_hints:
+        extra: Dict[str, Any] = {"in_sync": self._follow_in_sync, "analysis": self._follow_analysis}
+        if self._follow_analysis:
             extra.update(
                 best_move=review.best_move(self.game.current_node, self._size()),
                 local_move=self._local_move(),
@@ -963,11 +964,22 @@ class BridgeSession(KaTrainHost):
             )
         return extra
 
-    def follow_hints(self, command_id, on):
-        """Shows or hides KataGo's suggestions while following."""
+    def follow_analysis(self, command_id, on):
+        """Switches KataGo on or off while following.
+
+        Off, what is queued is dropped and nothing new is asked. On again, the
+        position on the board is read first, then the moves played meanwhile, so
+        the curve fills its gaps behind the figure that matters.
+        """
         self._require_following()
-        self._follow_hints = bool(on)
-        self._request_local(ask=self._follow_hints)
+        self._follow_analysis = bool(on)
+        if self._follow_analysis:
+            for node in reversed(self.game.current_node.nodes_from_root):
+                if not node.analysis_complete:
+                    node.analyze(self.game.engines[node.next_player])
+        elif self._engine is not None:
+            self._engine.terminate_queries()
+        self._request_local(ask=self._follow_analysis)
         self._emit_state(command_id)
 
     def _join_halfway(self, target, size) -> None:
@@ -1018,8 +1030,9 @@ class BridgeSession(KaTrainHost):
                     if all(other is not child for other in before):
                         created.append((node, child))
                 if serialize.stone_map(self.game) == target:
-                    for node in played:
-                        node.analyze(self.game.engines[node.next_player])
+                    if self._follow_analysis:
+                        for node in played:
+                            node.analyze(self.game.engines[node.next_player])
                     return True
             except IllegalMoveException:
                 pass
