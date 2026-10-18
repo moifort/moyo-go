@@ -100,6 +100,13 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   the floor, every move squeezes the curve a little more; a scrolling window would
   keep the last moves readable at the cost of losing the opening from view.
 
+- **No phone button under review.** "Connecter" heads the footer of a game only.
+  Under review the link would do almost nothing: a move seen on the real board is
+  played only when it is the player's turn, which a record never is, and the one
+  thing it does — an empty board of another size starts a new game — is already
+  what "Nouvelle partie" is for. Following a real game move by move from a record
+  would need the review to accept moves, which it does not.
+
 - **A record under review is read-only.** Clicking the board does nothing, not even
   on the green marker; dragging across it draws the zone of the local reading.
   Playing the marked move with a click would be the obvious gesture, but it
