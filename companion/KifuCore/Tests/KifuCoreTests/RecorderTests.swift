@@ -37,6 +37,19 @@ final class RecorderTests: XCTestCase {
         XCTAssertEqual(rec.record.moves.count, 1)
     }
 
+    /// Hands over the board hid the intermediate positions: three stones appear at once.
+    func testThreeStonesAtOnceAreRecordedWithAGuessedOrder() {
+        var (rec, reader) = make()
+        let seen = Readings(position: position([at(2, 6): .black, at(3, 6): .black, at(3, 7): .white]))
+        reader.queue = [seen, seen, seen]
+        _ = rec.process(blank, at: 0); _ = rec.process(blank, at: 0.5)
+        let update = rec.process(blank, at: 1.0)
+        XCTAssertEqual(update.moves.count, 3)
+        XCTAssertEqual(update.status, .inSync)
+        XCTAssertEqual(rec.record.moves.map(\.uncertain), [true, true, true])
+        XCTAssertTrue(SGFWriter.write(rec.record).hasSuffix("C[ordre incertain])"))
+    }
+
     func testLastReadingsKeepTheRawImageReading() {
         var (rec, reader) = make()
         let seen = Readings(position: position([at(4, 4): .black]), unreadable: [at(2, 2)])

@@ -64,9 +64,9 @@ public struct Recorder {
 
         if candidate == accepted {
             clearPending()
-        } else if let moves = Rules.explain(from: accepted, to: candidate, toPlay: record.toPlay) {
-            record.apply(moves)
-            update.moves = moves
+        } else if let explained = Rules.explanation(from: accepted, to: candidate, toPlay: record.toPlay) {
+            record.apply(explained.moves, uncertain: explained.guessedOrder)
+            update.moves = explained.moves
             clearPending()
         } else if record.takeBack(to: candidate) {
             update.takenBack = accepted.stones.count - candidate.stones.count

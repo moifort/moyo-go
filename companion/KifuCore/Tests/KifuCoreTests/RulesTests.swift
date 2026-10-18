@@ -129,10 +129,41 @@ final class ExplainTests: XCTestCase {
         XCTAssertNil(Rules.explain(from: a, to: b, toPlay: .black))
     }
 
-    func testThreeStonesCannotBeExplained() {
+    func testThreeAlternatingStonesAreThreeMovesInGuessedOrder() throws {
         let a = Position(size: 5)
         var b = a; b[at(2, 2)] = .black; b[at(3, 3)] = .white; b[at(1, 1)] = .black
+        let e = try XCTUnwrap(Rules.explanation(from: a, to: b, toPlay: .black))
+        XCTAssertEqual(e.moves, [Move(color: .black, point: at(1, 1)), Move(color: .white, point: at(3, 3)),
+                                 Move(color: .black, point: at(2, 2))])
+        XCTAssertTrue(e.guessedOrder)
+    }
+
+    func testThreeStonesMustStartWithTheSideToPlay() {
+        let a = Position(size: 5)
+        var b = a; b[at(2, 2)] = .black; b[at(3, 3)] = .white; b[at(1, 1)] = .black
+        XCTAssertNil(Rules.explain(from: a, to: b, toPlay: .white))
+    }
+
+    func testFourAlternatingStonesAreExplained() throws {
+        let a = Position(size: 9)
+        var b = a
+        b[at(2, 2)] = .white; b[at(6, 6)] = .white; b[at(2, 6)] = .black; b[at(6, 2)] = .black
+        let e = try XCTUnwrap(Rules.explanation(from: a, to: b, toPlay: .white))
+        XCTAssertEqual(e.moves.map(\.color), [.white, .black, .white, .black])
+        XCTAssertTrue(e.guessedOrder)
+    }
+
+    func testFiveStonesCannotBeExplained() {
+        let a = Position(size: 9)
+        var b = a
+        for (i, c) in [(0, Stone.black), (1, .white), (2, .black), (3, .white), (4, .black)] { b[at(i * 2, 4)] = c }
         XCTAssertNil(Rules.explain(from: a, to: b, toPlay: .black))
+    }
+
+    func testTwoStonesHaveACertainOrder() throws {
+        let a = Position(size: 5)
+        var b = a; b[at(2, 2)] = .black; b[at(3, 3)] = .white
+        XCTAssertFalse(try XCTUnwrap(Rules.explanation(from: a, to: b, toPlay: .black)).guessedOrder)
     }
 
     func testCaptureIsExplainedOnceCapturedStonesAreGone() {

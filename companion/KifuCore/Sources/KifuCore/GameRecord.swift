@@ -45,11 +45,11 @@ public struct GameRecord: Sendable, Equatable {
         return handicap > 0 ? .white : .black
     }
 
-    /// Appends moves already validated by the rules.
-    public mutating func apply(_ sequence: [Move]) {
+    /// Appends moves already validated by the rules, flagged when their order was guessed.
+    public mutating func apply(_ sequence: [Move], uncertain: Bool = false) {
         for move in sequence {
             guard let next = Rules.play(move, on: position) else { continue }
-            moves.append(RecordedMove(move: move))
+            moves.append(RecordedMove(move: move, uncertain: uncertain))
             positions.append(next)
         }
     }

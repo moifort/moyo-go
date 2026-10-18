@@ -48,17 +48,32 @@ public enum Rules {
         return (group, liberties.count)
     }
 
-    /// The sequence of moves that leads exactly from `from` to `to`, or nil.
-    ///
-    /// At most two stones placed, alternating from `toPlay`. A single implicit pass is
-    /// tolerated right before a placement when the first stone belongs to the other side.
-    /// Captures are applied by the rules and must match the stones that disappeared.
-    public static func explain(from: Position, to: Position, toPlay: Stone) -> [Move]? {
-        explain(from: from, to: to, toPlay: toPlay, matching: { $0 == to })
+    /// The most stones explained by a single change: hands over the board can hide a few
+    /// moves played in quick succession.
+    public static let maxStonesPerChange = 4
+
+    /// Moves explaining a change, and whether their order had to be guessed.
+    public struct Explanation: Sendable, Equatable {
+        public let moves: [Move]
+        /// More than one legal order leads to the same position: the one kept is a guess.
+        public let guessedOrder: Bool
     }
 
-    /// Same as `explain`, but the final position is accepted by `matching` instead of strict equality.
-    static func explain(from: Position, to: Position, toPlay: Stone, matching: (Position) -> Bool) -> [Move]? {
+    /// The sequence of moves that leads exactly from `from` to `to`, or nil.
+    public static func explain(from: Position, to: Position, toPlay: Stone) -> [Move]? {
+        explanation(from: from, to: to, toPlay: toPlay)?.moves
+    }
+
+    /// At most `maxStonesPerChange` stones placed, alternating from `toPlay`. A single implicit
+    /// pass is tolerated when the only new stone belongs to the other side. Captures are applied
+    /// by the rules and must match the stones that disappeared. Among the orders that fit, the
+    /// first by coordinates is kept.
+    public static func explanation(from: Position, to: Position, toPlay: Stone) -> Explanation? {
+        explanation(from: from, to: to, toPlay: toPlay, matching: { $0 == to })
+    }
+
+    /// Same as `explanation`, but the final position is accepted by `matching` instead of strict equality.
+    static func explanation(from: Position, to: Position, toPlay: Stone, matching: (Position) -> Bool) -> Explanation? {
         guard from.size == to.size, toPlay != .empty else { return nil }
         var added: [(Intersection, Stone)] = []
         for (i, stone) in from.diff(to: to).sorted(by: { $0.key < $1.key }) {
@@ -67,33 +82,63 @@ public enum Rules {
                 added.append((i, stone))
             }
         }
-        if added.isEmpty { return from == to ? [] : nil }
-        guard added.count <= 2 else { return nil }
+        if added.isEmpty { return from == to ? Explanation(moves: [], guessedOrder: false) : nil }
+        guard added.count <= maxStonesPerChange else { return nil }
 
-        var sequence: [Move] = []
         if added.count == 1 {
             let (i, stone) = added[0]
+            var sequence: [Move] = []
             if stone != toPlay { sequence.append(Move(color: toPlay, point: nil)) }
             sequence.append(Move(color: stone, point: i))
-        } else {
-            guard added[0].1 != added[1].1 else { return nil }
-            let first = added.first { $0.1 == toPlay }!
-            let second = added.first { $0.1 != toPlay }!
-            sequence = [Move(color: first.1, point: first.0), Move(color: second.1, point: second.0)]
+            guard let end = play(sequence, on: from), matching(end) else { return nil }
+            return Explanation(moves: sequence, guessedOrder: false)
         }
 
-        var position = from
-        for move in sequence {
+        // Alternation from the side to play: as many stones as the other side, or one more.
+        let mine = added.filter { $0.1 == toPlay }.map(\.0)
+        let theirs = added.filter { $0.1 != toPlay }.map(\.0)
+        guard mine.count == theirs.count || mine.count == theirs.count + 1 else { return nil }
+
+        var found: [Move]?
+        var fits = 0
+        for a in permutations(mine) {
+            for b in permutations(theirs) {
+                var sequence: [Move] = []
+                for k in 0..<mine.count {
+                    sequence.append(Move(color: toPlay, point: a[k]))
+                    if k < b.count { sequence.append(Move(color: toPlay.opponent, point: b[k])) }
+                }
+                guard let end = play(sequence, on: from), matching(end) else { continue }
+                fits += 1
+                if found == nil { found = sequence }
+            }
+        }
+        return found.map { Explanation(moves: $0, guessedOrder: fits > 1) }
+    }
+
+    /// Plays `moves` in turn, nil as soon as one is illegal.
+    static func play(_ moves: [Move], on position: Position) -> Position? {
+        var position = position
+        for move in moves {
             guard let next = play(move, on: position) else { return nil }
             position = next
         }
-        return matching(position) ? sequence : nil
+        return position
+    }
+
+    /// Every order of `items`, the given order first.
+    static func permutations<T>(_ items: [T]) -> [[T]] {
+        guard items.count > 1 else { return [items] }
+        return items.indices.flatMap { i -> [[T]] in
+            var rest = items; let head = rest.remove(at: i)
+            return permutations(rest).map { [head] + $0 }
+        }
     }
 
     /// True when `to` is `from` plus a legal sequence whose captured stones are still on the board.
     public static func isAwaitingCaptureRemoval(from: Position, to: Position, toPlay: Stone) -> Bool {
         // Every stone the rules would capture is still shown in `to` with its colour, nothing else differs.
-        let moves = explain(from: from, to: to, toPlay: toPlay, matching: { result in
+        let explained = explanation(from: from, to: to, toPlay: toPlay, matching: { result in
             var captured = false
             for i in result.all where result[i] != to[i] {
                 guard result[i] == .empty, from[i] != .empty, to[i] == from[i] else { return false }
@@ -101,6 +146,6 @@ public enum Rules {
             }
             return captured
         })
-        return !(moves ?? []).isEmpty
+        return !(explained?.moves ?? []).isEmpty
     }
 }

@@ -188,11 +188,13 @@ suicide interdit. Il expose une seule fonction :
     explain(from: Position, to: Position, toPlay: Stone) -> [Move]?
 
 qui rend la suite de coups qui mène exactement de `from` à `to`, ou nil.
-Au plus deux pierres posées, en alternance à partir de `toPlay`. Une passe
-implicite est tolérée une seule fois, juste avant une pose : une pierre blanche
-qui apparaît quand c'est à noir de jouer s'explique par « noir passe, blanc
-joue » et s'écrit `;B[];W[..]`. Deux pierres de la même couleur demanderaient
-deux passes : nil. Les captures sont appliquées par le moteur et doivent
+Au plus quatre pierres posées, en alternance à partir de `toPlay` : une main
+au-dessus du plateau peut cacher quelques coups joués à la suite. Tous les
+ordres légaux qui mènent à `to` sont essayés ; s'il y en a plusieurs, le premier
+par coordonnées est gardé et chaque coup porte `C[ordre incertain]`. Une passe
+implicite n'est tolérée que pour une pierre seule : une pierre blanche qui
+apparaît quand c'est à noir de jouer s'explique par « noir passe, blanc joue »
+et s'écrit `;B[];W[..]`. Des pierres qui n'alternent pas : nil. Les captures sont appliquées par le moteur et doivent
 correspondre exactement aux pierres disparues.
 
 À chaque image, l'app construit la position candidate (état accepté + lectures
