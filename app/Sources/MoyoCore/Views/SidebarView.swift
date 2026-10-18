@@ -33,7 +33,6 @@ public struct SidebarView: View {
                 }
                 divider
                 opponentSection
-                phoneSection
                 Spacer(minLength: 0)
                 if state.status == .finished {
                     // Nothing left to play: the only way on is the next game.
@@ -122,94 +121,91 @@ public struct SidebarView: View {
         ]
     }
 
-    /// Who you are playing: the mode by name, its level as a tag, and the one
-    /// button that changes either. The setting itself lives in a sheet — the
-    /// sidebar states who you are playing, it is not a control panel.
+    /// Who you are playing, and the board it is played on: the mode by name with
+    /// its level as a tag and a gear to change it, then the phone that watches the
+    /// real board. The setting itself lives in a sheet — the sidebar states who you
+    /// are playing, it is not a control panel.
     private var opponentSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             SectionTitle("Adversaire")
             HStack(spacing: 8) {
                 Text(session.currentMode.name)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
+                    .help(session.currentMode.summary)
                 if let tag = session.currentMode.tag(for: session.settingValue(for: session.currentMode)) {
                     Tag(tag)
                 }
                 Spacer(minLength: 0)
+                Button {
+                    isConfiguringAI = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .help("Configurer l'IA")
+                .accessibilityLabel("Configurer l'IA")
             }
-            .help(session.currentMode.summary)
-            Button {
-                isConfiguringAI = true
-            } label: {
-                Label("Configurer l'IA", systemImage: "slider.horizontal.3")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
+            phoneButton
         }
     }
 
-    /// The phone that watches the real board. One button to connect it; once it is
-    /// looking for or has found the phone, the same place says so.
-    private var phoneSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionTitle("Téléphone")
+    /// The phone that watches the real board, in the same shape as the buttons at
+    /// the foot of the sidebar. The button says where the link stands and does the
+    /// one thing that makes sense from there.
+    @ViewBuilder private var phoneButton: some View {
+        Group {
             switch session.phone.status {
             case .idle:
                 Button {
                     session.phone.connect()
                 } label: {
-                    Label("Connecter le téléphone", systemImage: "iphone")
+                    Label("Connecter", systemImage: "iphone")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .help("Connecter le téléphone qui filme le plateau")
             case .searching, .connecting:
                 Button {
                     session.phone.disconnect()
                 } label: {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text(phoneProgress)
-                            .lineLimit(1)
+                        Text(phoneProgress).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
                 .help("Arrêter la recherche")
             case .connected(let name):
-                HStack(spacing: 8) {
-                    Image(systemName: "iphone")
-                        .foregroundStyle(Theme.connected)
-                    Text(name)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.primaryText)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Button("Déconnecter") { session.phone.disconnect() }
-                        .buttonStyle(.link)
-                        .font(.system(size: 12))
-                }
-            case .failed(let message):
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Échec : \(message)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(2)
-                    Button {
-                        session.phone.connect()
-                    } label: {
-                        Label("Réessayer", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity)
+                Button {
+                    session.phone.disconnect()
+                } label: {
+                    Label {
+                        Text("Connecté")
+                    } icon: {
+                        Image(systemName: "iphone").foregroundStyle(Theme.connected)
                     }
-                    .buttonStyle(.glass)
+                    .frame(maxWidth: .infinity)
                 }
+                .help("\(name) — cliquer pour déconnecter")
+            case .failed(let message):
+                Button {
+                    session.phone.connect()
+                } label: {
+                    Label("Réessayer", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .help("Échec : \(message)")
             }
         }
+        .buttonStyle(.glass)
+        .controlSize(.large)
     }
 
     private var phoneProgress: String {
-        if case .connecting(let name) = session.phone.status { return "Connexion à \(name)…" }
-        return "Recherche du téléphone…"
+        if case .connecting = session.phone.status { return "Connexion…" }
+        return "Recherche…"
     }
 
     private func actions(_ state: GameState) -> some View {
