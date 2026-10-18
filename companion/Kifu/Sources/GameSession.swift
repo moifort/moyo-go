@@ -4,6 +4,34 @@ import Observation
 import KifuCore
 import UIKit
 
+/// The corners of the last game played, offered to the next one: the stand rarely moves.
+/// Only valid for frames of the same size from the same lens.
+struct SavedCalibration: Codable, Equatable {
+    static let defaultsKey = "lastCalibration"
+
+    let corners: [[Double]]
+    let width: Int
+    let height: Int
+    let ultraWide: Bool
+
+    init(calibration: Calibration, width: Int, height: Int, ultraWide: Bool) {
+        corners = calibration.corners.map { [$0.x, $0.y] }
+        self.width = width
+        self.height = height
+        self.ultraWide = ultraWide
+    }
+
+    var points: [Point] { corners.map { Point(x: $0[0], y: $0[1]) } }
+
+    static func load() -> SavedCalibration? {
+        UserDefaults.standard.data(forKey: defaultsKey).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) { UserDefaults.standard.set(data, forKey: Self.defaultsKey) }
+    }
+}
+
 /// Drives one game: calibration, recording, file writing. UI state lives on the main actor,
 /// the vision work runs on a serial worker queue.
 @Observable
@@ -37,6 +65,10 @@ final class GameSession {
     var fileURL: URL?
     var startedAt: Date?
     var result: GameResult?
+    /// A game has started in this session: calibrating again resumes it.
+    var gameInProgress = false
+    /// Corners kept from the last game, when they fit this camera.
+    var savedCalibration = SavedCalibration.load()
     var cancelled = false
     /// Macs running Moyo that follow the game.
     var connectedMacs = 0
@@ -47,6 +79,11 @@ final class GameSession {
     nonisolated private let server = BoardServer()
 
     var isCalibrated: Bool { calibration != nil }
+    var canReuseCalibration: Bool {
+        guard let saved = savedCalibration, frozen == nil, !isCalibrated else { return false }
+        return saved.ultraWide == ultraWide && saved.width == Int(frameSize.width) && saved.height == Int(frameSize.height)
+    }
+    private let ultraWide = CameraSession.useUltraWide
     var qualityWarning: String? {
         guard isCalibrated else { return nil }
         return minSpacing < Self.minimumComfortableSpacing
@@ -116,22 +153,41 @@ final class GameSession {
             // Corners are placed precisely, zoomed in: only nudge them onto the line crossings.
             let corners = BoardGeometry.fitCorners(taps, lines: Self.lines, in: gray, radius: Self.cornerRefineRadius)
             CalibrationDump.save(frame: gray, taps: taps, corners: corners)
-            let calibration = Calibration(lines: Self.lines, corners: corners)
-            guard let geometry = BoardGeometry(calibration: calibration) else {
-                Task { @MainActor in self.taps = []; self.calibrationFailed = true }
+            self.apply(Calibration(lines: Self.lines, corners: corners))
+        }
+    }
+
+    /// The last game's corners, nudged onto the grid as it sits now in case the stand shifted.
+    func reuseCalibration() {
+        guard canReuseCalibration, let saved = savedCalibration else { return }
+        calibrationFailed = false
+        worker.async {
+            guard let gray = self.engine.latest?.gray, gray.width == saved.width, gray.height == saved.height,
+                  BoardGeometry(calibration: Calibration(lines: Self.lines, corners: saved.points)) != nil else {
+                Task { @MainActor in self.calibrationFailed = true }
                 return
             }
-            self.engine.reader = IntersectionReader(geometry: geometry)
-            self.engine.calibration = calibration
-            let points = (0..<Self.lines).map { row in
-                (0..<Self.lines).map { col in geometry.imagePoint(of: Intersection(col: col, row: row)) }
-            }
-            Task { @MainActor in
-                self.calibration = calibration
-                self.gridPoints = points
-                self.minSpacing = geometry.minSpacing
-                self.frozen = nil
-            }
+            let corners = BoardGeometry.fitCorners(saved.points, lines: Self.lines, in: gray, radius: Self.cornerRefineRadius)
+            self.apply(Calibration(lines: Self.lines, corners: corners))
+        }
+    }
+
+    /// Worker side: installs the reader for `calibration` and shows its grid.
+    private nonisolated func apply(_ calibration: Calibration) {
+        guard let geometry = BoardGeometry(calibration: calibration) else {
+            Task { @MainActor in self.taps = []; self.calibrationFailed = true }
+            return
+        }
+        engine.reader = IntersectionReader(geometry: geometry)
+        engine.calibration = calibration
+        let points = (0..<Self.lines).map { row in
+            (0..<Self.lines).map { col in geometry.imagePoint(of: Intersection(col: col, row: row)) }
+        }
+        Task { @MainActor in
+            self.calibration = calibration
+            self.gridPoints = points
+            self.minSpacing = geometry.minSpacing
+            self.frozen = nil
         }
     }
 
@@ -153,7 +209,9 @@ final class GameSession {
             self.writeFile()
             self.logTrial([.start])
             self.publishRecorder()
+            self.saveCalibration()
             Task { @MainActor in
+                self.gameInProgress = true
                 self.acceptedPosition = start
                 self.candidatePosition = start
                 self.moveCount = 0
@@ -196,6 +254,7 @@ final class GameSession {
             self.engine.recorder?.recalibrate(reader: reader)
             self.engine.recording = true
             self.publishRecorder()
+            self.saveCalibration()
             Task { @MainActor in self.phase = .recording }
         }
     }
@@ -210,7 +269,35 @@ final class GameSession {
         }
     }
 
+    /// Another game on the same board: the calibration and the Moyo link are kept.
+    func newGame() {
+        result = nil
+        gameInProgress = false
+        fileURL = nil
+        startedAt = nil
+        moveCount = 0
+        lastMove = nil
+        status = .inSync
+        phase = .calibrating
+        worker.async {
+            self.engine.recorder = nil
+            self.engine.recording = false
+            self.engine.fileURL = nil
+            self.engine.trial = nil
+            self.engine.result = nil
+        }
+    }
+
     // MARK: Worker side
+
+    /// Worker side: remembers the corners in use for the next game.
+    private nonisolated func saveCalibration() {
+        guard let calibration = engine.calibration, let gray = engine.latest?.gray else { return }
+        let saved = SavedCalibration(calibration: calibration, width: gray.width, height: gray.height,
+                                     ultraWide: CameraSession.useUltraWide)
+        saved.save()
+        Task { @MainActor in self.savedCalibration = saved }
+    }
 
     private final class Engine {
         var latest: CameraFrame?
@@ -223,6 +310,10 @@ final class GameSession {
         var calibration: Calibration?
         var trial: TrialLog?
         var result: GameResult?
+    /// A game has started in this session: calibrating again resumes it.
+    var gameInProgress = false
+    /// Corners kept from the last game, when they fit this camera.
+    var savedCalibration = SavedCalibration.load()
     }
 
     private nonisolated func handle(_ frame: CameraFrame) {

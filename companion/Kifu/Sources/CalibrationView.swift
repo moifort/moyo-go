@@ -59,6 +59,9 @@ struct CalibrationView: View {
                         .buttonStyle(.borderedProminent)
                     } else {
                         Button("Annuler") { session.cancel() }.buttonStyle(.bordered)
+                        if session.canReuseCalibration {
+                            Button("Ancien calibrage") { session.reuseCalibration() }.buttonStyle(.bordered)
+                        }
                         Button("Figer l'image") { session.freeze() }
                             .buttonStyle(.borderedProminent)
                             .disabled(session.preview == nil)
@@ -79,6 +82,7 @@ struct CalibrationView: View {
             let count = session.readPosition.stones.count
             return count == 0 ? "Grille calée, plateau vide" : "Grille calée, \(count) pierre\(count > 1 ? "s" : "") vue\(count > 1 ? "s" : "")"
         }
+        if session.canReuseCalibration { return "Remets le téléphone sur le support, ou fige l'image" }
         return "Place le téléphone, puis fige l'image"
     }
 }

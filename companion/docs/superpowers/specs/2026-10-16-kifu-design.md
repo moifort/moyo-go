@@ -266,6 +266,10 @@ de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie
    consigne « Touche le coin haut-gauche de la grille », loupe sous le doigt,
    quatre repères numérotés, puis grille projetée et pierres lues, indicateur
    de qualité, boutons « Reprendre les coins » et « Commencer ».
+   Les coins de la dernière partie sont mémorisés : « Ancien calibrage » les reprend,
+   recalés de quelques pixels sur l'image du moment, si l'objectif et la taille d'image
+   sont les mêmes. L'écran de fin propose « Nouvelle partie », qui garde le calibrage en
+   cours sans repasser par l'accueil.
 3. **Partie** : image caméra en direct, grille, pierres acceptées (disques
    pleins) et dernier coup marqué, compteur de coups, bandeau d'état, boutons
    « Noir abandonne », « Blanc abandonne » et « Partie terminée ». Pas de bouton d'annulation : un coup repris sur le

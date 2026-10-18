@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FinishedView: View {
     let session: GameSession
+    let newGame: () -> Void
     let dismiss: () -> Void
 
     var body: some View {
@@ -15,7 +16,12 @@ struct FinishedView: View {
                 ShareLink(item: url) { Label("Partager le SGF", systemImage: "square.and.arrow.up") }
                     .buttonStyle(.borderedProminent)
             }
-            Button("Terminer", action: dismiss).buttonStyle(.bordered)
+            HStack(spacing: 16) {
+                Button("Terminer", action: dismiss).buttonStyle(.bordered)
+                Button("Nouvelle partie", action: newGame).buttonStyle(.bordered)
+            }
+            Text("Nouvelle partie garde le calibrage : le téléphone ne doit pas avoir bougé.")
+                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .padding()
     }
