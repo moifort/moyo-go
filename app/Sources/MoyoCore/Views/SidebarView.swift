@@ -34,16 +34,21 @@ public struct SidebarView: View {
                 divider
                 opponentSection
                 Spacer(minLength: 0)
-                if state.status == .finished {
-                    // Nothing left to play: the only way on is the next game.
-                    Button("Nouvelle partie") {
-                        NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
+                // The phone heads the footer: it is how a game on a real board
+                // begins, before any of the moves the buttons below act on.
+                VStack(spacing: 7) {
+                    phoneButton
+                    if state.status == .finished {
+                        // Nothing left to play: the only way on is the next game.
+                        Button("Nouvelle partie") {
+                            NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        actions(state)
                     }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-                } else {
-                    actions(state)
                 }
             } else {
                 Text("Préparation de la partie…")
@@ -121,9 +126,8 @@ public struct SidebarView: View {
         ]
     }
 
-    /// Who you are playing, and the board it is played on: the mode by name with
-    /// its level as a tag and a gear to change it, then the phone that watches the
-    /// real board. The setting itself lives in a sheet — the sidebar states who you
+    /// Who you are playing: the mode by name with its level as a tag and a button
+    /// to change it. The setting itself lives in a sheet — the sidebar states who you
     /// are playing, it is not a control panel.
     private var opponentSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -152,12 +156,11 @@ public struct SidebarView: View {
                 .help("Configurer l'IA")
                 .accessibilityLabel("Configurer l'IA")
             }
-            phoneButton
         }
     }
 
-    /// The phone that watches the real board, in the same shape as the buttons at
-    /// the foot of the sidebar. The button says where the link stands and does the
+    /// The phone that watches the real board, one of the buttons at the foot of
+    /// the sidebar. The button says where the link stands and does the
     /// one thing that makes sense from there.
     @ViewBuilder private var phoneButton: some View {
         Group {
