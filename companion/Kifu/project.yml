@@ -20,6 +20,8 @@ targets:
       properties:
         CFBundleDisplayName: Kifu
         NSCameraUsageDescription: "La caméra regarde le plateau pour noter les coups de la partie."
+        NSLocalNetworkUsageDescription: "Kifu envoie la position du plateau à Moyo sur le Mac, en réseau local."
+        NSBonjourServices: ["_goboard._tcp"]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

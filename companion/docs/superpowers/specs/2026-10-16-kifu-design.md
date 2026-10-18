@@ -58,7 +58,8 @@ Conséquences de la vue rasante, à garder en tête partout :
 
 ## Non-objectifs
 
-- Jouer contre une IA, dialoguer avec un robot ou un Mac.
+- Jouer contre une IA ou dialoguer avec un robot. Seule exception, décidée le
+  18 octobre 2026 : la diffusion vers Moyo (voir « Suivi en direct dans Moyo »).
 - Détecter automatiquement le plateau dans l'image : le calibrage se fait au
   doigt, une fois par partie, et c'est voulu (voir plus bas).
 - Compter le score, détecter la fin de partie, saisir le résultat.
@@ -242,6 +243,16 @@ par « C'est bon » s'écrit `AE[..]` dans le nœud du coup suivant.
 
 « Fin de partie » ajoute rien de plus, ferme la partie et ouvre la feuille de
 partage. La liste des parties passées est accessible depuis l'écran d'accueil.
+
+## Suivi en direct dans Moyo
+
+Pendant toute la session de jeu, l'app s'annonce en Bonjour (`_goboard._tcp`, le service
+que Moyo cherche déjà pour GoBoardVision) et envoie à chaque Mac connecté la **position
+acceptée**, une ligne JSON par changement : `{"size":19,"rows":[...],"status":"locked"}`,
+rangée 0 en haut de l'image. `status` vaut `locked` quand le plateau correspond au kifu,
+`uncertain` quand l'arbitre attend. Jamais de lecture brute : Moyo ne voit que ce que la
+règle a expliqué. La liaison est en lecture seule et facultative ; le SGF reste la source
+de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie.
 
 ## Écrans
 

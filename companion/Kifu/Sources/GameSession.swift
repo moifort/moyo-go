@@ -37,10 +37,13 @@ final class GameSession {
     var fileURL: URL?
     var startedAt: Date?
     var cancelled = false
+    /// Macs running Moyo that follow the game.
+    var connectedMacs = 0
 
     private let worker = DispatchQueue(label: "Kifu.worker", qos: .userInitiated)
     private var camera: CameraSession?
     nonisolated(unsafe) private let engine = Engine()
+    nonisolated private let server = BoardServer()
 
     var isCalibrated: Bool { calibration != nil }
     var qualityWarning: String? {
@@ -54,10 +57,15 @@ final class GameSession {
         self.camera = camera
         cameraAvailable = await camera.start()
         UIApplication.shared.isIdleTimerDisabled = true
+        server.onClientsChanged = { [weak self] count in
+            Task { @MainActor in self?.connectedMacs = count }
+        }
+        server.start()
     }
 
     func stopCamera() {
         camera?.stop()
+        server.stop()
         UIApplication.shared.isIdleTimerDisabled = false
     }
 
@@ -143,6 +151,7 @@ final class GameSession {
             self.engine.trial = trial
             self.writeFile()
             self.logTrial([.start])
+            self.publishRecorder()
             Task { @MainActor in
                 self.acceptedPosition = start
                 self.candidatePosition = start
@@ -263,6 +272,7 @@ final class GameSession {
         let status = recorder.status
         let count = recorder.record.moves.count
         let last = recorder.record.moves.last?.move
+        server.publish(position: accepted, status: status)
         Task { @MainActor in
             self.acceptedPosition = accepted
             self.candidatePosition = candidate

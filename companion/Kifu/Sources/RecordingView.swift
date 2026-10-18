@@ -20,6 +20,10 @@ struct RecordingView: View {
                     Text(statusText).font(.headline)
                     Text("·").foregroundStyle(.secondary)
                     Text("\(session.moveCount) coup\(session.moveCount > 1 ? "s" : "")").font(.subheadline)
+                    if session.connectedMacs > 0 {
+                        Text("·").foregroundStyle(.secondary)
+                        Label("Moyo", systemImage: "desktopcomputer").font(.subheadline)
+                    }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .background(.black.opacity(0.65), in: Capsule())
