@@ -2,13 +2,13 @@ import XCTest
 @testable import KifuCore
 
 final class BoardBroadcastTests: XCTestCase {
-    private struct Wire: Decodable { let size: Int; let rows: [String]; let status: String }
+    private struct Wire: Decodable { let size: Int; let rows: [String]; let status: String; let follow: Bool; let next: String }
 
     func testLineIsOneJSONObjectInMoyoFormat() throws {
         var p = Position(size: 19)
         p[Intersection(col: 3, row: 0)] = .black
         p[Intersection(col: 15, row: 18)] = .white
-        let data = BoardBroadcast.line(position: p, status: .inSync, viewpoint: .leftPlayer)
+        let data = BoardBroadcast.line(position: p, status: .inSync, toPlay: .white, viewpoint: .leftPlayer)
         XCTAssertEqual(data.last, UInt8(ascii: "\n"))
         XCTAssertEqual(data.filter { $0 == UInt8(ascii: "\n") }.count, 1)
         let wire = try JSONDecoder().decode(Wire.self, from: data.dropLast())
@@ -16,6 +16,8 @@ final class BoardBroadcastTests: XCTestCase {
         XCTAssertEqual(wire.rows.count, 19)
         XCTAssertEqual(wire.rows, BoardBroadcast.Viewpoint.leftPlayer.orient(p).description.split(separator: "\n").map(String.init))
         XCTAssertEqual(wire.status, "locked")
+        XCTAssertTrue(wire.follow)
+        XCTAssertEqual(wire.next, "W")
     }
 
     /// Image (row 0 = far edge, last row = phone edge):

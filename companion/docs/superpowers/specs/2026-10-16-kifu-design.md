@@ -266,7 +266,9 @@ acceptée**, une ligne JSON par changement : `{"size":19,"rows":[...],"status":"
 vue par le joueur de gauche ou de droite de l'image (réglage de l'écran d'accueil) : le
 téléphone est sur un troisième côté, le plateau pivote donc d'un quart de tour pour que le
 bord du joueur choisi soit en bas. `status` vaut `locked` quand le plateau correspond au kifu,
-`uncertain` quand l'arbitre attend. Jamais de lecture brute : Moyo ne voit que ce que la
+`uncertain` quand l'arbitre attend. Deux champs s'ajoutent au format de GoBoardVision : `"follow":true`, qui
+demande à Moyo d'afficher ce plateau quelle que soit la partie qu'il avait ouverte, et
+`"next":"B"` ou `"W"`, le trait, qu'une position seule ne dit pas. Jamais de lecture brute : Moyo ne voit que ce que la
 règle a expliqué. La liaison est en lecture seule et facultative ; le SGF reste la source
 de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie.
 

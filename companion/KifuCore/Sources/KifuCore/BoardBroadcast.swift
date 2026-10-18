@@ -3,6 +3,9 @@ import Foundation
 /// The line sent to Moyo on the Mac, in the format GoBoardVision already speaks:
 /// `{"size":19,"rows":["X..", ...],"status":"locked"}` and a newline, row 0 at the top.
 /// Only the accepted position is sent: what the rules explained, never a raw reading.
+/// Two fields go beyond GoBoardVision: `follow` asks Moyo to show this board whatever
+/// game it had open, rather than read it as moves against its AI, and `next` ("B" or "W")
+/// says whose turn it is, which a position alone cannot tell.
 public enum BoardBroadcast {
     public static let serviceType = "_goboard._tcp"
 
@@ -29,9 +32,12 @@ public enum BoardBroadcast {
         }
     }
 
-    public static func line(position: Position, status: Recorder.Status, viewpoint: Viewpoint) -> Data {
+    public static func line(position: Position, status: Recorder.Status, toPlay: Stone, viewpoint: Viewpoint) -> Data {
         let rows = viewpoint.orient(position).description.split(separator: "\n").map(String.init)
-        let payload: [String: Any] = ["size": position.size, "rows": rows, "status": statusName(status)]
+        let payload: [String: Any] = [
+            "size": position.size, "rows": rows, "status": statusName(status),
+            "follow": true, "next": toPlay == .white ? "W" : "B",
+        ]
         var data = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
         data.append(UInt8(ascii: "\n"))
         return data

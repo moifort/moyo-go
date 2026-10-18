@@ -40,8 +40,8 @@ final class BoardServer: @unchecked Sendable {
     }
 
     /// Sends the position to every Mac, unless it is the line they already have.
-    func publish(position: Position, status: Recorder.Status) {
-        let data = BoardBroadcast.line(position: position, status: status, viewpoint: Self.viewpoint)
+    func publish(position: Position, status: Recorder.Status, toPlay: Stone) {
+        let data = BoardBroadcast.line(position: position, status: status, toPlay: toPlay, viewpoint: Self.viewpoint)
         queue.async { [self] in
             guard data != lastLine else { return }
             lastLine = data
