@@ -149,6 +149,7 @@ public struct GameWindow: View {
 
     private var title: String {
         if session.isReviewing { return session.recordName ?? "Partie" }
+        if session.state?.isFollowing == true { return "Partie suivie" }
         return session.state?.status == .finished ? "Partie terminée" : "Partie contre KataGo"
     }
 

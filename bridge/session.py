@@ -23,6 +23,7 @@ from katrain.core.constants import (
 from katrain.core.game import Game, IllegalMoveException
 from pysgf import Move
 
+import follow
 import local
 import record
 import review
@@ -46,7 +47,16 @@ class BridgeSession(KaTrainHost):
         self._human_color = "B"
         self._emitted_scores: Dict[int, float] = {}
         self._ai_pending = False
-        self._status = "playing"  # playing | scoring | finished | review
+        self._status = "playing"  # playing | scoring | finished | review | following
+        #: Following a game on a real board: the next position seen is the start,
+        #: placed as it is, since the game may be joined halfway through.
+        self._follow_fresh = False
+        #: False when the last position seen could not be reached by any move.
+        self._follow_in_sync = True
+        #: KataGo at work while following: each move analysed for the score and the
+        #: curve, plus the best move and, in the zone of the last move, the best
+        #: local move with what it costs. Off, KataGo computes nothing.
+        self._follow_analysis = False
         self._dead: set = set()
         # -- review state, all empty outside a review
         #: The main line of the record, cached once. A variation adds nodes to the
@@ -100,6 +110,9 @@ class BridgeSession(KaTrainHost):
         if self._status == "review":
             self._on_review_advanced()
             return
+        if self._status == "following":
+            self._on_following_advanced()
+            return
         if self._status == "scoring" and not self._dead:
             # The ownership map often lands after the second pass; take it when it
             # arrives rather than leaving the player with nothing proposed.
@@ -122,6 +135,23 @@ class BridgeSession(KaTrainHost):
         if key != self._emitted_best:
             self._emitted_best = key
             self._emit_state()
+
+    def _on_following_advanced(self) -> None:
+        """An analysis came back while following: move the markers, if they are shown."""
+        if not self._follow_analysis:
+            return
+        key = (self._hint_key(), id(self.game.current_node))
+        if key != self._emitted_best:
+            self._emitted_best = key
+            self._emit_state()
+
+    def _hint_key(self):
+        best = review.best_move(self.game.current_node, self._size())
+        nearby = self._local_move()
+        return (
+            None if best is None else (best["row"], best["col"]),
+            None if nearby is None else (nearby["row"], nearby["col"], nearby["points_lost"]),
+        )
 
     #: Score changes smaller than this are not worth an event. KataGo keeps refining
     #: an analysis while it ponders, and without a threshold every node would emit a
@@ -195,6 +225,13 @@ class BridgeSession(KaTrainHost):
     def _emit_state(self, command_id: Optional[int] = None) -> None:
         if self._status == "review":
             self._emit_review_state(command_id)
+            return
+        if self._status == "following":
+            self._writer.emit(
+                "state",
+                command_id,
+                **serialize.game_state(self.game, self._human_color, status="following", extra=self._follow_extra()),
+            )
             return
         result = self.game.current_node.end_state if self._status == "finished" else None
         # A resigned game has nothing to count: the stones on the board were never
@@ -361,6 +398,7 @@ class BridgeSession(KaTrainHost):
         self._require_game()
         self._refuse_in_review()
         self._refuse_when_over()
+        self._refuse_when_following()
         self._status = "playing"
         self._dead = set()
         self._ai_pending = False
@@ -725,6 +763,10 @@ class BridgeSession(KaTrainHost):
             self._request_local(ask=True)
         self._emit_state(command_id)
 
+    def _focus_node(self):
+        """The position the local reading is about: the record's, or the game's own."""
+        return self._line[self._index] if self._status == "review" else self.game.current_node
+
     def _request_local(self, ask: bool = False) -> None:
         """Places the zone of the position on screen; `ask` also has KataGo read it.
 
@@ -732,7 +774,7 @@ class BridgeSession(KaTrainHost):
         know whether there is a fight to read. The reading is asked for once per
         position and zone.
         """
-        node = self._line[self._index]
+        node = self._focus_node()
         if self._engine is None:
             return
         zone = self._drawn_zone or local.region(
@@ -766,12 +808,12 @@ class BridgeSession(KaTrainHost):
             self._on_local_extension(analysis, zone)
             return
         reading = self._local.get(id(node))
-        if reading is None or self._status != "review":
+        if reading is None or self._status not in ("review", "following"):
             return  # another record has been opened since
         if zone is not None and reading["zone"] != zone:
             return  # the answer to a zone redrawn since
         reading["analysis"] = analysis
-        if node is not self._line[self._index]:
+        if node is not self._focus_node():
             return
         if self._local_wanted and not self._variation:
             self._local_wanted = False
@@ -796,13 +838,13 @@ class BridgeSession(KaTrainHost):
                 and not extension["done"]
                 and extension["depth"] == len(self._variation)
             )
-        reading = self._local.get(id(self._line[self._index]))
+        reading = self._local.get(id(self._focus_node()))
         return bool(reading and reading.get("asked") and reading["analysis"] is None)
 
     def _local_reading(self) -> Optional[Dict[str, Any]]:
         if self._variation and self._variation_kind != "local":
             return None
-        return self._local.get(id(self._line[self._index]))
+        return self._local.get(id(self._focus_node()))
 
     def _local_zone(self) -> Optional[Dict[str, int]]:
         """The zone on screen: on the record itself, and while its sequence is walked."""
@@ -816,7 +858,7 @@ class BridgeSession(KaTrainHost):
             return None
         if self._variation:
             return self._next_in_variation(None)
-        node = self._line[self._index]
+        node = self._focus_node()
         prefer = local.whole_board_choice(node, reading["zone"], self._size())
         return local.best_move(reading["analysis"], node, self._size(), prefer)
 
@@ -855,9 +897,175 @@ class BridgeSession(KaTrainHost):
         if self._status == "finished":
             raise CommandError("not_playing", "the game is over")
 
+    def _refuse_when_following(self) -> None:
+        if self._status == "following":
+            raise CommandError("not_playing", "la partie se joue sur le plateau, pas ici")
+
     def _refuse_in_review(self) -> None:
         if self._status == "review":
             raise CommandError("not_playing", "la partie est en revue, pas en cours")
+
+
+    # -- following a game on a real board ------------------------------------
+
+    def follow_start(self, command_id, size, komi, rules, analysis=False):
+        """Starts following a game between two people, seen by the phone.
+
+        Nobody is to move on the Mac: both players are human, the AI never plays,
+        and KataGo only analyses. The game proper starts with the next position.
+        """
+        if self._engine is None:
+            raise CommandError("no_engine", "engine not started")
+        for color in ("B", "W"):
+            self.players_info[color].update(PLAYER_HUMAN, PLAYING_NORMAL)
+        self._human_color = "B"
+        self._clear_review()
+        self._emitted_scores.clear()
+        self._dead = set()
+        self._ai_pending = False
+        self._status = "following"
+        self._follow_fresh = True
+        self._follow_in_sync = True
+        self._follow_analysis = bool(analysis)
+        self.game = Game(self, self._engine, game_properties={"SZ": size, "KM": komi, "RU": rules})
+        self._writer.emit("thinking", None, value=False)
+        self._emit_state(command_id)
+
+    def follow_board(self, command_id, rows):
+        """The position on the real board changed: find the moves that lead there.
+
+        Forward first — a move, a pass and a move, one move each — then back to an
+        earlier position, a move taken back, then a correction a few moves back.
+        Every candidate is played through the core and kept only if the board it
+        produces is the one seen, captures included.
+        """
+        self._require_following()
+        size = self._size()
+        target = follow.read_rows(rows, size)
+        if self._follow_fresh:
+            self._follow_fresh = False
+            if target:
+                self._join_halfway(target, size)
+            self._follow_in_sync = True
+            self._emit_state(command_id)
+            return
+        self._follow_in_sync = self._reach(target)
+        self._request_local(ask=self._follow_analysis)
+        self._emit_state(command_id)
+
+    def _follow_extra(self) -> Dict[str, Any]:
+        extra: Dict[str, Any] = {"in_sync": self._follow_in_sync, "analysis": self._follow_analysis}
+        if self._follow_analysis:
+            extra.update(
+                best_move=review.best_move(self.game.current_node, self._size()),
+                local_move=self._local_move(),
+                local_zone=self._local_zone(),
+                local_pending=self._local_pending(),
+            )
+        return extra
+
+    def follow_analysis(self, command_id, on):
+        """Switches KataGo on or off while following.
+
+        Off, what is queued is dropped and nothing new is asked. On again, the
+        position on the board is read first, then the moves played meanwhile, so
+        the curve fills its gaps behind the figure that matters.
+        """
+        self._require_following()
+        self._follow_analysis = bool(on)
+        if self._follow_analysis:
+            for node in reversed(self.game.current_node.nodes_from_root):
+                if not node.analysis_complete:
+                    node.analyze(self.game.engines[node.next_player])
+        elif self._engine is not None:
+            self._engine.terminate_queries()
+        self._request_local(ask=self._follow_analysis)
+        self._emit_state(command_id)
+
+    def _join_halfway(self, target, size) -> None:
+        """The first position already has stones: place them as the game's setup."""
+        properties = dict(self.game.root.properties)
+        self.game = Game(self, self._engine, game_properties={**properties, **follow.setup_properties(target, size)})
+
+    def _reach(self, target) -> bool:
+        start = self.game.current_node
+        if serialize.stone_map(self.game) == target or self._play_towards(target):
+            return True
+        line = start.nodes_from_root
+        for node in reversed(line[:-1]):
+            self.game.set_current_node(node)
+            if serialize.stone_map(self.game) == target:
+                return True
+        for node in reversed(line[-1 - follow.CORRECTION_DEPTH : -1]):
+            self.game.set_current_node(node)
+            if self._play_towards(target):
+                return True
+        self.game.set_current_node(start)
+        return False
+
+    def _play_towards(self, target) -> bool:
+        """Tries the candidate sequences from the current node; keeps the first that fits."""
+        start = self.game.current_node
+        size = self._size()
+        saved_pl = start.get_property("PL", None)
+        # Only a setup leaves the turn open; an empty board is Black's to start.
+        turn_unknown = start.is_root and not start.children and bool(start.placements)
+        before = serialize.stone_map(self.game)
+        for sequence in follow.candidates(before, target, start.next_player, turn_unknown):
+            played, created = [], []
+            try:
+                for step in sequence:
+                    node = self.game.current_node
+                    if step is None:
+                        move = Move(coords=None, player=node.next_player)
+                    else:
+                        color, (row, col) = step
+                        if color != node.next_player and turn_unknown and node is start:
+                            # Joined halfway: the first move seen says who was to move.
+                            node.set_property("PL", color)
+                        move = Move(coords=to_engine_coords(row, col, size), player=color)
+                    before = list(node.children)
+                    child = self.game.play(move, analyze=False)
+                    played.append(child)
+                    if all(other is not child for other in before):
+                        created.append((node, child))
+                if serialize.stone_map(self.game) == target:
+                    if self._follow_analysis:
+                        for node in played:
+                            node.analyze(self.game.engines[node.next_player])
+                    return True
+            except IllegalMoveException:
+                pass
+            for parent, child in created:
+                parent.children = [other for other in parent.children if other is not child]
+            if start.get_property("PL", None) != saved_pl:
+                start.set_property("PL", saved_pl) if saved_pl else start.clear_property("PL")
+            self.game.set_current_node(start)
+        return False
+
+    def follow_end(self, command_id, result):
+        """The game on the real board is over: open it as a record under review.
+
+        The analyses already made are kept, and the record is the line actually
+        followed: corrections and moves taken back stay in the tree, off the line.
+        """
+        self._require_following()
+        if result:
+            self.game.root.set_property("RE", result)
+        line = self.game.current_node.nodes_from_root
+        self._clear_review()
+        self._status = "review"
+        self._line = line
+        self._game_info = review.game_info(self.game.root)
+        self._index = len(line) - 1
+        self.game.set_current_node(line[self._index])
+        self._boost_window()
+        self._request_local()
+        self._emit_state(command_id)
+
+    def _require_following(self) -> None:
+        if self._status != "following":
+            raise CommandError("not_following", "aucune partie n'est suivie")
 
     # -- ai ------------------------------------------------------------------
 
@@ -885,6 +1093,7 @@ class BridgeSession(KaTrainHost):
         """Switches the AI mode mid-game; it applies from its next move."""
         self._require_game()
         self._refuse_in_review()
+        self._refuse_when_following()
         current = self.config(f"ai/{strategy}")
         if current is None:
             raise CommandError("unknown_ai", f"AI strategy {strategy} not found")

@@ -31,6 +31,8 @@ public enum Theme {
     public static let tagBackground = Color.white.opacity(0.12)
     /// The phone is live: the one green in the sidebar, so it is seen.
     public static let connected = Color(red: 0.30, green: 0.78, blue: 0.42)
+    /// A position from the phone that no move explains: amber, a wait rather than a fault.
+    public static let warning = Color(red: 0.93, green: 0.66, blue: 0.25)
 
     public static func stone(_ color: PlayerColor) -> Color {
         color == .black ? blackStone : whiteStone

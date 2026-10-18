@@ -25,6 +25,9 @@ public final class GameSession {
         public var humanColor: PlayerColor
         public var aiStrategy: String
         public var aiSettingValues: [String: Double]
+        /// KataGo at work while following a real board. Optional so settings saved
+        /// before it existed still load; absent means on.
+        public var followAnalysis: Bool?
 
         public init(
             size: Int = 19,
@@ -100,11 +103,26 @@ public final class GameSession {
 
     public let thinking = ThinkingIndicator()
 
-    /// The phone watching the real board, when the player has connected one.
+    /// The phone watching the real board. It is looked for from launch and
+    /// connected when the player asks, to follow the game played there.
     public let phone = PhoneLink()
-    /// The move sent on the phone's behalf and not yet answered by the bridge,
-    /// so the same stone is not played twice while the state is in flight.
-    private var phoneMoveInFlight: Point?
+
+    /// The Mac follows the game on the real board: every position the phone sends
+    /// goes to the bridge, which turns it into moves. True from the moment the
+    /// player connects until they disconnect or start something else.
+    public private(set) var isFollowing = false
+    /// The phone said the game was over; the record is on screen, and the next
+    /// position the phone sends starts the next game.
+    private var followedGameEnded = false
+
+    /// The player asked to connect while a game was under way: the sidebar asks
+    /// whether to save it first.
+    public var isConfirmingFollow = false
+    /// The sheet listing the phones in sight is open, for the player to pick one.
+    public var isChoosingPhone = false
+    /// The game is being saved before following starts; the save panel's answer
+    /// starts it.
+    private var followsAfterExport = false
 
     /// Score lead per move number, filled in as analyses come back.
     public private(set) var scoreByMove: [Int: Double] = [:]
@@ -136,6 +154,7 @@ public final class GameSession {
         self.store = store
         self.settings = store.load() ?? Settings()
         phone.onBoard = { [weak self] board in self?.phoneBoardDidChange(board) }
+        phone.onGameEnd = { [weak self] end in self?.phoneGameDidEnd(end) }
     }
 
     // -- lifecycle -----------------------------------------------------------
@@ -145,6 +164,7 @@ public final class GameSession {
     public func start() {
         guard !hasStarted else { return }
         hasStarted = true
+        phone.startDiscovery()
         guard let location = BridgeLocation.resolve() else {
             phase = .failed(
                 "Emplacement du projet inconnu. Définissez MOYO_DEV_ROOT ou reconstruisez l'application."
@@ -236,7 +256,9 @@ public final class GameSession {
     }
 
     /// Refusals the board answers on its own, without a word.
-    private static let silentFailures: Set<String> = ["illegal_move", "no_variation"]
+    ///
+    /// `not_following` is a position the phone sent just as following stopped.
+    private static let silentFailures: Set<String> = ["illegal_move", "no_variation", "not_following"]
 
     private func apply(_ newState: GameState) {
         // Moves beyond the current one no longer exist, typically after an undo —
@@ -250,56 +272,117 @@ public final class GameSession {
         }
         state = newState
         if newState.status != .playing { thinking.ended() }
-        phoneMoveInFlight = nil
-        syncWithPhone()
     }
 
-    // -- phone ----------------------------------------------------------------
+    // -- following a game on a real board ------------------------------------
 
-    /// The real board changed. A phone that records a game of its own is followed;
-    /// otherwise a board of another size starts a matching game, and any other board
-    /// is compared with the game to find the player's move.
-    private func phoneBoardDidChange(_ board: PhoneBoard) {
-        if board.follow {
-            follow(board)
-            return
+    /// A game is under way that following would replace: worth asking first.
+    public var hasGameInProgress: Bool {
+        guard let state, !isFollowing else { return false }
+        return state.status == .scoring || (state.status == .playing && state.moveNumber > 0)
+    }
+
+    /// The player clicked "Connecter". A game under way is not dropped without
+    /// asking: the sidebar first offers to save it, or to give it up. Then the
+    /// phones in sight are listed, for the player to pick one.
+    public func connectPhone() {
+        if isFollowing {
+            phone.connect()  // the link dropped or failed: the game followed goes on
+        } else if hasGameInProgress {
+            isConfirmingFollow = true
+        } else {
+            choosePhone()
         }
+    }
+
+    /// Opens the list of phones running Kifu.
+    public func choosePhone() {
+        isConfirmingFollow = false
+        phone.startDiscovery()
+        isChoosingPhone = true
+    }
+
+    /// The player picked a phone, by its Bonjour service: follow the game it records.
+    public func follow(phone service: String) {
+        isChoosingPhone = false
+        startFollowing(phone: service)
+    }
+
+    /// Saves the game under way, then follows the real board whatever the panel's answer.
+    public func saveThenFollow() {
+        followsAfterExport = true
+        exportRecord()
+    }
+
+    /// Starts following: an empty game with no AI, and the chosen phone's link opened.
+    /// The phone sends its position on connecting, which the bridge takes as the
+    /// start — a game recorded halfway is joined where it stands.
+    func startFollowing(phone service: String) {
         guard phase == .running else { return }
-        if state == nil || state?.size != board.size, board.stones.isEmpty {
-            settings.size = board.size
+        isConfirmingFollow = false
+        isFollowing = true
+        beginFollowedGame(size: 19)
+        phone.connect(to: service)
+    }
+
+    /// Stops following. The game followed so far opens as a record, its analyses
+    /// kept — unless something else is about to take the window.
+    public func stopFollowing(openingRecord: Bool = true) {
+        guard isFollowing else { return }
+        isFollowing = false
+        phone.disconnect()
+        let ended = followedGameEnded
+        followedGameEnded = false
+        guard openingRecord, !ended, let state, state.isFollowing else { return }
+        // Nothing was seen: there is no record to open, only a game to start.
+        if state.moveNumber == 0, state.stones.isEmpty {
             newGame()
-            return
+        } else {
+            bridge.send(.followEnd(id: nextID(), result: nil))
         }
-        syncWithPhone()
     }
 
-    /// The board followed on the phone, last loaded into the bridge.
-    private var followedBoard: PhoneBoard?
-
-    /// True while the window shows the board of a phone that records its own game.
-    public var isFollowingPhone: Bool { followedBoard != nil }
-
-    /// Shows the phone's board in place of whatever the window had open — a game
-    /// against the AI, a record, an earlier position of the same game. Only stones
-    /// reach the Mac, so it opens as a record of that one position, which KataGo reads.
-    private func follow(_ board: PhoneBoard) {
-        guard board != followedBoard else { return }
-        let name: String
-        switch phone.status {
-        case .connected(let phoneName), .connecting(let phoneName): name = phoneName
-        default: name = "Téléphone"
-        }
-        let contents = PhoneRecord.sgf(board, komi: settings.komi, event: "En direct — \(name)")
-        load(SGFImport.Record(name: name, contents: contents))
-        followedBoard = board
+    private func beginFollowedGame(size: Int) {
+        followedGameEnded = false
+        scoreByMove.removeAll()
+        state = nil
+        lastErrorMessage = nil
+        recordName = nil
+        analysisProgress = nil
+        thinking.ended()
+        bridge.send(
+            .followStart(id: nextID(), size: size, komi: settings.komi, rules: settings.rules, analysis: followsWithAnalysis)
+        )
     }
 
-    private func syncWithPhone() {
-        guard let board = phone.latest, let state, canAct,
-              let point = BoardSync.pendingMove(phone: board, game: state),
-              point != phoneMoveInFlight else { return }
-        phoneMoveInFlight = point
-        play(row: point.row, col: point.col)
+    /// Whether KataGo analyses the game followed: the score and its curve, the best
+    /// move, and the best move near the last one with what it costs. Off, KataGo
+    /// computes nothing.
+    public var followsWithAnalysis: Bool {
+        get { settings.followAnalysis ?? true }
+        set {
+            settings.followAnalysis = newValue
+            store.save(settings)
+            if state?.isFollowing == true { bridge.send(.followAnalysis(id: nextID(), on: newValue)) }
+        }
+    }
+
+    /// The real board changed. While following, the position goes to the bridge;
+    /// after a game has ended, the next one starts with it.
+    private func phoneBoardDidChange(_ board: PhoneBoard) {
+        guard phase == .running, isFollowing else { return }
+        if followedGameEnded || (state?.isFollowing == true && state?.size != board.size && state?.moveNumber == 0) {
+            beginFollowedGame(size: board.size)
+        }
+        bridge.send(.followBoard(id: nextID(), rows: board.rows))
+    }
+
+    /// The phone says the game is over: it opens as a record under review, and the
+    /// link stays open for the next game.
+    private func phoneGameDidEnd(_ end: PhoneGameEnd) {
+        guard phase == .running, isFollowing, !followedGameEnded else { return }
+        followedGameEnded = true
+        bridge.send(.followEnd(id: nextID(), result: end.result))
     }
 
     // -- commands ------------------------------------------------------------
@@ -310,7 +393,7 @@ public final class GameSession {
     }
 
     public func newGame() {
-        followedBoard = nil
+        stopFollowing(openingRecord: false)
         store.save(settings)
         scoreByMove.removeAll()
         state = nil
@@ -390,7 +473,6 @@ public final class GameSession {
     /// The file is read here and sent as text: the bridge opens nothing, which keeps
     /// the sandbox out of the child process and the encoding guess in AppKit's hands.
     public func openRecord(at url: URL) {
-        followedBoard = nil
         do {
             load(try SGFImport.read(url))
         } catch {
@@ -401,6 +483,7 @@ public final class GameSession {
 
     /// Hands a record to the bridge, or holds it until the bridge is ready for one.
     private func load(_ record: SGFImport.Record) {
+        stopFollowing(openingRecord: false)
         scoreByMove.removeAll()
         analysisProgress = nil
         lastErrorMessage = nil
@@ -424,7 +507,7 @@ public final class GameSession {
         guard canExport else { return }
         var black: String?
         var white: String?
-        if !isReviewing, let state {
+        if !isReviewing, !isFollowing, let state {
             let mode = currentMode
             let players = SGFExport.players(
                 humanColor: state.humanColor,
@@ -439,6 +522,10 @@ public final class GameSession {
     /// The save panel is done with the document, written or not.
     public func exportHandled() {
         pendingExport = nil
+        if followsAfterExport {
+            followsAfterExport = false
+            choosePhone()
+        }
     }
 
     /// Moves to a position in the record. The bridge clamps anything out of range.
@@ -473,6 +560,7 @@ public final class GameSession {
 
     /// Whether the board shows the local reading right now.
     public var showsLocalReading: Bool {
+        if state?.isFollowing == true { return state?.analysis == true }
         guard let state, state.isReviewing else { return false }
         return isOptionHeld || state.variationKind == .local || state.localWanted == true
     }

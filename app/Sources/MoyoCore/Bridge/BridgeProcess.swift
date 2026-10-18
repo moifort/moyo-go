@@ -125,7 +125,11 @@ public final class BridgeProcess: @unchecked Sendable {
         }
     }
 
+    /// Sees every command on its way out; the tests listen here, with no bridge running.
+    var onSend: ((BridgeCommand) -> Void)?
+
     public func send(_ command: BridgeCommand) {
+        onSend?(command)
         guard process.isRunning, let data = try? command.encodedLine() else { return }
         try? inPipe.fileHandleForWriting.write(contentsOf: data)
     }
