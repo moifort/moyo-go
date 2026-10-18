@@ -1,0 +1,43 @@
+{
+  "corners": [
+    [
+      1189.5,
+      1238.5
+    ],
+    [
+      2786.7,
+      1219.8
+    ],
+    [
+      3918.4,
+      2600.8
+    ],
+    [
+      540.1,
+      2830.7
+    ]
+  ],
+  "lines": 19,
+  "expected": [
+    "...................",
+    "...................",
+    ".......X.......XO..",
+    "...O.O.........XO..",
+    "...............X...",
+    "...X.............O.",
+    "...................",
+    "...................",
+    "...................",
+    "...................",
+    "...................",
+    "...................",
+    "...O...............",
+    "..O..............O.",
+    ".......X.......X...",
+    "..X.O..........XO..",
+    "....X..X.......XO..",
+    "...................",
+    "..................."
+  ],
+  "note": "16:09 trial, frame of rasante-blanches-au-fond-perdues with the corners the tracker fitted on it. The white stone at (17,5) leans right, over the last line: with the disk of (18,5) held on the line it read the rim of that stone as a second white. The disk now follows a stone a little past the side lines."
+}

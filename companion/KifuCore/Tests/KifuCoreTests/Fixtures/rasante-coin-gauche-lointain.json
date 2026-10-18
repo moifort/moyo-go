@@ -1,0 +1,43 @@
+{
+  "corners": [
+    [
+      693.6,
+      1713.4
+    ],
+    [
+      2153.7,
+      1694.5
+    ],
+    [
+      2915.7,
+      2849.8
+    ],
+    [
+      70.8,
+      2961.0
+    ]
+  ],
+  "lines": 19,
+  "expected": [
+    "...................",
+    ".....X.............",
+    ".OO.O..X.......XO..",
+    "..XO.O.........XO..",
+    "..X............X...",
+    "...X.............O.",
+    "...................",
+    "...................",
+    "...................",
+    "..X................",
+    "...................",
+    "...................",
+    "...O...............",
+    "..O..............O.",
+    ".......X.......X...",
+    "..XOO..........XO..",
+    ".OOXX..X.......XO..",
+    "..X................",
+    "..................."
+  ],
+  "note": "18 October 2026, 18:24 trial, iPhone 15 Pro on the stand with the near-left corner at the frame edge. Two ghosts the app recorded as moves: a white at (1,3) in the far-left corner, where every wood cell around the intersection touches a stone, and a black at (5,0), under the body of the black stone at (5,1), which leans over the far line. (5,0) is read as unreadable, not as empty."
+}

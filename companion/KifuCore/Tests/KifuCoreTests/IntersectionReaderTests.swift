@@ -1,4 +1,6 @@
 import XCTest
+import CoreGraphics
+import ImageIO
 @testable import KifuCore
 
 final class IntersectionReaderTests: XCTestCase {
@@ -48,14 +50,35 @@ final class IntersectionReaderTests: XCTestCase {
         XCTAssertEqual(readings.position, expected(stones))
     }
 
-    func testStoneLiftGrowsTowardsTheFarEdge() {
-        let r = reader(for: SyntheticScene(), height: 0.35)
-        let near = r.stoneLift(at: at(9, 18)), far = r.stoneLift(at: at(9, 1))
-        XCTAssertGreaterThan(far, near)
-        XCTAssertGreaterThanOrEqual(near, 0)
-        XCTAssertLessThanOrEqual(far, ReaderSettings().maxLift)
-        // On the far line itself the lifted disk would leave the board.
-        XCTAssertEqual(r.stoneLift(at: at(9, 0)), 0)
+    func testStoneShiftGrowsTowardsTheFarEdgeAndLeansOutwards() {
+        let scene = SyntheticScene()
+        let r = reader(for: scene, height: 0.35)
+        let image = scene.render()
+        func length(_ s: (Double, Double)) -> Double { (s.0 * s.0 + s.1 * s.1).squareRoot() }
+        let near = r.stoneShift(at: at(9, 18), in: image), far = r.stoneShift(at: at(9, 1), in: image)
+        XCTAssertGreaterThan(length(far), length(near))
+        XCTAssertLessThan(far.1, 0, "away from the camera is up the image, towards row 0")
+        XCTAssertLessThanOrEqual(length(far), ReaderSettings().maxLift)
+        // On the far line itself the shifted disk would leave the board.
+        XCTAssertEqual(r.stoneShift(at: at(9, 0), in: image).1, 0, accuracy: 1e-9)
+    }
+
+    /// Through the camera recovered from a real frame, a stone off the camera's axis leans
+    /// outwards as well as away. The synthetic trapezoid matches no real camera, so the reader
+    /// falls back to the straight shift there.
+    func testStoneShiftLeansOutwardsOnARealFrame() throws {
+        let dir = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures", withExtension: nil))
+        let photo = dir.appendingPathComponent("rasante-coin-gauche-lointain.jpg")
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(photo as CFURL, nil))
+        let cg = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let image = try XCTUnwrap(GrayImage(cgImage: cg))
+        let corners = [Point(x: 693.6, y: 1713.4), Point(x: 2153.7, y: 1694.5), Point(x: 2915.7, y: 2849.8), Point(x: 70.8, y: 2961.0)]
+        let geometry = try XCTUnwrap(BoardGeometry(calibration: Calibration(corners: corners)))
+        XCTAssertNotNil(geometry.camera(imageWidth: image.width, imageHeight: image.height))
+        let r = IntersectionReader(geometry: geometry)
+        XCTAssertLessThan(r.stoneShift(at: at(0, 9), in: image).0, -0.05)
+        XCTAssertGreaterThan(r.stoneShift(at: at(18, 9), in: image).0, 0.05)
+        XCTAssertLessThan(r.stoneShift(at: at(9, 9), in: image).1, -0.2)
     }
 
     func testGradientAndHardShadowDoNotChangeTheReading() {

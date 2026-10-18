@@ -15,6 +15,9 @@ public struct ReaderSettings: Sendable, Equatable, Codable {
     /// The lift never exceeds this, in spacings, so that the disk stays short of the next
     /// intersection's stone on photos where the far rows are compressed to a few pixels.
     public var maxLift = 0.45
+    /// How far past the side lines, in spacings, the disk may follow a stone's body: the wood
+    /// margin of a board is about half a spacing.
+    public var edgeMargin = 0.3
     /// Black when stone / wood is below this.
     public var blackBelow = 0.55
     /// White when stone / wood is above this, or when the headroom fraction is above `whiteHeadroom`.
@@ -31,6 +34,11 @@ public struct ReaderSettings: Sendable, Equatable, Codable {
     /// Standard deviation inside the stone disk above which the intersection is unreadable.
     /// Deliberately high: synthetic line crossings already reach 60. To be tuned on real photos.
     public var maxDeviation = 80.0
+    /// A stone that was not there before is only taken when the disk is this uniform: inside
+    /// a stone's body the deviation stays under 20 on real photos, while a disk straddling the
+    /// rim of the neighbour's stone, which leans into this cell, reaches 45 and more. Such an
+    /// intersection is left unreadable, and keeps what it had.
+    public var maxNewStoneDeviation = 40.0
 
     public init() {}
 }
@@ -80,11 +88,40 @@ public struct IntersectionReader: Sendable {
         public var headroom: Double { (stone - wood) / max(255 - wood, 1) }
     }
 
-    /// How far, in spacings, the top of a stone at `i` appears shifted away from the camera.
+    /// Where, in spacings, the body of a stone at `i` appears to sit on the board: the point of
+    /// the board plane under the image of the stone's mid-height. Seen through the camera the
+    /// shift points away from it, with a sideways part near the frame's edges; without a usable
+    /// camera it follows `awayFromCamera` by h / 2 · cos θ / sin θ. Capped at `maxLift` and
+    /// kept on the board, so the far line reads where it is.
+    public func stoneShift(at i: Intersection, in image: GrayImage) -> (Double, Double) {
+        guard settings.stoneHeight > 0 else { return (0, 0) }
+        let p = Point(x: Double(i.col), y: Double(i.row))
+        var shift: (Double, Double)
+        if let camera = geometry.camera(imageWidth: image.width, imageHeight: image.height) {
+            let q = geometry.toBoard.apply(camera.project(p, height: settings.stoneHeight / 2))
+            shift = (q.x - p.x, q.y - p.y)
+        } else {
+            let away = geometry.awayFromCamera
+            shift = (away.0 * axisLift(at: i), away.1 * axisLift(at: i))
+        }
+        let length = (shift.0 * shift.0 + shift.1 * shift.1).squareRoot()
+        if length > settings.maxLift { shift = (shift.0 * settings.maxLift / length, shift.1 * settings.maxLift / length) }
+        // Not past the far line, where the background begins; sideways the wood goes on for
+        // a while past the last line, and a stone on it leans out over that margin.
+        let n = Double(geometry.lines - 1), margin = settings.edgeMargin
+        let away = geometry.awayFromCamera
+        let coordinate = away.0 != 0 ? p.x : p.y
+        let farLine = away.0 + away.1 > 0 ? n : 0
+        if abs(coordinate - farLine) < 1e-9 { return (0, 0) }
+        let (mx, my) = away.0 == 0 ? (margin, 0.0) : (0.0, margin)
+        shift.0 = min(max(shift.0, -p.x - mx), n - p.x + mx)
+        shift.1 = min(max(shift.1, -p.y - my), n - p.y + my)
+        return shift
+    }
+
     /// A stone of height h seen at elevation θ has its top projected h / tan θ further away;
     /// the visible body is centred about half of that.
-    public func stoneLift(at i: Intersection) -> Double {
-        guard settings.stoneHeight > 0 else { return 0 }
+    func axisLift(at i: Intersection) -> Double {
         let away = geometry.awayFromCamera
         let here = geometry.imagePoint(boardX: Double(i.col), boardY: Double(i.row))
         let along = geometry.imagePoint(boardX: Double(i.col) + away.0, boardY: Double(i.row) + away.1)
@@ -95,12 +132,7 @@ public struct IntersectionReader: Sendable {
         let sine = min(depth / width, 1)
         let cosine = (1 - sine * sine).squareRoot()
         guard sine > 0.05 else { return 0 }
-        var lift = min(settings.stoneHeight / 2 * cosine / sine, settings.maxLift)
-        // On the far line the lifted disk would read whatever lies beyond the board.
-        let n = Double(geometry.lines - 1)
-        let room = away.0 > 0 ? n - Double(i.col) : away.0 < 0 ? Double(i.col) : away.1 > 0 ? n - Double(i.row) : Double(i.row)
-        lift = min(lift, max(room, 0))
-        return lift
+        return settings.stoneHeight / 2 * cosine / sine
     }
 
     /// Measures `i`, taking the wood from cells no stone can hide when `occupied` is given.
@@ -124,11 +156,13 @@ public struct IntersectionReader: Sendable {
     /// say there is a stone.
     public func loneStone(_ image: GrayImage, at i: Intersection, previous: Stone?) -> Stone? {
         let base = measure(image, at: i)
-        guard let block = blockWood(image, at: i, occupied: []) else { return nil }
+        guard base.deviation <= settings.maxNewStoneDeviation,
+              let block = blockWood(image, at: i, occupied: []) else { return nil }
         let byBlock = Self.classify(Measure(stone: base.stone, wood: block, deviation: base.deviation), previous: previous, settings: settings)
         guard byBlock != .empty else { return nil }
         let n = Double(geometry.lines - 1)
-        let (cx, cy) = liftedCentre(of: i)
+        let shift = stoneShift(at: i, in: image)
+        let (cx, cy) = (Double(i.col) + shift.0, Double(i.row) + shift.1)
         var adjacent: [Double] = []
         for dy in [-0.5, 0.5] {
             for dx in [-0.5, 0.5] {
@@ -158,46 +192,66 @@ public struct IntersectionReader: Sendable {
         return false
     }
 
-    /// Where the stone disk of `i` is measured: its intersection, moved by the lift away from the camera.
-    private func liftedCentre(of i: Intersection) -> (Double, Double) {
-        let away = geometry.awayFromCamera
-        let lift = stoneLift(at: i)
-        return (Double(i.col) + away.0 * lift, Double(i.row) + away.1 * lift)
-    }
-
     /// Median wood of the 4×4 block of cells around the lifted centre of `i`, leaving out the
-    /// cells a stone of `occupied` touches and the two just beyond `i`. Nil with fewer than
-    /// three cells left.
+    /// cells a stone of `occupied` touches and the two just beyond `i`. In a corner where
+    /// stones touch every cell, the median of the whole block, which a few stone bodies do not
+    /// move. Nil with fewer than three cells on the board.
     private func blockWood(_ image: GrayImage, at i: Intersection, occupied: Set<Intersection>) -> Double? {
-        let away = geometry.awayFromCamera
+        let shift = stoneShift(at: i, in: image)
+        let away = shift == (0, 0) ? geometry.awayFromCamera : shift
         let n = Double(geometry.lines - 1)
-        let (cx, cy) = liftedCentre(of: i)
-        var woods: [Double] = []
+        let (cx, cy) = (Double(i.col) + shift.0, Double(i.row) + shift.1)
+        var free: [Double] = [], all: [Double] = []
         for dy in [-1.5, -0.5, 0.5, 1.5] {
             for dx in [-1.5, -0.5, 0.5, 1.5] {
                 let x = cx + dx, y = cy + dy
-                guard x > 0, y > 0, x < n, y < n, !touched(x, y, by: occupied, except: i) else { continue }
+                guard x > 0, y > 0, x < n, y < n else { continue }
                 let beyond = abs(dx) == 0.5 && abs(dy) == 0.5 && dx * away.0 + dy * away.1 > 0
                 if beyond { continue }
                 let s = disk(image, cx: x, cy: y, radius: settings.woodRadius)
-                woods.append(s.reduce(0, +) / Double(s.count))
+                let wood = s.reduce(0, +) / Double(s.count)
+                all.append(wood)
+                if !touched(x, y, by: occupied, except: i) { free.append(wood) }
             }
         }
+        let woods = free.count >= 3 ? free : all
         guard woods.count >= 3 else { return nil }
         return woods.sorted()[woods.count / 2]
     }
 
-    public func measure(_ image: GrayImage, at i: Intersection) -> Measure {
-        measure(image, at: i, lift: stoneLift(at: i))
+    /// True when the disk of `i` lands inside the body of a stone of `occupied` leaning over
+    /// it: on the far line the disk cannot move off the board, and the stone just in front
+    /// covers it. Only a stone whose body leans towards `i` counts, so the stone in front is
+    /// never covered by the one it hides.
+    private func covered(_ i: Intersection, by occupied: Set<Intersection>, in image: GrayImage) -> Bool {
+        let shift = stoneShift(at: i, in: image)
+        let (cx, cy) = (Double(i.col) + shift.0, Double(i.row) + shift.1)
+        for dy in -1...1 {
+            for dx in -1...1 where dx != 0 || dy != 0 {
+                let other = Intersection(col: i.col + dx, row: i.row + dy)
+                guard occupied.contains(other) else { continue }
+                let s = stoneShift(at: other, in: image)
+                guard s.0 * Double(-dx) + s.1 * Double(-dy) > 0 else { continue }
+                let ox = Double(other.col) + s.0 - cx, oy = Double(other.row) + s.1 - cy
+                if (ox * ox + oy * oy).squareRoot() < settings.stoneRadius + Self.bodyRadius { return true }
+            }
+        }
+        return false
     }
 
-    /// Measures `i` with the stone disk, and the wood cells around it, moved `lift` spacings
-    /// away from the camera: the wood follows the disk so that a patch of sunlight a cell away
-    /// does not pass for a stone.
-    public func measure(_ image: GrayImage, at i: Intersection, lift: Double) -> Measure {
-        let away = geometry.awayFromCamera
-        let cx = Double(i.col) + away.0 * lift
-        let cy = Double(i.row) + away.1 * lift
+    /// Apparent radius of a stone's body, in spacings.
+    static let bodyRadius = 0.47
+
+    public func measure(_ image: GrayImage, at i: Intersection) -> Measure {
+        measure(image, at: i, shift: stoneShift(at: i, in: image))
+    }
+
+    /// Measures `i` with the stone disk, and the wood cells around it, moved by `shift`
+    /// spacings: the wood follows the disk so that a patch of sunlight a cell away does not
+    /// pass for a stone.
+    public func measure(_ image: GrayImage, at i: Intersection, shift: (Double, Double)) -> Measure {
+        let cx = Double(i.col) + shift.0
+        let cy = Double(i.row) + shift.1
         let samples = disk(image, cx: cx, cy: cy, radius: settings.stoneRadius)
         let mean = samples.reduce(0, +) / Double(samples.count)
         let variance = samples.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(samples.count)
@@ -227,12 +281,16 @@ public struct IntersectionReader: Sendable {
     /// Classifies `m`, measured with the disk lifted, and confirms a black stone on the
     /// intersection itself: a black stone's rim sits there, while the lifted disk of the empty
     /// intersection in front of one lands in its cast shadow.
-    private func classify(_ m: Measure, at i: Intersection, previous: Stone?, in image: GrayImage) -> Stone {
-        let stone = Self.classify(m, previous: previous, settings: settings)
-        guard stone == .black, stoneLift(at: i) > 0 else { return stone }
-        let flat = measure(image, at: i, lift: 0)
-        let onIntersection = Measure(stone: flat.stone, wood: m.wood, deviation: flat.deviation)
-        return Self.classify(onIntersection, previous: previous, settings: settings) == .black ? .black : .empty
+    /// Nil when a new stone shows but the disk is not uniform enough to take it.
+    private func classify(_ m: Measure, at i: Intersection, previous: Stone?, in image: GrayImage) -> Stone? {
+        var stone = Self.classify(m, previous: previous, settings: settings)
+        if stone == .black, stoneShift(at: i, in: image) != (0, 0) {
+            let flat = measure(image, at: i, shift: (0, 0))
+            let onIntersection = Measure(stone: flat.stone, wood: m.wood, deviation: flat.deviation)
+            stone = Self.classify(onIntersection, previous: previous, settings: settings) == .black ? .black : .empty
+        }
+        if stone != .empty, stone != previous, m.deviation > settings.maxNewStoneDeviation { return nil }
+        return stone
     }
 
     public static func classify(_ m: Measure, previous: Stone?, settings: ReaderSettings) -> Stone {
@@ -263,7 +321,12 @@ public struct IntersectionReader: Sendable {
                 unreadable.insert(i)
                 position[i] = previous?[i] ?? .empty
             } else {
-                position[i] = classify(m, at: i, previous: previous?[i], in: image)
+                if let stone = classify(m, at: i, previous: previous?[i], in: image) {
+                    position[i] = stone
+                } else {
+                    unreadable.insert(i)
+                    position[i] = previous?[i] ?? .empty
+                }
             }
         }
 
@@ -278,8 +341,20 @@ public struct IntersectionReader: Sendable {
                 }
             }
             if hasNeighbour {
+                if covered(i, by: occupied.subtracting([i]), in: image) {
+                    unreadable.insert(i)
+                    position[i] = previous?[i] ?? .empty
+                    continue
+                }
                 let m = measure(image, at: i, occupied: occupied)
-                if m != measures[i] { position[i] = classify(m, at: i, previous: previous?[i], in: image) }
+                if m != measures[i] {
+                    if let stone = classify(m, at: i, previous: previous?[i], in: image) {
+                        position[i] = stone
+                    } else {
+                        unreadable.insert(i)
+                        position[i] = previous?[i] ?? .empty
+                    }
+                }
             } else if first[i] == .empty, let stone = loneStone(image, at: i, previous: previous?[i]) {
                 lone[i] = stone
             }

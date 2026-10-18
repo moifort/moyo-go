@@ -88,11 +88,22 @@ let readings = reader.read(image, previous: nil)
 print(readings.position)
 if !readings.unreadable.isEmpty { print("unreadable: \(readings.unreadable.sorted())") }
 if printLifts {
-    for row in 0..<lines { print(String(format: "row %d lift %.2f", row, reader.stoneLift(at: Intersection(col: lines / 2, row: row)))) }
+    if let camera = geometry.camera(imageWidth: image.width, imageHeight: image.height) {
+        let foot = camera.foot
+        let check = camera.project(Point(x: 3, y: 15), height: 0), direct = geometry.imagePoint(boardX: 3, boardY: 15)
+        print(String(format: "focal %.0f px, camera at (%.1f, %.1f) height %.1f spacings; (3,15) projects to %.1f,%.1f vs %.1f,%.1f", camera.focal, foot.x, foot.y, camera.height, check.x, check.y, direct.x, direct.y))
+    }
+    for row in 0..<lines {
+        let cols = [0, lines / 2, lines - 1].map { col -> String in
+            let s = reader.stoneShift(at: Intersection(col: col, row: row), in: image)
+            return String(format: "(%d) %+.2f,%+.2f", col, s.0, s.1)
+        }
+        print("row \(row) shift " + cols.joined(separator: "  "))
+    }
 }
 for i in readings.position.all where debugged.contains(i.description) {
     let occupied = Set(readings.position.stones.keys)
-    print("debug \(i): flat \(reader.measure(image, at: i, lift: 0)) lifted \(reader.measure(image, at: i)) withOccupied \(reader.measure(image, at: i, occupied: occupied)) lone \(String(describing: reader.loneStone(image, at: i, previous: nil)))")
+    print("debug \(i): flat \(reader.measure(image, at: i, shift: (0, 0))) lifted \(reader.measure(image, at: i)) withOccupied \(reader.measure(image, at: i, occupied: occupied)) lone \(String(describing: reader.loneStone(image, at: i, previous: nil)))")
 }
 if printMeasures {
     for i in readings.position.all {
@@ -119,10 +130,9 @@ if let overlay {
         ctx.addLine(to: cgPoint(geometry.imagePoint(boardX: n, boardY: t)))
     }
     ctx.strokePath()
-    let away = geometry.awayFromCamera
     for i in readings.position.all {
-        let lift = reader.stoneLift(at: i)
-        let c = geometry.imagePoint(boardX: Double(i.col) + away.0 * lift, boardY: Double(i.row) + away.1 * lift)
+        let shift = reader.stoneShift(at: i, in: image)
+        let c = geometry.imagePoint(boardX: Double(i.col) + shift.0, boardY: Double(i.row) + shift.1)
         let r = max(3.0, geometry.minSpacing * 0.25)
         let rect = CGRect(x: c.x - r, y: Double(h) - c.y - r, width: 2 * r, height: 2 * r)
         switch readings.position[i] {

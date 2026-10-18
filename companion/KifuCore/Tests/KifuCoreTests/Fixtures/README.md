@@ -44,3 +44,11 @@ Recommended set: empty board, a few stones, a dense position, a hand over the bo
   pixels of drift tipped it. The reader now lifts the disk onto the stone's body.
 - `rasante-support-decale`: same trial, four minutes later. The stand had shifted the grid by
   up to 20 px since calibration (`calibration`); `corners` are refitted on this frame.
+- `rasante-coin-gauche-lointain`: the 18:24 trial, with the near-left corner of the grid at the
+  edge of the frame. Two ghosts the app had recorded as moves: a white at (1,3), where every
+  wood cell around the intersection touches a stone and the reference fell back to a cell under
+  a stone, and a black at (5,0) under the body of the black stone at (5,1), which leans over the
+  far line. (5,0) is left unreadable, not read as empty.
+- `rasante-blanche-au-bord-droit`: the frame of `rasante-blanches-au-fond-perdues` with the
+  corners the tracker fitted on it. The white stone at (17,5) leans right, over the last line;
+  with the disk of (18,5) held on the line, it read that stone's rim as a second white.

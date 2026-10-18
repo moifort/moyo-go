@@ -60,6 +60,55 @@ public struct BoardGeometry: Sendable {
         minSpacing = minimum
     }
 
+    /// The camera behind the homography, for a frame of the given size: the focal length that
+    /// makes the board's two axes perpendicular (principal point at the frame centre), and the
+    /// pose. Nil when the view is too frontal to tell.
+    public struct Camera: Sendable {
+        let k: [Double]          // row-major 3x3 intrinsics
+        let r: [[Double]]        // columns r1, r2, r3 of the rotation
+        let t: [Double]
+        public let focal: Double
+
+        /// The camera centre in board coordinates: where it stands over the board, and how high.
+        public var foot: Point { Point(x: -(r[0][0] * t[0] + r[0][1] * t[1] + r[0][2] * t[2]), y: -(r[1][0] * t[0] + r[1][1] * t[1] + r[1][2] * t[2])) }
+        public var height: Double { -(r[2][0] * t[0] + r[2][1] * t[1] + r[2][2] * t[2]) }
+
+        /// Image of the point `height` spacings above board point `p`.
+        public func project(_ p: Point, height: Double) -> Point {
+            var c = [0.0, 0.0, 0.0]
+            for i in 0..<3 { c[i] = r[0][i] * p.x + r[1][i] * p.y + r[2][i] * height + t[i] }
+            let u = k[0] * c[0] + k[1] * c[1] + k[2] * c[2]
+            let v = k[3] * c[0] + k[4] * c[1] + k[5] * c[2]
+            let w = k[6] * c[0] + k[7] * c[1] + k[8] * c[2]
+            return Point(x: u / w, y: v / w)
+        }
+    }
+
+    public func camera(imageWidth: Int, imageHeight: Int) -> Camera? {
+        let m = toImage.m
+        let cx = Double(imageWidth) / 2, cy = Double(imageHeight) / 2
+        let h1 = (m[0], m[3], m[6]), h2 = (m[1], m[4], m[7]), h3 = (m[2], m[5], m[8])
+        // With K = diag(f, f, 1) about (cx, cy), r1 ⊥ r2 fixes f.
+        let a1 = h1.0 - cx * h1.2, b1 = h1.1 - cy * h1.2
+        let a2 = h2.0 - cx * h2.2, b2 = h2.1 - cy * h2.2
+        let f2 = -(a1 * a2 + b1 * b2) / (h1.2 * h2.2)
+        guard f2.isFinite, f2 > 0 else { return nil }
+        let f = f2.squareRoot()
+        let longest = Double(max(imageWidth, imageHeight))
+        guard f > 0.3 * longest, f < 6 * longest else { return nil }
+        var m1 = [a1 / f, b1 / f, h1.2], m2 = [a2 / f, b2 / f, h2.2]
+        var m3 = [(h3.0 - cx * h3.2) / f, (h3.1 - cy * h3.2) / f, h3.2]
+        let scale = 1 / (m1[0] * m1[0] + m1[1] * m1[1] + m1[2] * m1[2]).squareRoot()
+        // The board lies in front of the camera: its origin has a positive depth.
+        let sign: Double = m3[2] * scale > 0 ? 1 : -1
+        for i in 0..<3 { m1[i] *= scale * sign; m2[i] *= scale * sign; m3[i] *= scale * sign }
+        var r3 = [m1[1] * m2[2] - m1[2] * m2[1], m1[2] * m2[0] - m1[0] * m2[2], m1[0] * m2[1] - m1[1] * m2[0]]
+        // Up is towards the camera: the camera centre -Rᵀt must sit above the board.
+        let camZ = -(r3[0] * m3[0] + r3[1] * m3[1] + r3[2] * m3[2])
+        if camZ < 0 { r3 = r3.map { -$0 } }
+        return Camera(k: [f, 0, cx, 0, f, cy, 0, 0, 1], r: [m1, m2, r3], t: m3, focal: f)
+    }
+
     public func imagePoint(of i: Intersection) -> Point {
         toImage.apply(Point(x: Double(i.col), y: Double(i.row)))
     }

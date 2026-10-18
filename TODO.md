@@ -259,3 +259,13 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   thickness (a 9 mm stone on a 22 mm grid), scaled by the local viewing angle and capped
   at 0.45. Thinner stones or a bigger board would want another value; measuring it from
   the calibration frame (a stone's rim against its intersection) is the day it matters.
+
+- **A hand over the board reads as stones.** Skin is bright and uniform, so a finger resting
+  on an intersection reads as a white stone, and the 18:24 trial recorded two such moves
+  while a stone was being placed. The stability filter only waits for the reading to settle,
+  and a hand holding still for its eight seconds is taken as seen. Telling skin from a stone
+  wants colour, which the reader does not have (frames are gray), or motion.
+
+- **A stone hidden behind another on the far line cannot be read.** The stone just in front
+  leans over the far line, so the intersection behind it is left unreadable and keeps what it
+  had: a stone played there after its neighbour is never seen. Physical, from this angle.
