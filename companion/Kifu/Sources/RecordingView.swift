@@ -3,6 +3,8 @@ import KifuCore
 
 struct RecordingView: View {
     @Bindable var session: GameSession
+    /// The ending tapped, waiting for confirmation: a stray tap must not stop the record.
+    @State private var ending: GameResult?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -47,12 +49,36 @@ struct RecordingView: View {
 
             VStack {
                 Spacer()
-                HStack(spacing: 20) {
-                    Button("Recalibrer") { session.recalibrate() }.buttonStyle(.bordered)
-                    Button("Fin de partie") { session.endGame() }.buttonStyle(.borderedProminent)
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
+                        Button("Noir abandonne") { ending = .blackResigned }
+                        Button("Blanc abandonne") { ending = .whiteResigned }
+                    }
+                    .buttonStyle(.bordered)
+                    HStack(spacing: 12) {
+                        Button("Recalibrer") { session.recalibrate() }.buttonStyle(.bordered)
+                        Button("Partie terminée") { ending = .finished }.buttonStyle(.borderedProminent)
+                    }
                 }
                 .padding(.bottom, 20)
+                .confirmationDialog(ending.map(Self.title) ?? "", isPresented: isEnding, titleVisibility: .visible) {
+                    Button("Arrêter l'enregistrement", role: .destructive) {
+                        if let ending { session.endGame(ending) }
+                    }
+                }
             }
+        }
+    }
+
+    private var isEnding: Binding<Bool> {
+        Binding(get: { ending != nil }, set: { if !$0 { ending = nil } })
+    }
+
+    static func title(_ result: GameResult) -> String {
+        switch result {
+        case .blackResigned: return "Noir abandonne, Blanc gagne"
+        case .whiteResigned: return "Blanc abandonne, Noir gagne"
+        case .finished: return "Partie terminée, décompte à faire à la relecture"
         }
     }
 

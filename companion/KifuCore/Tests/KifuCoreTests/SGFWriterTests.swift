@@ -11,6 +11,14 @@ final class SGFWriterTests: XCTestCase {
                        "(;GM[1]FF[4]CA[UTF-8]AP[Kifu:1.0]SZ[19]DT[2026-10-14]KM[6.5])")
     }
 
+    func testResignationIsWrittenAsTheOpponentsWin() {
+        let r = GameRecord(start: Position(size: 19), date: date)
+        XCTAssertEqual(SGFWriter.write(r, result: .blackResigned),
+                       "(;GM[1]FF[4]CA[UTF-8]AP[Kifu:1.0]SZ[19]DT[2026-10-14]KM[6.5]RE[W+R])")
+        XCTAssertTrue(SGFWriter.write(r, result: .whiteResigned).contains("RE[B+R]"))
+        XCTAssertFalse(SGFWriter.write(r, result: .finished).contains("RE["))
+    }
+
     func testMovesUseColumnThenRowLetters() {
         var r = GameRecord(start: Position(size: 19), date: date)
         r.apply([Move(color: .black, point: at(15, 3)), Move(color: .white, point: at(3, 15))])

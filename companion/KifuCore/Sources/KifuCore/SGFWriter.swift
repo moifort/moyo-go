@@ -1,12 +1,29 @@
 import Foundation
 
+/// How the game ended, as chosen on the phone.
+public enum GameResult: Sendable, Equatable {
+    case blackResigned, whiteResigned
+    /// Played to the end; the count is left to the reviewing software.
+    case finished
+
+    /// The SGF `RE` value, nil when the winner is not known.
+    public var sgfValue: String? {
+        switch self {
+        case .blackResigned: return "W+R"
+        case .whiteResigned: return "B+R"
+        case .finished: return nil
+        }
+    }
+}
+
 /// Writes a GameRecord as a single-variation SGF file.
 public enum SGFWriter {
     public static let application = "Kifu:1.0"
 
-    public static func write(_ record: GameRecord) -> String {
+    public static func write(_ record: GameRecord, result: GameResult? = nil) -> String {
         var out = "(;GM[1]FF[4]CA[UTF-8]AP[\(application)]SZ[\(record.size)]DT[\(dateString(record.date))]"
         if record.handicap > 0 { out += "HA[\(record.handicap)]KM[0.5]" } else { out += "KM[6.5]" }
+        if let value = result?.sgfValue { out += "RE[\(value)]" }
         if !record.setupBlack.isEmpty { out += "AB" + record.setupBlack.map(coordinate).joined() }
         if !record.setupWhite.isEmpty { out += "AW" + record.setupWhite.map(coordinate).joined() }
         for m in record.moves {

@@ -241,8 +241,10 @@ des pierres des deux couleurs sont présentes au départ (reprise d'une
 position), elles vont dans `AB` et `AW`, sans `HA`, et noir joue en premier. Un retrait manuel validé
 par « C'est bon » s'écrit `AE[..]` dans le nœud du coup suivant.
 
-« Fin de partie » ajoute rien de plus, ferme la partie et ouvre la feuille de
-partage. La liste des parties passées est accessible depuis l'écran d'accueil.
+La partie se ferme par « Noir abandonne » (`RE[W+R]`), « Blanc abandonne »
+(`RE[B+R]`) ou « Partie terminée » (pas de `RE` : le décompte se fait à la relecture),
+chacun confirmé une fois pour qu'un geste malheureux n'arrête pas l'enregistrement.
+L'écran de fin rappelle le résultat et propose le partage. La liste des parties passées est accessible depuis l'écran d'accueil.
 
 ## Suivi en direct dans Moyo
 
@@ -265,8 +267,8 @@ de vérité. Le bandeau de partie affiche « Moyo » quand un Mac suit la partie
    quatre repères numérotés, puis grille projetée et pierres lues, indicateur
    de qualité, boutons « Reprendre les coins » et « Commencer ».
 3. **Partie** : image caméra en direct, grille, pierres acceptées (disques
-   pleins) et dernier coup marqué, compteur de coups, bandeau d'état, bouton
-   « Fin de partie ». Pas de bouton d'annulation : un coup repris sur le
+   pleins) et dernier coup marqué, compteur de coups, bandeau d'état, boutons
+   « Noir abandonne », « Blanc abandonne » et « Partie terminée ». Pas de bouton d'annulation : un coup repris sur le
    plateau est détecté comme retour en arrière, et un désaccord passe par le
    bandeau « Je ne comprends pas la position », qui apparaît par-dessus avec
    ses deux boutons.

@@ -36,6 +36,7 @@ final class GameSession {
     var lastMove: Move?
     var fileURL: URL?
     var startedAt: Date?
+    var result: GameResult?
     var cancelled = false
     /// Macs running Moyo that follow the game.
     var connectedMacs = 0
@@ -199,9 +200,11 @@ final class GameSession {
         }
     }
 
-    func endGame() {
+    func endGame(_ result: GameResult) {
+        self.result = result
         worker.async {
             self.engine.recording = false
+            self.engine.result = result
             self.writeFile()
             Task { @MainActor in self.phase = .finished }
         }
@@ -219,6 +222,7 @@ final class GameSession {
         var fileURL: URL?
         var calibration: Calibration?
         var trial: TrialLog?
+        var result: GameResult?
     }
 
     private nonisolated func handle(_ frame: CameraFrame) {
@@ -284,7 +288,7 @@ final class GameSession {
 
     private nonisolated func writeFile() {
         guard let recorder = engine.recorder else { return }
-        let text = SGFWriter.write(recorder.record)
+        let text = SGFWriter.write(recorder.record, result: engine.result)
         guard let url = engine.fileURL else { return }
         try? text.write(to: url, atomically: true, encoding: .utf8)
     }
