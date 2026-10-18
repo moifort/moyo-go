@@ -211,6 +211,9 @@ struct ReviewPanel: View {
     @Bindable var session: GameSession
     let state: GameState
 
+    /// The name of the button under the pointer, said above the buttons at once.
+    @State private var hoveredStep: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
@@ -370,8 +373,9 @@ struct ReviewPanel: View {
         .controlSize(.large)
     }
 
-    /// An icon wide enough to hit, with its name in the tooltip and for VoiceOver:
-    /// four labels would not fit across the sidebar.
+    /// An icon wide enough to hit, named above the buttons on hover and for
+    /// VoiceOver: four labels would not fit across the sidebar. The system tooltip
+    /// waits too long, and not at all on a disabled button, to explain an icon.
     private func step(
         _ title: String, systemImage: String, enabled: Bool, action: @escaping () -> Void
     ) -> some View {
@@ -379,13 +383,32 @@ struct ReviewPanel: View {
             Image(systemName: systemImage)
                 .frame(maxWidth: .infinity)
         }
-        .help(title)
         .accessibilityLabel(title)
         .disabled(!enabled)
+        .onHover { inside in
+            if inside {
+                hoveredStep = title
+            } else if hoveredStep == title {
+                hoveredStep = nil
+            }
+        }
+    }
+
+    /// One line kept in place whether or not something is hovered, so the buttons
+    /// below never jump.
+    private var stepHint: some View {
+        Text(hoveredStep ?? " ")
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.secondaryText)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHidden(true)
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            stepHint
             navigation
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
