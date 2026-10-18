@@ -92,7 +92,9 @@ cohérence. Trois filtres successifs, chacun indépendant des deux autres :
    deux cases juste au-delà de l'intersection. Une pierre seule posée un peu à côté
    de son intersection couvre l'une des quatre cases : elle est retenue si le
    bloc de 4×4 cases et les cases adjacentes privées de la plus semblable à la
-   pierre la voient tous deux.
+   pierre la voient tous deux. Son sommet couvre aussi l'intersection juste
+   au-delà, qui passe alors pour une pierre seule de même couleur : des deux,
+   seule la plus proche de l'objectif est gardée.
 2. **Stabilité temporelle.** Un changement sur une intersection n'est retenu
    que s'il est lu identique sur plusieurs images consécutives. Une main qui
    passe ne tient pas en place.

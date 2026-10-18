@@ -31,3 +31,6 @@ Recommended set: empty board, a few stones, a dense position, a hand over the bo
   its neighbours from the four adjacent cells, so the wood reference must come from further out.
 - `rasante-pierre-seule-au-fond`: same setup. A lone white stone at (3,2), near the far edge:
   its own top covers the two cells just beyond it, which then read as bright as the stone.
+- `rasante-blanche-hoshi`, `rasante-blanche-hoshi-tard`: same setup, ten minutes apart. A lone
+  white stone on the hoshi at (3,3): its top covers (3,2), which read as a second lone white stone
+  and left the recorder lost for the rest of the trial.

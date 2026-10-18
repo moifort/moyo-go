@@ -233,6 +233,7 @@ public struct IntersectionReader: Sendable {
         var occupied = Set(position.stones.keys)
         if let previous { occupied.formUnion(previous.stones.keys) }
         let first = position
+        var lone: [Intersection: Stone] = [:]
         for i in first.all where !unreadable.contains(i) {
             let hasNeighbour = (-1...1).contains { dy in
                 (-1...1).contains { dx in
@@ -243,8 +244,15 @@ public struct IntersectionReader: Sendable {
                 let m = measure(image, at: i, occupied: occupied)
                 if m != measures[i] { position[i] = Self.classify(m, previous: previous?[i], settings: settings) }
             } else if first[i] == .empty, let stone = loneStone(image, at: i, previous: previous?[i]) {
-                position[i] = stone
+                lone[i] = stone
             }
+        }
+        // A lone stone's top covers the intersection just beyond it, which then passes for a lone
+        // stone of the same colour: keep only the nearer of the two.
+        let away = (col: Int(geometry.awayFromCamera.0), row: Int(geometry.awayFromCamera.1))
+        for (i, stone) in lone {
+            let nearer = Intersection(col: i.col - away.col, row: i.row - away.row)
+            if lone[nearer] != stone { position[i] = stone }
         }
         return Readings(position: position, unreadable: unreadable)
     }
