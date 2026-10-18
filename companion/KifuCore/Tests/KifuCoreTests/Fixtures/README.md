@@ -25,3 +25,7 @@ Drop `name.jpg` (or .heic/.png) next to `name.json`, taken with the iPhone on it
 
 `FixtureTests` reads every pair; it is skipped when the folder is empty.
 Recommended set: empty board, a few stones, a dense position, a hand over the board.
+
+- `rasante-coin-serre`: iPhone 15 Pro on the stand, 18 October 2026. Two white stones side by
+  side behind two black ones in the far right corner: the white stone at (16,2) is hidden by
+  its neighbours from the four adjacent cells, so the wood reference must come from further out.

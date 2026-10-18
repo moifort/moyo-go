@@ -94,6 +94,46 @@ public struct IntersectionReader: Sendable {
         return settings.stoneHeight / 2 * cosine / sine
     }
 
+    /// Measures `i`, taking the wood from cells no stone can hide when `occupied` is given.
+    ///
+    /// Seen from low, a stone covers the cells behind it in the image, and its own top covers
+    /// the cells just beyond it: in a tight shape all four adjacent cells can show stones, and a
+    /// white stone next to white stones then reads as empty. When a neighbour in `occupied`
+    /// touches an adjacent cell, the wood comes from the cells of the surrounding 4×4 block
+    /// that no stone of `occupied` touches, minus the two just beyond `i`.
+    public func measure(_ image: GrayImage, at i: Intersection, occupied: Set<Intersection>) -> Measure {
+        let base = measure(image, at: i)
+        let n = Double(geometry.lines - 1)
+        func touched(_ x: Double, _ y: Double) -> Bool {
+            for cx in [x - 0.5, x + 0.5] {
+                for cy in [y - 0.5, y + 0.5] {
+                    let corner = Intersection(col: Int(cx.rounded()), row: Int(cy.rounded()))
+                    if corner != i, occupied.contains(corner) { return true }
+                }
+            }
+            return false
+        }
+        let near = [-0.5, 0.5]
+        guard near.contains(where: { dy in near.contains { dx in touched(Double(i.col) + dx, Double(i.row) + dy) } }) else {
+            return base
+        }
+        let away = geometry.awayFromCamera
+        var woods: [Double] = []
+        for dy in [-1.5, -0.5, 0.5, 1.5] {
+            for dx in [-1.5, -0.5, 0.5, 1.5] {
+                let x = Double(i.col) + dx, y = Double(i.row) + dy
+                guard x > 0, y > 0, x < n, y < n, !touched(x, y) else { continue }
+                let beyond = abs(dx) == 0.5 && abs(dy) == 0.5 && dx * away.0 + dy * away.1 > 0
+                if beyond { continue }
+                let s = disk(image, cx: x, cy: y, radius: settings.woodRadius)
+                woods.append(s.reduce(0, +) / Double(s.count))
+            }
+        }
+        guard woods.count >= 3 else { return base }
+        let sorted = woods.sorted()
+        return Measure(stone: base.stone, wood: sorted[sorted.count / 2], deviation: base.deviation)
+    }
+
     public func measure(_ image: GrayImage, at i: Intersection) -> Measure {
         let away = geometry.awayFromCamera
         let lift = stoneLift(at: i)
@@ -139,17 +179,37 @@ public struct IntersectionReader: Sendable {
     }
 
     /// Reads the whole board. `previous` enables the hysteresis on already-known stones.
+    ///
+    /// Two passes: the first finds the stones, the second measures again the intersections next
+    /// to one, with the wood taken from cells those stones cannot hide.
     public func read(_ image: GrayImage, previous: Position?) -> Readings {
         var position = Position(size: geometry.lines)
         var unreadable: Set<Intersection> = []
+        var measures: [Intersection: Measure] = [:]
         for i in position.all {
             let m = measure(image, at: i)
+            measures[i] = m
             if m.deviation > settings.maxDeviation {
                 unreadable.insert(i)
                 position[i] = previous?[i] ?? .empty
             } else {
                 position[i] = Self.classify(m, previous: previous?[i], settings: settings)
             }
+        }
+
+        var occupied = Set(position.stones.keys)
+        if let previous { occupied.formUnion(previous.stones.keys) }
+        guard !occupied.isEmpty else { return Readings(position: position, unreadable: unreadable) }
+        let first = position
+        for i in first.all where !unreadable.contains(i) {
+            let hasNeighbour = (-1...1).contains { dy in
+                (-1...1).contains { dx in
+                    (dx != 0 || dy != 0) && occupied.contains(Intersection(col: i.col + dx, row: i.row + dy))
+                }
+            }
+            guard hasNeighbour else { continue }
+            let m = measure(image, at: i, occupied: occupied)
+            if m != measures[i] { position[i] = Self.classify(m, previous: previous?[i], settings: settings) }
         }
         return Readings(position: position, unreadable: unreadable)
     }

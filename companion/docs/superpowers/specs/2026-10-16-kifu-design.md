@@ -83,6 +83,13 @@ cohérence. Trois filtres successifs, chacun indépendant des deux autres :
 1. **Lecture locale.** Chaque intersection est lue par rapport à son voisinage
    immédiat, jamais par rapport à une valeur globale du bois. Une ombre qui
    couvre une moitié du plateau ne change pas la lecture.
+   Le bois de référence vient des quatre cases adjacentes ; mais vue de bas,
+   une pierre cache les cases derrière elle et son sommet couvre celles juste
+   au-delà, si bien que dans une forme serrée les quatre cases peuvent montrer
+   des pierres et une blanche entourée de blanches se lit vide. Une seconde
+   passe relit donc les intersections voisines d'une pierre avec le bois pris
+   dans le bloc de 4×4 cases, hors cases touchées par une pierre et hors les
+   deux cases juste au-delà de l'intersection.
 2. **Stabilité temporelle.** Un changement sur une intersection n'est retenu
    que s'il est lu identique sur plusieurs images consécutives. Une main qui
    passe ne tient pas en place.
