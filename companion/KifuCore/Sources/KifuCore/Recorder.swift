@@ -38,6 +38,8 @@ public struct Recorder {
     public private(set) var record: GameRecord
     public private(set) var candidate: Position
     public private(set) var status: Status = .inSync
+    /// What the last image showed, before the stability filter.
+    public private(set) var lastReadings: Readings?
     public let settings: RecorderSettings
     private var reader: BoardReader
     private var filter: StabilityFilter
@@ -56,6 +58,7 @@ public struct Recorder {
     public mutating func process(_ image: GrayImage, at time: TimeInterval) -> Update {
         var update = Update()
         let readings = reader.read(image, previous: candidate)
+        lastReadings = readings
         candidate = filter.push(readings)
         let accepted = record.position
 

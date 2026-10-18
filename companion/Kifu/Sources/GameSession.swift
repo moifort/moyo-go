@@ -113,6 +113,7 @@ final class GameSession {
                 return
             }
             self.engine.reader = IntersectionReader(geometry: geometry)
+            self.engine.calibration = calibration
             let points = (0..<Self.lines).map { row in
                 (0..<Self.lines).map { col in geometry.imagePoint(of: Intersection(col: col, row: row)) }
             }
@@ -132,13 +133,16 @@ final class GameSession {
         fileURL = Self.newFileURL(for: date)
         camera?.lockForGame()
         let url = fileURL
+        let trial = TrialLog.enabled ? TrialLog(date: date) : nil
         worker.async {
             guard let reader = self.engine.reader else { return }
             let start = self.engine.lastReadPosition
             self.engine.recorder = Recorder(reader: reader, start: start, date: date)
             self.engine.fileURL = url
             self.engine.recording = true
+            self.engine.trial = trial
             self.writeFile()
+            self.logTrial([.start])
             Task { @MainActor in
                 self.acceptedPosition = start
                 self.candidatePosition = start
@@ -157,6 +161,7 @@ final class GameSession {
         worker.async {
             self.engine.recorder?.accept()
             self.writeFile()
+            self.logTrial([.accepted])
             self.publishRecorder()
         }
     }
@@ -203,6 +208,8 @@ final class GameSession {
         var frozenGray: GrayImage?
         var recording = false
         var fileURL: URL?
+        var calibration: Calibration?
+        var trial: TrialLog?
     }
 
     private nonisolated func handle(_ frame: CameraFrame) {
@@ -220,8 +227,17 @@ final class GameSession {
                 let update = recorder.process(frame.gray, at: frame.time)
                 engine.recorder = recorder
                 if !update.moves.isEmpty || update.takenBack > 0 { writeFile() }
-                if update.status == .lost, before != .lost {
+                let alert = update.status == .lost && before != .lost
+                if alert {
                     Task { @MainActor in UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+                }
+                if let trial = engine.trial {
+                    var reasons: [TrialLog.Reason] = []
+                    if !update.moves.isEmpty { reasons.append(.move) }
+                    if update.takenBack > 0 { reasons.append(.takeBack) }
+                    if alert { reasons.append(.alert) }
+                    if reasons.isEmpty, trial.isDue(at: frame.time) { reasons.append(.periodic) }
+                    if !reasons.isEmpty { logTrial(reasons, frame: frame) }
                 }
                 publishRecorder()
             } else if let reader = engine.reader {
@@ -230,6 +246,14 @@ final class GameSession {
                 Task { @MainActor in self.readPosition = readings.position }
             }
         }
+    }
+
+    /// Trial mode only: saves `frame` (the latest one by default) with the recorder's view of it.
+    private nonisolated func logTrial(_ reasons: [TrialLog.Reason], frame: CameraFrame? = nil) {
+        guard let trial = engine.trial, let recorder = engine.recorder,
+              let frame = frame ?? engine.latest else { return }
+        trial.save(frame: frame.gray, time: frame.time, reasons: reasons,
+                   calibration: engine.calibration, recorder: recorder)
     }
 
     private nonisolated func publishRecorder() {

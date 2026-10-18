@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @State private var games: [URL] = []
     @State private var showGame = false
+    @AppStorage(TrialLog.defaultsKey) private var trialMode = false
 
     var body: some View {
         NavigationStack {
@@ -13,6 +14,11 @@ struct HomeView: View {
                     } label: {
                         Label("Nouvelle partie", systemImage: "camera.viewfinder").font(.headline)
                     }
+                }
+                Section {
+                    Toggle("Mode d'essai", isOn: $trialMode)
+                } footer: {
+                    Text("Garde les images de la partie dans Fichiers > Kifu > Essai : au départ, à chaque coup, à chaque alerte et toutes les 10 s. Environ 6 Mo par image.")
                 }
                 Section("Parties enregistrées") {
                     if games.isEmpty {

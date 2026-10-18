@@ -36,7 +36,7 @@ enum CalibrationDump {
         prune(dir)
     }
 
-    private static func cgImage(of image: GrayImage) -> CGImage? {
+    static func cgImage(of image: GrayImage) -> CGImage? {
         let data = Data(image.pixels)
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(width: image.width, height: image.height, bitsPerComponent: 8, bitsPerPixel: 8,

@@ -18,7 +18,7 @@ public enum SGFWriter {
         return out + ")"
     }
 
-    static func letters(_ i: Intersection) -> String {
+    public static func letters(_ i: Intersection) -> String {
         let a = Int(UnicodeScalar("a").value)
         return String(UnicodeScalar(a + i.col)!) + String(UnicodeScalar(a + i.row)!)
     }

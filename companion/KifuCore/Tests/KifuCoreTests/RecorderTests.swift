@@ -37,6 +37,16 @@ final class RecorderTests: XCTestCase {
         XCTAssertEqual(rec.record.moves.count, 1)
     }
 
+    func testLastReadingsKeepTheRawImageReading() {
+        var (rec, reader) = make()
+        let seen = Readings(position: position([at(4, 4): .black]), unreadable: [at(2, 2)])
+        reader.queue = [seen]
+        XCTAssertNil(rec.lastReadings)
+        _ = rec.process(blank, at: 0)
+        XCTAssertEqual(rec.lastReadings, seen)
+        XCTAssertEqual(rec.candidate, Position(size: 9))
+    }
+
     func testTwoStonesOfDifferentColoursAreRecordedInOrder() {
         var (rec, reader) = make()
         let seen = Readings(position: position([at(4, 4): .black, at(2, 2): .white]))
