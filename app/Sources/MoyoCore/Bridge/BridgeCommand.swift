@@ -18,6 +18,7 @@ public struct BridgeCommand: Encodable, Sendable {
     var contents: String?
     var moveNumber: Int?
     var step: Int?
+    var kind: VariationKind?
     var blackName: String?
     var whiteName: String?
 
@@ -67,9 +68,12 @@ public struct BridgeCommand: Encodable, Sendable {
         BridgeCommand(id: id, cmd: "goto", moveNumber: moveNumber)
     }
 
-    /// Walks KataGo's own continuation: +1 adds a move, -1 takes one back.
-    public static func variation(id: Int, step: Int) -> BridgeCommand {
-        BridgeCommand(id: id, cmd: "variation", step: step)
+    /// Walks a continuation: +1 adds a move, -1 takes one back.
+    ///
+    /// `kind` picks KataGo's own line or the local sequence; starting one while
+    /// walking the other goes back to the record first.
+    public static func variation(id: Int, step: Int, kind: VariationKind = .best) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "variation", step: step, kind: kind)
     }
 
     public static func toggleDead(id: Int, row: Int, col: Int) -> BridgeCommand {

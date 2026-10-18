@@ -39,6 +39,10 @@ def session():
     bridge = BridgeSession(EventWriter(stream))
     bridge._engine = FakeEngine()
     bridge._stream = stream
+    # The local reading goes through KaTrain's query builder, which a fake engine
+    # cannot feed; the queries are kept here instead, for the tests to answer.
+    bridge._local_queries = []
+    bridge._send_local_query = lambda node, zone: bridge._local_queries.append((node, zone))
     return bridge
 
 

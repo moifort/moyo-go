@@ -102,6 +102,60 @@ public struct BestMove: Codable, Sendable, Hashable {
     public var point: Point { Point(row: row, col: col) }
 }
 
+/// The best move inside the zone of the fight, read by KataGo kept in that zone.
+///
+/// `pointsLost` is what playing it costs against the best move on the whole board.
+/// nil while the whole-board analysis has not come back, and always nil for the
+/// moves of a local sequence being walked, which nobody has measured.
+public struct LocalMove: Codable, Sendable, Hashable {
+    public let row: Int
+    public let col: Int
+    public let pointsLost: Double?
+
+    public init(row: Int, col: Int, pointsLost: Double?) {
+        self.row = row
+        self.col = col
+        self.pointsLost = pointsLost
+    }
+
+    public var point: Point { Point(row: row, col: col) }
+
+    /// What the local move costs, in words; nil when the bridge could not say.
+    ///
+    /// Under a tenth of a point the two moves are as good as each other, and a
+    /// figure of "0,0 point" would read as a rounding mistake.
+    public var costLabel: String? {
+        guard let pointsLost else { return nil }
+        let rounded = (pointsLost * 10).rounded() / 10
+        guard rounded >= 0.1 else { return "aussi bon que le meilleur coup" }
+        let figure = String(format: "%.1f", rounded).replacingOccurrences(of: ".", with: ",")
+        return "coûte \(figure) point\(rounded >= 2 ? "s" : "")"
+    }
+}
+
+/// The zone of the fight the bridge drew around the last move, bounds inclusive.
+public struct LocalZone: Codable, Sendable, Hashable {
+    public let top: Int
+    public let left: Int
+    public let bottom: Int
+    public let right: Int
+
+    public init(top: Int, left: Int, bottom: Int, right: Int) {
+        self.top = top
+        self.left = left
+        self.bottom = bottom
+        self.right = right
+    }
+}
+
+/// Whose line a variation follows.
+public enum VariationKind: String, Codable, Sendable {
+    /// KataGo's own continuation, over the whole board.
+    case best
+    /// The sequence kept inside the zone of the fight.
+    case local
+}
+
 /// What the record says about the game it holds. Every field may be absent.
 public struct GameInfo: Codable, Sendable, Hashable {
     public let blackName: String?
@@ -196,10 +250,16 @@ public struct GameState: Codable, Sendable {
     /// Moves in the record's main line. `moveNumber` is a position within it.
     public let moveCount: Int?
     public let gameInfo: GameInfo?
-    /// How far down KataGo's own continuation we have walked, 0 on the record itself.
+    /// How far down a continuation we have walked, 0 on the record itself.
     public let variationDepth: Int?
+    /// Which continuation is being walked; nil on the record itself.
+    public let variationKind: VariationKind?
     /// nil until the analysis for this position comes back.
     public let bestMove: BestMove?
+    /// nil until the local reading comes back, and when there is no fight to read.
+    public let localMove: LocalMove?
+    /// Sent before the local reading, so the player sees where it is looking.
+    public let localZone: LocalZone?
 
     public var isReviewing: Bool { status == .review }
 

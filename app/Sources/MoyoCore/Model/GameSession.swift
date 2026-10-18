@@ -427,10 +427,21 @@ public final class GameSession {
         goto(moveNumber: state.moveNumber + delta)
     }
 
-    /// One move of KataGo's own continuation, added or taken back.
-    public func stepVariation(_ delta: Int) {
+    /// One move of a continuation, added or taken back: KataGo's own, or the local one.
+    public func stepVariation(_ delta: Int, kind: VariationKind = .best) {
         guard isReviewing else { return }
-        bridge.send(.variation(id: nextID(), step: delta > 0 ? 1 : -1))
+        bridge.send(.variation(id: nextID(), step: delta > 0 ? 1 : -1, kind: kind))
+    }
+
+    /// Whether the local sequence can be started or walked further.
+    public var canWalkLocal: Bool {
+        guard let state, state.isReviewing else { return false }
+        return state.localZone != nil
+    }
+
+    /// Whether a local sequence is under way, so it can be taken back.
+    public var isWalkingLocal: Bool {
+        state?.variationKind == .local && (state?.variationDepth ?? 0) > 0
     }
 
     public var canStepBackward: Bool {

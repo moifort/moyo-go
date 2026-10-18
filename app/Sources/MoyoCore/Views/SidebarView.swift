@@ -251,9 +251,10 @@ struct ReviewPanel: View {
                 Spacer(minLength: 0)
             }
             if let depth = state.variationDepth, depth > 0 {
-                Text("Proposition de KataGo, \(depth) coup\(depth > 1 ? "s" : "")")
+                let local = state.variationKind == .local
+                Text("\(local ? "Séquence locale" : "Proposition de KataGo"), \(depth) coup\(depth > 1 ? "s" : "")")
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.bestMove)
+                    .foregroundStyle(local ? Theme.localMove : Theme.bestMove)
             } else if let event = state.gameInfo?.event {
                 Text(event)
                     .font(.system(size: 11))
@@ -324,6 +325,28 @@ struct ReviewPanel: View {
         ]
     }
 
+    /// The local proposal, with what it costs against the whole board: often the
+    /// lesson itself, when the fight is worth less than the big point elsewhere.
+    private var localLegend: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Circle()
+                .fill(Theme.localMove)
+                .frame(width: 9, height: 9)
+            Group {
+                if let cost = state.localMove?.costLabel, state.variationKind != .local {
+                    Text("Meilleur coup local, \(cost)")
+                } else if state.localMove == nil, state.variationKind != .local {
+                    Text("Lecture du combat local…")
+                } else {
+                    Text("Meilleur coup local")
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     /// The same moves as the Revue menu and its arrow keys, within reach of the mouse:
     /// a record dropped on the window is read with the pointer as often as with keys.
     private var navigation: some View {
@@ -351,6 +374,17 @@ struct ReviewPanel: View {
                 }
                 step("Dérouler la proposition de KataGo", systemImage: "sparkles", enabled: true) {
                     session.stepVariation(1)
+                }
+            }
+            HStack(spacing: 7) {
+                step(
+                    "Remonter la séquence locale", systemImage: "arrow.uturn.backward.circle",
+                    enabled: session.isWalkingLocal
+                ) {
+                    session.stepVariation(-1, kind: .local)
+                }
+                step("Dérouler la séquence locale", systemImage: "scope", enabled: session.canWalkLocal) {
+                    session.stepVariation(1, kind: .local)
                 }
             }
         }
@@ -381,6 +415,9 @@ struct ReviewPanel: View {
                 Text("Meilleur coup selon KataGo")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
+            }
+            if state.localZone != nil {
+                localLegend
             }
             navigation
             Button {

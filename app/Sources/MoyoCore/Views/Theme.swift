@@ -40,6 +40,10 @@ public enum Theme {
     /// stone, so it reads as "play here" rather than as an annotation.
     public static let bestMove = Color(red: 0.247, green: 0.725, blue: 0.314)
 
+    /// The best move inside the zone of the fight. A blue far from KaTrain's green,
+    /// so the two proposals are never mistaken for each other.
+    public static let localMove = Color(red: 0.255, green: 0.553, blue: 0.894)
+
     /// Marks the last move by contrast with the stone it sits on, rather than with a
     /// colour of its own.
     public static func lastMoveMarker(on stone: PlayerColor) -> Color {

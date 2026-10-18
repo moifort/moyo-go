@@ -39,6 +39,10 @@ def session():
     bridge = BridgeSession(EventWriter(stream))
     bridge._engine = FakeEngine()
     bridge._stream = stream
+    # The local reading goes through KaTrain's query builder, which a fake engine
+    # cannot feed; the queries are kept here instead, for the tests to answer.
+    bridge._local_queries = []
+    bridge._send_local_query = lambda node, zone: bridge._local_queries.append((node, zone))
     return bridge
 
 
@@ -231,3 +235,114 @@ def test_a_line_that_disagrees_with_the_board_is_not_adopted(reviewing):
     run(reviewing, reviewing.step_variation, 4, 1)
     assert errors(reviewing)[-1]["code"] == "no_variation"
     assert last_state(reviewing)["variation_depth"] == 1
+
+
+# -- local reading -----------------------------------------------------------
+
+
+def local_answer(pv, score_lead=0.0):
+    """Stands in for KataGo's answer to a query kept inside the zone."""
+    return {"moveInfos": [{"move": pv[0], "order": 0, "scoreLead": score_lead, "pv": list(pv)}]}
+
+
+def test_only_the_position_on_screen_is_read_locally(reviewing):
+    assert [node for node, _ in reviewing._local_queries] == [reviewing._line[5]]
+    run(reviewing, reviewing.goto, 2, 2)
+    run(reviewing, reviewing.goto, 3, 5)
+    # Coming back to a position already read does not ask again.
+    assert [node for node, _ in reviewing._local_queries] == [reviewing._line[5], reviewing._line[2]]
+
+
+def test_the_zone_is_sent_before_the_answer(reviewing):
+    state = last_state(reviewing)
+    # The last move is B[gc]: row 2, col 6 on a 9×9 board.
+    assert state["local_zone"] == {"top": 0, "left": 2, "bottom": 6, "right": 8}
+    assert state["local_move"] is None
+
+
+def test_the_local_move_comes_with_its_cost(reviewing):
+    node = reviewing._line[5]
+    analysed(node, ["E7"])
+    node.analysis["root"]["scoreLead"] = 4.0  # Black leads by 4 with White to move
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6"], score_lead=6.5))
+    state = last_state(reviewing)
+    assert state["local_move"] == {"row": 3, "col": 6, "points_lost": 2.5}
+    # The whole-board marker is untouched by the local reading.
+    assert state["best_move"]["col"] == 4
+
+
+def test_a_late_answer_for_another_position_is_kept_silent(reviewing):
+    node = reviewing._line[5]
+    run(reviewing, reviewing.goto, 2, 2)
+    count = len([e for e in events(reviewing) if e["event"] == "state"])
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]))
+    assert len([e for e in events(reviewing) if e["event"] == "state"]) == count
+    run(reviewing, reviewing.goto, 3, 5)
+    assert last_state(reviewing)["local_move"]["col"] == 6
+
+
+def test_the_local_sequence_is_walked_and_stops_at_the_zone(reviewing):
+    node = reviewing._line[5]
+    # The third move leaves the zone, whose left edge is column C.
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6", "A1"]))
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    state = last_state(reviewing)
+    assert state["variation_kind"] == "local"
+    assert state["variation_depth"] == 1
+    assert state["best_move"] is None
+    assert state["local_move"] == {"row": 3, "col": 7, "points_lost": None}
+
+    run(reviewing, reviewing.step_variation, 3, 1, "local")
+    run(reviewing, reviewing.step_variation, 4, 1, "local")
+    assert errors(reviewing)[-1]["message"] == "la séquence locale s'arrête là"
+    assert last_state(reviewing)["variation_depth"] == 2
+
+
+def test_switching_lines_starts_again_from_the_record(reviewing):
+    node = reviewing._line[5]
+    analysed(node, ["A1", "A9"])
+    run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6", "H6"]))
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    run(reviewing, reviewing.step_variation, 3, 1, "local")
+    run(reviewing, reviewing.step_variation, 4, 1, "best")
+    state = last_state(reviewing)
+    assert state["variation_kind"] == "best"
+    assert state["variation_depth"] == 1
+    assert state["local_zone"] is None
+    assert len(node.children) == 1  # the local branch is gone
+
+    run(reviewing, reviewing.step_variation, 5, -1)
+    assert last_state(reviewing)["variation_kind"] is None
+    assert last_state(reviewing)["local_zone"] is not None
+
+
+def test_a_local_walk_waits_for_its_answer(reviewing):
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    assert errors(reviewing)[-1]["message"] == "l'analyse locale n'est pas encore revenue"
+
+
+def test_the_first_position_has_no_fight(reviewing):
+    run(reviewing, reviewing.goto, 2, 0)
+    assert last_state(reviewing)["local_zone"] is None
+    run(reviewing, reviewing.step_variation, 3, 1, "local")
+    assert errors(reviewing)[-1]["message"] == "aucun combat local à cette position"
+
+
+def test_a_whole_board_choice_inside_the_zone_is_the_local_move_too(reviewing):
+    node = reviewing._line[5]
+    analysed(node, ["G6", "H6"])  # inside the zone around G7
+    # The local search, noisier, ranks another move first.
+    answer = {
+        "moveInfos": [
+            {"move": "H7", "order": 0, "scoreLead": 0.3, "pv": ["H7"]},
+            {"move": "G6", "order": 1, "scoreLead": 0.6, "pv": ["G6", "H5", "H6"]},
+        ]
+    }
+    run(reviewing, reviewing._on_local_analysis, node, answer)
+    state = last_state(reviewing)
+    assert state["local_move"] == {"row": 3, "col": 6, "points_lost": 0.0}
+    assert state["best_move"]["row"] == 3 and state["best_move"]["col"] == 6
+    # The sequence walked is the local reading of that same move.
+    run(reviewing, reviewing.step_variation, 2, 1, "local")
+    run(reviewing, reviewing.step_variation, 3, 1, "local")
+    assert last_state(reviewing)["local_move"] == {"row": 3, "col": 7, "points_lost": None}

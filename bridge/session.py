@@ -23,6 +23,7 @@ from katrain.core.constants import (
 from katrain.core.game import Game, IllegalMoveException
 from pysgf import Move
 
+import local
 import record
 import review
 import scoring
@@ -57,6 +58,13 @@ class BridgeSession(KaTrainHost):
         #: actually played walks into the record itself — which must never be pruned.
         self._variation: List[tuple] = []
         self._anchor_pv: List[str] = []
+        #: Whose line the variation follows: "best" for KataGo's own, "local" for
+        #: the reading kept inside the zone of the fight.
+        self._variation_kind = "best"
+        #: The local reading of each position looked at, by node id: its zone, and
+        #: KataGo's answer once it is back. Only positions put on screen are asked
+        #: for, so a record costs one extra analysis per position actually read.
+        self._local: Dict[int, Dict[str, Any]] = {}
         self._game_info: Dict[str, Any] = {}
         #: Nodes already pushed to the front of the queue, by id. `request_analysis`
         #: has no guard against duplicates, and the tree holds every node for the
@@ -95,6 +103,10 @@ class BridgeSession(KaTrainHost):
         self._emit_progress()
         best = self._best_move()
         key = None if best is None else (best["row"], best["col"])
+        # The local move's cost is measured against this very analysis, so a
+        # deeper reading of the whole board can change it under a still marker.
+        nearby = self._local_move()
+        key = (key, None if nearby is None else nearby["points_lost"])
         if key != self._emitted_best:
             self._emitted_best = key
             self._emit_state()
@@ -376,6 +388,8 @@ class BridgeSession(KaTrainHost):
         self._index = 0
         self._variation = []
         self._anchor_pv = []
+        self._variation_kind = "best"
+        self._local = {}
         self._game_info = {}
         self._boosted = set()
         self._emitted_best = None
@@ -407,6 +421,7 @@ class BridgeSession(KaTrainHost):
         self._index = len(self._line) - 1
         self.game.set_current_node(self._line[self._index])
         self._boost_window()
+        self._request_local()
         self._emit_state(command_id)
 
     def export_sgf(self, command_id, black_name, white_name):
@@ -442,15 +457,38 @@ class BridgeSession(KaTrainHost):
         self.game.set_current_node(self._line[self._index])
         self._emitted_best = None
         self._boost_window()
+        self._request_local()
         self._emit_state(command_id)
 
-    def step_variation(self, command_id, step):
-        """Walks KataGo's own continuation, one move per call, colours alternating."""
+    def step_variation(self, command_id, step, kind="best"):
+        """Walks a continuation one move per call, colours alternating.
+
+        `kind` picks the line: KataGo's own, or the local sequence. Starting one
+        while walking the other goes back to the record first, so the board never
+        shows half of each.
+        """
         self._require_review()
+        if kind not in ("best", "local"):
+            raise CommandError("bad_arguments", f"unknown variation kind '{kind}'")
         if int(step) > 0:
+            if self._variation and kind != self._variation_kind:
+                self._prune_variation()
+                self.game.set_current_node(self._line[self._index])
+            self._variation_kind = kind
             self._push_variation(command_id)
         else:
             self._pop_variation(command_id)
+
+    def _anchor_line(self) -> List[str]:
+        """The continuation the current variation follows, as it stands right now."""
+        anchor = self._line[self._index]
+        if self._variation_kind == "best":
+            return review.variation(anchor)
+        reading = self._local.get(id(anchor))
+        if not reading or reading["analysis"] is None:
+            return []
+        prefer = local.whole_board_choice(anchor, reading["zone"], self._size())
+        return local.variation(reading["analysis"], reading["zone"], self._size(), prefer)
 
     def _refresh_anchor_pv(self) -> None:
         """Takes a longer continuation from the anchor once the analysis has deepened.
@@ -461,7 +499,7 @@ class BridgeSession(KaTrainHost):
         only when it still begins with the moves already on the board, so the branch
         under the player's eyes is extended and never rewritten.
         """
-        fresh = review.variation(self._line[self._index])
+        fresh = self._anchor_line()
         walked = len(self._variation)
         if len(fresh) <= len(self._anchor_pv):
             return
@@ -472,11 +510,13 @@ class BridgeSession(KaTrainHost):
     def _push_variation(self, command_id) -> None:
         anchor = self._line[self._index]
         if not self._variation:
-            self._anchor_pv = review.variation(anchor)
+            self._anchor_pv = self._anchor_line()
         else:
             self._refresh_anchor_pv()
         depth = len(self._variation)
         if depth >= len(self._anchor_pv):
+            if self._variation_kind == "local":
+                self._refuse_local_end(anchor)
             # Worth telling apart: one is a wait, the other is the end of the line.
             if not anchor.analysis_complete:
                 raise CommandError(
@@ -496,6 +536,14 @@ class BridgeSession(KaTrainHost):
         self._variation.append((node, played, created))
         self._emit_state(command_id)
 
+    def _refuse_local_end(self, anchor) -> None:
+        reading = self._local.get(id(anchor))
+        if not reading or reading["zone"] is None:
+            raise CommandError("no_variation", "aucun combat local à cette position")
+        if reading["analysis"] is None:
+            raise CommandError("no_variation", "l'analyse locale n'est pas encore revenue")
+        raise CommandError("no_variation", "la séquence locale s'arrête là")
+
     def _pop_variation(self, command_id) -> None:
         if not self._variation:
             raise CommandError("no_variation", "il n'y a pas de variante à remonter")
@@ -505,6 +553,7 @@ class BridgeSession(KaTrainHost):
             parent.children = [child for child in parent.children if child is not node]
         if not self._variation:
             self._anchor_pv = []
+            self._variation_kind = "best"
         self._emit_state(command_id)
 
     def _prune_variation(self) -> None:
@@ -514,6 +563,7 @@ class BridgeSession(KaTrainHost):
             if created:
                 parent.children = [child for child in parent.children if child is not node]
         self._anchor_pv = []
+        self._variation_kind = "best"
 
     def _boost_window(self) -> None:
         """Pushes the current node and the ones just behind it to the front of the queue."""
@@ -533,18 +583,79 @@ class BridgeSession(KaTrainHost):
 
         Inside a variation the marker keeps coming from the anchor's own line, which
         is also what the next step will play. Those nodes carry no analysis of their
-        own, and asking for one would cost a wait for no gain in the reading.
+        own, and asking for one would cost a wait for no gain in the reading. A local
+        sequence being walked has no whole-board marker: it is not the best move.
         """
         size = serialize.board_size(self.game)
         depth = len(self._variation)
         if depth == 0:
             return review.best_move(self._line[self._index], size)
+        if self._variation_kind != "best":
+            return None
+        return self._next_in_variation(0.0)
+
+    def _next_in_variation(self, points_lost) -> Optional[Dict[str, Any]]:
+        depth = len(self._variation)
         if depth >= len(self._anchor_pv):
             return None
         move = Move.from_gtp(self._anchor_pv[depth], player=self.game.current_node.next_player)
         if move.is_pass:
             return None
-        return {**to_display_coords(move.coords, size), "points_lost": 0.0}
+        return {**to_display_coords(move.coords, self._size()), "points_lost": points_lost}
+
+    # -- local reading -------------------------------------------------------
+
+    def _request_local(self) -> None:
+        """Asks for the local reading of the position on screen, once per position."""
+        node = self._line[self._index]
+        if self._engine is None or id(node) in self._local:
+            return
+        zone = local.region(serialize.stone_map(self.game), self._size(), serialize.last_move(self.game))
+        self._local[id(node)] = {"zone": zone, "analysis": None}
+        if zone is None:
+            return
+        self._send_local_query(node, zone)
+
+    def _send_local_query(self, node, zone) -> None:
+        """The only call that reaches KataGo for a local reading; tests replace it."""
+        local.request(
+            self._engine,
+            node,
+            zone,
+            self._size(),
+            on_result=lambda analysis: self.submit(self._on_local_analysis, node, analysis),
+            on_error=lambda analysis: self._log_stderr(f"local analysis failed: {analysis}"),
+            priority=PRIORITY_DEFAULT,
+        )
+
+    def _on_local_analysis(self, node, analysis) -> None:
+        reading = self._local.get(id(node))
+        if reading is None or self._status != "review":
+            return  # another record has been opened since
+        reading["analysis"] = analysis
+        if node is self._line[self._index]:
+            self._emit_state()
+
+    def _local_reading(self) -> Optional[Dict[str, Any]]:
+        if self._variation and self._variation_kind != "local":
+            return None
+        return self._local.get(id(self._line[self._index]))
+
+    def _local_zone(self) -> Optional[Dict[str, int]]:
+        """The zone on screen: on the record itself, and while its sequence is walked."""
+        reading = self._local_reading()
+        return reading["zone"] if reading else None
+
+    def _local_move(self) -> Optional[Dict[str, Any]]:
+        """The local marker: the zone's best move, or the local sequence's next one."""
+        reading = self._local_reading()
+        if not reading or reading["analysis"] is None:
+            return None
+        if self._variation:
+            return self._next_in_variation(None)
+        node = self._line[self._index]
+        prefer = local.whole_board_choice(node, reading["zone"], self._size())
+        return local.best_move(reading["analysis"], node, self._size(), prefer)
 
     def _emit_review_state(self, command_id: Optional[int] = None) -> None:
         self._writer.emit(
@@ -561,7 +672,10 @@ class BridgeSession(KaTrainHost):
                     "score_history": [node.score for node in self._line],
                     "game_info": self._game_info,
                     "variation_depth": len(self._variation),
+                    "variation_kind": self._variation_kind if self._variation else None,
                     "best_move": self._best_move(),
+                    "local_move": self._local_move(),
+                    "local_zone": self._local_zone(),
                 },
             ),
         )

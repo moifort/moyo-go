@@ -57,10 +57,16 @@ public struct BoardView: View {
         if state.bestMove != nil {
             description += ", meilleur coup proposé"
         }
+        if state.localMove != nil {
+            description += ", coup local proposé"
+        }
         return description
     }
 
     private func draw(in context: inout GraphicsContext, geometry: BoardGeometry) {
+        if let zone = state.localZone {
+            drawLocalZone(in: &context, geometry: geometry, zone: zone)
+        }
         drawGrid(in: &context, geometry: geometry)
         drawStarPoints(in: &context, geometry: geometry)
         drawStones(in: &context, geometry: geometry)
@@ -69,19 +75,66 @@ public struct BoardView: View {
         } else {
             drawLastMove(in: &context, geometry: geometry)
         }
+        if let nearby = state.localMove, nearby.point != state.bestMove?.point {
+            drawProposal(in: &context, geometry: geometry, at: nearby.point, color: Theme.localMove)
+        }
         if let best = state.bestMove {
-            drawBestMove(in: &context, geometry: geometry, at: best.point)
+            drawProposal(in: &context, geometry: geometry, at: best.point, color: Theme.bestMove)
+            if state.localMove?.point == best.point {
+                drawLocalRing(in: &context, geometry: geometry, at: best.point)
+            }
         }
     }
 
-    /// KataGo's first choice, drawn last so nothing sits on top of it.
+    /// The zone the local reading is kept in, washed under the grid.
+    ///
+    /// Half a cell past its outer lines, so the stones on its edge sit inside it.
+    /// Faint on purpose: it says where the reading looks, and the board stays the
+    /// thing being read.
+    private func drawLocalZone(in context: inout GraphicsContext, geometry: BoardGeometry, zone: LocalZone) {
+        let topLeft = geometry.position(row: zone.top, col: zone.left)
+        let bottomRight = geometry.position(row: zone.bottom, col: zone.right)
+        let inset = geometry.stoneRadius * 1.05
+        let rect = CGRect(
+            x: topLeft.x - inset, y: topLeft.y - inset,
+            width: bottomRight.x - topLeft.x + inset * 2,
+            height: bottomRight.y - topLeft.y + inset * 2
+        )
+        let path = Path(roundedRect: rect, cornerRadius: geometry.stoneRadius * 0.5)
+        context.fill(path, with: .color(Theme.localMove.opacity(0.10)))
+        context.stroke(
+            path,
+            with: .color(Theme.localMove.opacity(0.55)),
+            style: StrokeStyle(lineWidth: max(1, geometry.lineWidth * 1.5), dash: [geometry.stoneRadius * 0.4])
+        )
+    }
+
+    /// When the best move is already the local one, a blue ring around the green
+    /// disc says so without hiding either.
+    private func drawLocalRing(in context: inout GraphicsContext, geometry: BoardGeometry, at point: Point) {
+        let center = geometry.position(of: point)
+        let radius = geometry.stoneRadius * 1.0
+        let rect = CGRect(
+            x: center.x - radius, y: center.y - radius,
+            width: radius * 2, height: radius * 2
+        )
+        context.stroke(
+            Path(ellipseIn: rect),
+            with: .color(Theme.localMove),
+            lineWidth: max(1.2, geometry.stoneRadius * 0.16)
+        )
+    }
+
+    /// A proposed move — KataGo's first choice, or the local one — drawn last so
+    /// nothing sits on top of it.
     ///
     /// A full disc rather than a ring: the point is to see a move, not a mark. The
     /// bridge only ever sends an empty intersection, so it can never cover a stone.
-    private func drawBestMove(
+    private func drawProposal(
         in context: inout GraphicsContext,
         geometry: BoardGeometry,
-        at point: Point
+        at point: Point,
+        color: Color
     ) {
         let center = geometry.position(of: point)
         let radius = geometry.stoneRadius
@@ -90,7 +143,7 @@ public struct BoardView: View {
             width: radius * 2, height: radius * 2
         )
         let path = Path(ellipseIn: rect)
-        context.fill(path, with: .color(Theme.bestMove.opacity(0.92)))
+        context.fill(path, with: .color(color.opacity(0.92)))
         // The wood and the green are close in value; a darker edge keeps the disc
         // from melting into the board at small sizes.
         context.stroke(

@@ -100,6 +100,16 @@ public struct ReviewCommands: Commands {
             Button("Remonter la proposition") { session?.stepVariation(-1) }
                 .keyboardShortcut(.leftArrow, modifiers: .option)
                 .disabled(session?.state?.variationDepth ?? 0 == 0)
+
+            Divider()
+
+            Button("Dérouler la séquence locale") { session?.stepVariation(1, kind: .local) }
+                .keyboardShortcut(.rightArrow, modifiers: [.option, .shift])
+                .disabled(session?.canWalkLocal != true)
+
+            Button("Remonter la séquence locale") { session?.stepVariation(-1, kind: .local) }
+                .keyboardShortcut(.leftArrow, modifiers: [.option, .shift])
+                .disabled(session?.isWalkingLocal != true)
         }
     }
 }

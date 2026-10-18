@@ -53,6 +53,29 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   player already saw reads as a replay, not a game. Worth revisiting if a redo
   button ever appears.
 
+- **Drawing the zone of the fight by hand.** The local reading looks at a zone the
+  bridge deduces: the last move, every group touching it, two lines of margin, seven
+  lines a side at least. That guess is wrong whenever the last move was itself a
+  tenuki, or the fight that matters is not the one just played. Dragging a rectangle
+  on the board would settle it, and the dashed frame already shows what the bridge
+  chose. Deferred because a click on the board means nothing in a review today (see
+  "A record under review is read-only"), and the gesture deserves its own decision
+  rather than being slipped in with the first version.
+
+- **Local reading during a game against the AI.** The zone, the blue marker and the
+  local sequence exist in a review only, because that is where the best move is shown
+  at all. Bringing them into a game means showing a hint while the player is still
+  to move, which is a teaching mode, and is waiting on the same decision.
+
+- **One zone at a time.** A board with two fights gets the one around the last move.
+  Reading several would mean one more KataGo query per zone and a way to tell their
+  markers apart.
+
+- **The local sequence stops where KataGo leaves the zone.** Both colours are kept
+  inside for twelve moves; past that, or at the first pass, the walk ends. A fight
+  that needs a ko threat elsewhere is therefore cut at the threat. Following the
+  reading out of the zone would need a rule for when it is still "local".
+
 ## Design
 
 - **A record under review is read-only.** Clicking the board does nothing, not even

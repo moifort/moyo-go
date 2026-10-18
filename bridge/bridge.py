@@ -58,7 +58,9 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
     elif name == "goto":
         session.submit(session.goto, command_id, int(command["move_number"]))
     elif name == "variation":
-        session.submit(session.step_variation, command_id, int(command["step"]))
+        session.submit(
+            session.step_variation, command_id, int(command["step"]), command.get("kind") or "best"
+        )
     elif name == "state":
         session.submit(session.state, command_id)
     else:
