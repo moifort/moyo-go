@@ -4,10 +4,13 @@ import SwiftUI
 /// better on a dark surface, and glass over a light background turns milky.
 public enum Theme {
     public static let windowBackground = Color(red: 0.133, green: 0.122, blue: 0.106)
-    public static let wood = Color(red: 0.874, green: 0.745, blue: 0.545)
-    public static let gridLine = Color(red: 0.290, green: 0.220, blue: 0.137)
-    public static let blackStone = Color(red: 0.102, green: 0.090, blue: 0.078)
-    public static let whiteStone = Color(red: 0.969, green: 0.961, blue: 0.945)
+    public static let wood = Color(red: 0xDC / 255, green: 0xB3 / 255, blue: 0x5C / 255)
+    public static let gridLine = Color(red: 0x3A / 255, green: 0x2A / 255, blue: 0x10 / 255)
+    public static let blackStone = Color(red: 0x1A / 255, green: 0x1A / 255, blue: 0x1A / 255)
+    public static let whiteStone = Color(red: 0xF7 / 255, green: 0xF7 / 255, blue: 0xF2 / 255)
+    /// A fine edge round each stone, so a white one keeps its outline on the wood.
+    public static let blackStoneEdge = Color.black
+    public static let whiteStoneEdge = Color(red: 0x55 / 255, green: 0x55 / 255, blue: 0x55 / 255)
 
     /// Lifts the sidebar slightly off the window background so its glass reads as
     /// glass rather than as a flat panel.
@@ -36,6 +39,10 @@ public enum Theme {
 
     public static func stone(_ color: PlayerColor) -> Color {
         color == .black ? blackStone : whiteStone
+    }
+
+    public static func stoneEdge(_ color: PlayerColor) -> Color {
+        color == .black ? blackStoneEdge : whiteStoneEdge
     }
 
     /// A stone agreed to be dead is not removed, it dims — but only slightly. Faded

@@ -41,8 +41,6 @@ public struct BoardView: View {
                     draw(in: &context, geometry: geometry)
                 }
                 .frame(width: side, height: side)
-                .background(Theme.wood)
-                .clipShape(RoundedRectangle(cornerRadius: side * 0.015, style: .continuous))
                 // A Canvas draws but does not take part in hit testing, so clicks are
                 // caught by an explicit shape laid over it. Drawing and interaction
                 // stay separate.
@@ -156,6 +154,11 @@ public struct BoardView: View {
     }
 
     private func draw(in context: inout GraphicsContext, geometry: BoardGeometry) {
+        context.fill(
+            Path(roundedRect: geometry.woodRect, cornerRadius: geometry.woodCornerRadius),
+            with: .color(Theme.wood)
+        )
+        drawCoordinates(in: &context, geometry: geometry)
         if let draft {
             drawLocalZone(in: &context, geometry: geometry, zone: LocalZone(spanning: draft.start, draft.end), emphasis: 2)
         } else if let zone = state.localZone, showsLocal || state.localZoneDrawn == true {
@@ -290,6 +293,21 @@ public struct BoardView: View {
         context.stroke(path, with: .color(Theme.gridLine), lineWidth: geometry.lineWidth)
     }
 
+    /// Letters below the wood and numbers to its left, row 1 at the bottom.
+    private func drawCoordinates(in context: inout GraphicsContext, geometry: BoardGeometry) {
+        let font = Font.system(size: geometry.labelSize)
+        for index in 0..<geometry.size {
+            context.draw(
+                Text(BoardGeometry.columnLabel(index)).font(font).foregroundStyle(Theme.secondaryText),
+                at: geometry.columnLabelPosition(index), anchor: .center
+            )
+            context.draw(
+                Text(geometry.rowLabel(index)).font(font).foregroundStyle(Theme.secondaryText),
+                at: geometry.rowLabelPosition(index), anchor: .trailing
+            )
+        }
+    }
+
     private func drawStarPoints(in context: inout GraphicsContext, geometry: BoardGeometry) {
         for point in geometry.starPoints {
             let center = geometry.position(of: point)
@@ -315,6 +333,11 @@ public struct BoardView: View {
             let path = Path(ellipseIn: rect)
             guard dead.contains(stone.point) else {
                 context.fill(path, with: .color(colour))
+                context.stroke(
+                    path,
+                    with: .color(Theme.stoneEdge(stone.color)),
+                    lineWidth: geometry.step * (stone.color == .black ? 0.5 : 0.8) / 28
+                )
                 continue
             }
             // A dead stone is dimmed, not emptied: it has to stay recognisably black
