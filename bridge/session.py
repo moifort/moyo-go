@@ -94,6 +94,12 @@ class BridgeSession(KaTrainHost):
         #: has nothing left to play in the zone.
         self._local_extension: Optional[Dict[str, Any]] = None
         self._game_info: Dict[str, Any] = {}
+        #: Every node the record came with, branches included, and the command that
+        #: opened it. Once all of them are analysed the record goes back to the app
+        #: to be written over its file; variation nodes are not part of it.
+        self._recorded: List[Any] = []
+        self._record_command: Optional[int] = None
+        self._record_sent = False
         #: Nodes already pushed to the front of the queue, by id. `request_analysis`
         #: has no guard against duplicates, and the tree holds every node for the
         #: session's lifetime, so the ids cannot be reused under us.
@@ -134,6 +140,7 @@ class BridgeSession(KaTrainHost):
     def _on_review_advanced(self) -> None:
         """An analysis came back while reviewing: move the gauge, and the marker."""
         self._emit_progress()
+        self._send_analysed_record()
         best = self._best_move()
         key = None if best is None else (best["row"], best["col"])
         # The local move's cost is measured against this very analysis, so a
@@ -194,6 +201,26 @@ class BridgeSession(KaTrainHost):
             return
         self._emitted_progress = done
         self._writer.emit("analysis_progress", None, done=done, total=len(self._line))
+
+    def _send_analysed_record(self) -> None:
+        """Hands the record back with its analysis, once every position has one.
+
+        Only if KataGo did some of the work: a file that came fully analysed would
+        be written over with what it already says. The text leaves out the variation
+        being walked — the file gets its analysis, not the player's exploration.
+        """
+        if self._record_sent or not self._recorded:
+            return
+        if not all(node.analysis_complete for node in self._recorded):
+            return
+        self._record_sent = True
+        if all(node.analysis_from_sgf for node in self._recorded):
+            return
+        self._writer.emit(
+            "record_analysed",
+            self._record_command,
+            contents=record.text(self.game.root, nodes=self._recorded),
+        )
 
     def _maybe_play_ai_move(self) -> None:
         """Reproduces the core's own trigger condition for an AI move.
@@ -501,6 +528,9 @@ class BridgeSession(KaTrainHost):
         self._local_wanted = False
         self._local_extension = None
         self._game_info = {}
+        self._recorded = []
+        self._record_command = None
+        self._record_sent = False
         self._boosted = set()
         self._emitted_best = None
         self._emitted_progress = None
@@ -528,6 +558,8 @@ class BridgeSession(KaTrainHost):
         self.game = Game(self, self._engine, move_tree=root, sgf_filename=name)
         self._line = review.main_line(self.game.root)
         self._game_info = review.game_info(self.game.root)
+        self._recorded = list(self.game.root.nodes_in_tree)
+        self._record_command = command_id
         self._index = len(self._line) - 1
         self.game.set_current_node(self._line[self._index])
         self._boost_window()
@@ -548,7 +580,7 @@ class BridgeSession(KaTrainHost):
         else:
             text = record.text(
                 self.game.root,
-                line=self.game.current_node.nodes_from_root,
+                nodes=self.game.current_node.nodes_from_root,
                 properties={
                     "AP": "Moyo",
                     "DT": record.sgf_date(self.game.root.get_property("DT", None)),

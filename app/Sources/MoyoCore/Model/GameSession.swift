@@ -134,6 +134,12 @@ public final class GameSession {
     /// The record's file name, for the window title.
     public private(set) var recordName: String?
 
+    /// The record on screen as it was read from disk, and the `load_sgf` that
+    /// opened it. Its analysis is written back to that file, and only an answer to
+    /// that very command may write it.
+    private var openedRecord: (record: SGFImport.Record, command: Int)?
+    var openedRecordCommand: Int? { openedRecord?.command }
+
     /// A record that arrived before the engine was ready, read while its sandbox
     /// grant was live and held until the bridge can take it.
     private var recordWaiting: SGFImport.Record?
@@ -237,6 +243,15 @@ public final class GameSession {
                 name: SGFExport.suggestedName(recordName: isReviewing ? recordName : nil, date: .now),
                 contents: contents
             )
+
+        case .recordAnalysed(let id, let contents):
+            guard let opened = openedRecord, opened.command == id else { break }
+            openedRecord = nil
+            do {
+                try SGFExport.rewrite(contents, over: opened.record)
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
 
         case .failure(_, let code, let message):
             // Some refusals are answers, not faults, and a keystroke that arrives a
@@ -348,6 +363,7 @@ public final class GameSession {
         state = nil
         lastErrorMessage = nil
         recordName = nil
+        openedRecord = nil
         analysisProgress = nil
         thinking.ended()
         bridge.send(
@@ -399,6 +415,7 @@ public final class GameSession {
         state = nil
         lastErrorMessage = nil
         recordName = nil
+        openedRecord = nil
         analysisProgress = nil
         bridge.send(
             .newGame(
@@ -477,6 +494,7 @@ public final class GameSession {
             load(try SGFImport.read(url))
         } catch {
             recordName = nil
+            openedRecord = nil
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -488,12 +506,15 @@ public final class GameSession {
         analysisProgress = nil
         lastErrorMessage = nil
         recordName = record.name
+        openedRecord = nil
         thinking.ended()
         guard phase == .running else {
             recordWaiting = record
             return
         }
-        bridge.send(.loadSGF(id: nextID(), name: record.name, contents: record.contents))
+        let command = nextID()
+        if record.url != nil { openedRecord = (record, command) }
+        bridge.send(.loadSGF(id: command, name: record.name, contents: record.contents))
     }
 
     /// True when there is a game or a record to save.
@@ -517,6 +538,16 @@ public final class GameSession {
             (black, white) = (players.black, players.white)
         }
         bridge.send(.exportSGF(id: nextID(), blackName: black, whiteName: white))
+    }
+
+    /// The player saved the game themselves. Over the record's own file, that save
+    /// is the one to keep — it may carry the variation being walked — so the
+    /// analysis is no longer written there behind their back.
+    public func recordSaved(to url: URL) {
+        guard let opened = openedRecord?.record.url else { return }
+        if opened.standardizedFileURL.path == url.standardizedFileURL.path {
+            openedRecord = nil
+        }
     }
 
     /// The save panel is done with the document, written or not.

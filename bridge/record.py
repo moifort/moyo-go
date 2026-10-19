@@ -8,34 +8,44 @@ child process.
 KaTrain's own `Game.write_sgf` is not used: it opens the file itself, names the
 players through its own translations, and stamps the root with a comment and an
 invisible marker meant for KaTrain alone. Only the properties the record actually
-carries are written here: moves, setup stones, comments, and the game information.
+carries are written here: moves, setup stones, comments, the game information, and
+KataGo's analysis of each position — in KaTrain's own `KT[]` format, so a record
+opened again, here or in KaTrain, is not analysed a second time.
 """
 
 import re
 from typing import Any, Dict, Iterable, List, Optional
+
+from katrain.core.constants import ANALYSIS_FORMAT_VERSION
+from katrain.core.game_node import analysis_dumps
 
 #: The text is handed to the app as a Python string and written out as UTF-8,
 #: whatever charset the record declared when it was read.
 CHARSET = "UTF-8"
 
 
-def text(root, line: Optional[List[Any]] = None, properties: Optional[Dict[str, Any]] = None) -> str:
+def text(root, nodes: Optional[Iterable[Any]] = None, properties: Optional[Dict[str, Any]] = None) -> str:
     """The record as SGF text.
 
-    `line`, when given, is a path from the root: only those nodes are written, which
-    is how a game against the AI leaves out the moves taken back. Without it the
-    whole tree goes out, branches included.
+    `nodes`, when given, are the only ones written. A path from the root is how a
+    game against the AI leaves out the moves taken back; the nodes a record came
+    with are how its analysis is saved without the variation being walked. Without
+    it the whole tree goes out, branches included.
 
     `properties` are laid over the root's own. A value of None removes the property.
     """
     root_properties = _root_properties(root, properties or {})
-    on_line = None if line is None else {id(node) for node in line}
+    written = None if nodes is None else {id(node) for node in nodes}
 
     def children(node) -> List[Any]:
         kept = node.ordered_children
-        if on_line is not None:
-            kept = [child for child in kept if id(child) in on_line]
+        if written is not None:
+            kept = [child for child in kept if id(child) in written]
         return kept
+
+    analyses = {id(node): _analysis(node) for node in root.nodes_in_tree}
+    if any(analyses.values()):
+        root_properties["KTV"] = [ANALYSIS_FORMAT_VERSION]
 
     # Iterative, like pysgf's own writer: a long game is a deep tree.
     out: List[str] = []
@@ -45,7 +55,10 @@ def text(root, line: Optional[List[Any]] = None, properties: Optional[Dict[str, 
         if isinstance(item, str):
             out.append(item)
             continue
-        out.append(_node_text(root_properties if item is root else _properties(item)))
+        properties = root_properties if item is root else _properties(item)
+        if analyses.get(id(item)):
+            properties = {**properties, "KT": analyses[id(item)]}
+        out.append(_node_text(properties))
         following = children(item)
         if len(following) == 1:
             stack.append(following[0])
@@ -74,6 +87,22 @@ def _properties(node) -> Dict[str, List[Any]]:
     if note:
         properties["C"] = [note]
     return properties
+
+
+def _analysis(node) -> Optional[List[str]]:
+    """The node's analysis as KaTrain stores it, or None when there is none to store.
+
+    An analysis read from the file and not yet unpacked by KaTrain goes back out as
+    the text it came in: saving early must not lose what the record already had.
+    """
+    if node.analysis_complete:
+        try:
+            return analysis_dumps(node.analysis)
+        except Exception:
+            # KaTrain itself saves the rest of the record when one analysis will
+            # not pack; a position analysed again is a smaller loss than the game.
+            return None
+    return list(node.analysis_from_sgf) if node.analysis_from_sgf else None
 
 
 def _root_properties(root, overrides: Dict[str, Any]) -> Dict[str, List[Any]]:

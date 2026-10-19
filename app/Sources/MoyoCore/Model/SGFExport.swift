@@ -9,11 +9,14 @@ import Foundation
 public enum SGFExport {
     public enum Failure: LocalizedError, Equatable {
         case notWritable(String)
+        case changedOnDisk(String)
 
         public var errorDescription: String? {
             switch self {
             case .notWritable(let name):
                 return "« \(name) » n'a pas pu être écrit."
+            case .changedOnDisk(let name):
+                return "« \(name) » a changé depuis son ouverture : l'analyse n'y a pas été enregistrée."
             }
         }
     }
@@ -57,6 +60,22 @@ public enum SGFExport {
         let human = human.trimmingCharacters(in: .whitespacesAndNewlines)
         let named = human.isEmpty ? nil : human
         return humanColor == .black ? (named, ai) : (ai, named)
+    }
+
+    /// Writes a record analysed to the end over the file it was read from.
+    ///
+    /// The open panel, a drop or the Finder granted access to that file; the grant
+    /// travels with the URL and is claimed again here. A file changed by someone
+    /// else since it was opened is left alone: their edit outweighs our analysis.
+    public static func rewrite(_ contents: String, over record: SGFImport.Record) throws {
+        guard let url = record.url else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        guard SGFImport.modificationDate(of: url) == record.modified else {
+            throw Failure.changedOnDisk(url.lastPathComponent)
+        }
+        try write(contents, to: url)
     }
 
     /// UTF-8, which is what the bridge declares in `CA[]`. Atomic, so a failed

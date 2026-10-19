@@ -30,6 +30,26 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   from a teaching session are mostly branches. Showing them means a tree in the
   sidebar, which is a screen of its own.
 
+- **A stored analysis is trusted as it is.** A record written back with its analysis
+  is read again without asking KataGo anything, even if the engine now runs deeper
+  than when it was analysed. KaTrain upstream does the same, and the visit count
+  stored in `KT[]` would be enough to re-analyse the shallow positions — but that
+  would bring back the wait this was meant to remove, for a difference few would see.
+
+- **An analysis that fails to unpack is recomputed at every opening.** The file is
+  rewritten only when one of its positions came without `KT[]`; a position whose
+  `KT[]` is there but unreadable is analysed again, and the file is left as it was.
+  Telling the two apart means knowing whether KaTrain's `load_analysis` succeeded,
+  which happens on a thread of its own after the record is opened. No file seen so
+  far has a broken `KT[]`.
+
+- **Writing the analysis over the opened file is untested in the sandbox.** The
+  development app runs unsandboxed, so the security-scoped grant of the open panel,
+  a drop and a Finder double-click — claimed again when the analysis lands, long
+  after the opening — has not been exercised in the sandboxed bundle that
+  `build-app.sh` produces. To check by hand on that build before release: open a
+  record, wait for the gauge to finish, reopen it, and see no gauge.
+
 - **SGF comments.** `C[]` is kept as KaTrain's node note and written back on save,
   but never shown. A review that showed the commentary would be worth more than one
   that only shows the engine.

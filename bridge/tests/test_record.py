@@ -52,7 +52,7 @@ def test_branches_and_comments_survive():
 def test_a_line_writes_that_line_and_nothing_else():
     root = review.parse(BRANCHED)
     line = [root, root.children[0], root.children[0].children[1]]
-    reread = review.parse(record.text(root, line=line))
+    reread = review.parse(record.text(root, nodes=line))
     assert moves(reread) == ["E5", "G3"]
     assert len(reread.children[0].children) == 1
 
@@ -88,3 +88,52 @@ def test_the_date_is_cut_to_the_day():
     assert record.sgf_date("1846-07-21") == "1846-07-21"
     assert record.sgf_date("1846-07-21,22") == "1846-07-21,22"
     assert record.sgf_date(None) is None
+
+
+def full_analysis(score_lead, size=9):
+    """What KataGo hands back for a position, ownership and policy included."""
+    return {
+        "completed": True,
+        "root": {"scoreLead": score_lead, "winrate": 0.5, "visits": 500},
+        "moves": {"C3": {"move": "C3", "order": 0, "scoreLead": score_lead, "winrate": 0.5,
+                         "visits": 400, "pv": ["C3", "D4"]}},
+        "ownership": [0.5] * (size * size),
+        "policy": [0.25] * (size * size + 1),
+    }
+
+
+def test_an_analysis_goes_out_and_comes_back():
+    root = review.parse("(;GM[1]FF[4]SZ[9];B[ee];W[cc])")
+    first = root.children[0]
+    first.analysis = full_analysis(2.5)
+    reread = review.parse(record.text(root))
+    node = reread.children[0]
+    # KaTrain's own format: read back by the same call KaTrain makes on opening.
+    assert node.load_analysis()
+    assert node.analysis_complete
+    assert node.analysis["root"]["scoreLead"] == 2.5
+    assert node.analysis["moves"]["C3"]["pv"] == ["C3", "D4"]
+    assert len(node.analysis["ownership"]) == 81
+    assert reread.get_property("KTV") == "1.0"
+
+
+def test_a_position_not_yet_analysed_goes_out_without_one():
+    root = review.parse("(;GM[1]FF[4]SZ[9];B[ee];W[cc])")
+    root.children[0].analysis = full_analysis(2.5)
+    reread = review.parse(record.text(root))
+    assert not reread.children[0].children[0].load_analysis()
+
+
+def test_a_record_with_no_analysis_carries_no_marker_of_it():
+    written = record.text(review.parse(RECORD))
+    assert "KT" not in written
+
+
+def test_an_analysis_read_but_not_yet_unpacked_is_kept():
+    root = review.parse("(;GM[1]FF[4]SZ[9];B[ee])")
+    root.children[0].analysis = full_analysis(-1.0)
+    stored = review.parse(record.text(root))
+    # Straight out of the parser: the analysis is still the text the file carried.
+    reread = review.parse(record.text(stored))
+    assert reread.children[0].load_analysis()
+    assert reread.children[0].analysis["root"]["scoreLead"] == -1.0

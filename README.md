@@ -32,12 +32,16 @@ it with the arrow keys or the buttons under the sidebar. At any position you can
 the move KataGo would have played, and hold Option with the arrows to unroll the
 engine's whole continuation before stepping back into the real game.
 
+Once KataGo has analysed every position, Moyo writes its analysis into the file
+you opened, in KaTrain's own format. The next time you open it, the analysis is
+read instead of computed again — in Moyo or in KaTrain.
+
 ## Keep a game
 
 ⌘S saves to SGF. A game against the AI goes out as it was played, signed with
 your name and the opponent's mode; a record under review goes out as it came in,
-along with the engine's continuation you are walking. The file opens in KaTrain,
-Sabaki or OGS.
+along with the engine's continuation you are walking, and KataGo's analysis of
+every position analysed so far. The file opens in KaTrain, Sabaki or OGS.
 
 ## Native, and nothing else
 

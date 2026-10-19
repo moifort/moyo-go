@@ -340,6 +340,9 @@ public enum BridgeEvent: Sendable {
     case analysisProgress(done: Int, total: Int)
     /// The game as SGF text, in answer to `export_sgf`.
     case sgf(id: Int?, contents: String)
+    /// A record analysed to the end, analysis included, for the app to write over
+    /// the file it came from. `id` is the `load_sgf` that opened it.
+    case recordAnalysed(id: Int?, contents: String)
     case failure(id: Int?, code: String, message: String)
     case engineFailed(message: String)
 
@@ -385,6 +388,8 @@ extension BridgeEvent: Decodable {
             )
         case "sgf":
             self = .sgf(id: id, contents: try container.decode(String.self, forKey: .contents))
+        case "record_analysed":
+            self = .recordAnalysed(id: id, contents: try container.decode(String.self, forKey: .contents))
         case "error":
             self = .failure(
                 id: id,

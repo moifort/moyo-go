@@ -81,6 +81,7 @@ public struct GameWindow: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try SGFExport.write(document.contents, to: url)
+            session.recordSaved(to: url)
         } catch {
             exportFailure = error.localizedDescription
         }

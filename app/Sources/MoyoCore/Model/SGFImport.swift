@@ -27,10 +27,16 @@ public enum SGFImport {
     public struct Record: Equatable, Sendable {
         public let name: String
         public let contents: String
+        /// Where the record was read, and when the file was last changed then: the
+        /// analysis is written back there, unless someone else wrote first.
+        public let url: URL?
+        public let modified: Date?
 
-        public init(name: String, contents: String) {
+        public init(name: String, contents: String, url: URL? = nil, modified: Date? = nil) {
             self.name = name
             self.contents = contents
+            self.url = url
+            self.modified = modified
         }
     }
 
@@ -54,7 +60,13 @@ public enum SGFImport {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw Failure.empty(name)
         }
-        return Record(name: name, contents: text)
+        return Record(name: name, contents: text, url: url, modified: modificationDate(of: url))
+    }
+
+    /// When the file was last written. Asked of the file system each time: a URL
+    /// caches its resource values, and would keep answering with the first date.
+    static func modificationDate(of url: URL) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 
     /// Bytes to text: UTF-8 first, then whatever the system recognises.
