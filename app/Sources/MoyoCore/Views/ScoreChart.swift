@@ -67,14 +67,21 @@ public struct ScoreChart: View {
             let reached = CGRect(x: 0, y: 0, width: currentX, height: size.height)
             let ahead = CGRect(x: currentX, y: 0, width: size.width - currentX, height: size.height)
 
+            // Each half is painted through a mask rather than by intersecting paths:
+            // a boolean operation treats the open line as a shape and closes it,
+            // which strokes a straight segment from its first point to its last.
             for (region, dim) in [(reached, false), (ahead, true)] where region.width > 0 {
-                var layer = context
-                layer.clip(to: Path(region))
-                layer.opacity = dim ? 0.3 : 1
-                layer.fill(area.clipped(to: above), with: .color(Theme.chartAheadFill))
-                layer.fill(area.clipped(to: below), with: .color(Theme.chartBehindFill))
-                layer.stroke(line.clipped(to: above), with: .color(Theme.chartAhead), style: stroke)
-                layer.stroke(line.clipped(to: below), with: .color(Theme.chartBehind), style: stroke)
+                for (half, fill, colour) in [
+                    (above, Theme.chartAheadFill, Theme.chartAhead),
+                    (below, Theme.chartBehindFill, Theme.chartBehind),
+                ] {
+                    var layer = context
+                    layer.clip(to: Path(region))
+                    layer.clip(to: Path(half))
+                    layer.opacity = dim ? 0.3 : 1
+                    layer.fill(area, with: .color(fill))
+                    layer.stroke(line, with: .color(colour), style: stroke)
+                }
             }
 
             if let moveCount, moveNumber < moveCount {
@@ -115,17 +122,5 @@ public struct ScoreChart: View {
         let bare = label(for: value)
         if bare == "0" { return bare }
         return (value > 0 ? "+" : "−") + bare
-    }
-}
-
-private extension Path {
-    /// The part of the path inside a rectangle, for painting one half of a curve in
-    /// one colour and the other half in another.
-    func clipped(to rect: Path) -> Path {
-        intersection(rect)
-    }
-
-    func clipped(to rect: CGRect) -> Path {
-        clipped(to: Path(rect))
     }
 }
