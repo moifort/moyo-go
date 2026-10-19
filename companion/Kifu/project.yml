@@ -33,3 +33,16 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 46C337T7YN
         PRODUCT_BUNDLE_IDENTIFIER: com.thibautmottet.Kifu
+schemes:
+  Kifu:
+    build:
+      targets:
+        Kifu: all
+    # Unoptimised, the 3D reader takes about forty times as long: half a minute a frame, and
+    # the worker never catches up. Run from Xcode in Release so the phone reads in real time.
+    run:
+      config: Release
+    profile:
+      config: Release
+    archive:
+      config: Release
