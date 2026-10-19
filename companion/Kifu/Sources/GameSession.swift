@@ -52,6 +52,9 @@ final class GameSession {
     static let cornerRefineRadius = 8
 
     var phase: Phase = .calibrating
+    /// Commencer or Reprendre was tapped and the worker has not got to it yet: it finishes the
+    /// readings already queued first, a second or two each.
+    var starting = false
     var cameraAvailable = true
     var preview: CGImage?
     var frameSize: CGSize = .zero
@@ -239,7 +242,8 @@ final class GameSession {
     }
 
     func startGame() {
-        guard isCalibrated else { return }
+        guard isCalibrated, !starting else { return }
+        starting = true
         let date = Date()
         startedAt = date
         fileURL = Self.newFileURL(for: date)
@@ -247,7 +251,10 @@ final class GameSession {
         let url = fileURL
         let trial = TrialLog.enabled ? TrialLog(date: date) : nil
         worker.async {
-            guard let reader = self.engine.reader else { return }
+            guard let reader = self.engine.reader else {
+                Task { @MainActor in self.starting = false }
+                return
+            }
             let start = self.engine.lastReadPosition
             self.engine.recorder = Recorder(reader: reader, start: start, date: date)
             self.engine.fileURL = url
@@ -265,6 +272,7 @@ final class GameSession {
                 self.lastMove = nil
                 self.status = .inSync
                 self.phase = .recording
+                self.starting = false
             }
         }
     }
@@ -284,15 +292,19 @@ final class GameSession {
 
     /// Resume recording after a recalibration.
     func resumeGame() {
-        guard isCalibrated else { return }
+        guard isCalibrated, !starting else { return }
+        starting = true
         camera?.lockForGame()
         worker.async {
-            guard let reader = self.engine.reader else { return }
+            guard let reader = self.engine.reader else {
+                Task { @MainActor in self.starting = false }
+                return
+            }
             self.engine.recorder?.recalibrate(reader: reader)
             self.engine.recording = true
             self.publishRecorder()
             self.saveCalibration()
-            Task { @MainActor in self.phase = .recording }
+            Task { @MainActor in self.phase = .recording; self.starting = false }
         }
     }
 

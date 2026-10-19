@@ -52,11 +52,23 @@ struct CalibrationView: View {
                             .buttonStyle(.bordered)
                             .disabled(session.taps.isEmpty)
                     } else if session.isCalibrated {
-                        Button("Reprendre les coins") { session.freeze() }.buttonStyle(.bordered)
-                        Button(resuming ? "Reprendre la partie" : "Commencer") {
+                        Button("Reprendre les coins") { session.freeze() }
+                            .buttonStyle(.bordered)
+                            .disabled(session.starting)
+                        Button {
                             if resuming { session.resumeGame() } else { session.startGame() }
+                        } label: {
+                            if session.starting {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                    Text("Démarrage…")
+                                }
+                            } else {
+                                Text(resuming ? "Reprendre la partie" : "Commencer")
+                            }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(session.starting)
                     } else {
                         Button("Annuler") { session.cancel() }.buttonStyle(.bordered)
                         if session.canReuseCalibration {
