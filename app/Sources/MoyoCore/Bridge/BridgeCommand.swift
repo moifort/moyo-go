@@ -104,6 +104,12 @@ public struct BridgeCommand: Encodable, Sendable {
         BridgeCommand(id: id, cmd: "follow_analysis", on: on)
     }
 
+    /// Shows or hides the score estimated from KataGo's ownership map, at any moment
+    /// of a game, a review or a game followed with analysis.
+    public static func estimate(id: Int, on: Bool) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "estimate", on: on)
+    }
+
     /// The position the phone sees, as it wrote it. The bridge finds the moves.
     public static func followBoard(id: Int, rows: [String]) -> BridgeCommand {
         BridgeCommand(id: id, cmd: "follow_board", rows: rows)

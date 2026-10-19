@@ -239,6 +239,22 @@ public struct ScoringDetail: Codable, Sendable {
     }
 }
 
+/// The score at any moment of a game, as the bridge estimates it.
+///
+/// Counted like a finished game once nearly every point has a settled owner
+/// (`count`); before that, KataGo's own lead to the half point. Either way the
+/// board marks the points KataGo already gives to one side.
+public struct ScoreEstimate: Codable, Sendable {
+    /// Black's lead, from Black's point of view. Nil until KataGo has given one.
+    public let lead: Double?
+    public let points: [TerritoryPoint]
+    public let deadStones: [Point]
+    /// The count, when the position is settled enough to have one.
+    public let count: ScoringDetail?
+
+    public var deadPoints: Set<Point> { Set(deadStones) }
+}
+
 /// The whole board state, as the bridge sees it. The app never derives it.
 public struct GameState: Codable, Sendable {
     public let size: Int
@@ -253,6 +269,11 @@ public struct GameState: Codable, Sendable {
     public let status: GameStatus
     public let result: String?
     public let scoring: ScoringDetail?
+    /// The score as KataGo's ownership map has it, while the player asks for it.
+    /// Nil until that map is back, and once the game is counted for real.
+    public let estimate: ScoreEstimate?
+    /// The player asked for the estimate. Absent from an older bridge.
+    public let estimating: Bool?
     /// The AI mode currently in force, as the bridge sees it.
     public let aiStrategy: String?
     public let aiSettings: [String: SettingValue]?

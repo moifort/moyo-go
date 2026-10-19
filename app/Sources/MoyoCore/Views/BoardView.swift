@@ -168,8 +168,11 @@ public struct BoardView: View {
         drawStarPoints(in: &context, geometry: geometry)
         drawStones(in: &context, geometry: geometry)
         if let scoring = state.scoring {
-            drawTerritory(in: &context, geometry: geometry, scoring: scoring)
+            drawTerritory(in: &context, geometry: geometry, points: scoring.points)
         } else {
+            if let estimate = state.estimate {
+                drawTerritory(in: &context, geometry: geometry, points: estimate.points)
+            }
             drawLastMove(in: &context, geometry: geometry)
         }
         if showsLocal, let nearby = state.localMove, nearby.point != state.bestMove?.point {
@@ -258,10 +261,10 @@ public struct BoardView: View {
     private func drawTerritory(
         in context: inout GraphicsContext,
         geometry: BoardGeometry,
-        scoring: ScoringDetail
+        points: [TerritoryPoint]
     ) {
         let side = geometry.stoneRadius * 0.44
-        for owned in scoring.points {
+        for owned in points {
             let center = geometry.position(row: owned.row, col: owned.col)
             let rect = CGRect(
                 x: center.x - side / 2, y: center.y - side / 2,
@@ -322,7 +325,7 @@ public struct BoardView: View {
 
     private func drawStones(in context: inout GraphicsContext, geometry: BoardGeometry) {
         let radius = geometry.stoneRadius
-        let dead = state.scoring?.deadPoints ?? []
+        let dead = state.scoring?.deadPoints ?? state.estimate?.deadPoints ?? []
         for stone in state.stones {
             let center = geometry.position(row: stone.row, col: stone.col)
             let rect = CGRect(

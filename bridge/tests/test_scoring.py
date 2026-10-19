@@ -201,3 +201,83 @@ class TestSuggestDead:
         stones, size = board(["WW.", "W..", "..."])
         ownership = [0.9] * 9
         assert scoring.suggest_dead(size, stones, ownership) == [(0, 0), (0, 1), (1, 0)]
+
+
+
+class TestEstimate:
+    """The score at any moment, after KaTrain's `Game.manual_score`."""
+
+    #: Black on the left, White on the right.
+    POSITION = ["B..W", "B..W", "B..W", "B..W"]
+    NO_CAPTURES = {"by_black": 0, "by_white": 0}
+
+    @staticmethod
+    def ownership(rows):
+        """A flat map from a picture of values per point, row-major from the top."""
+        return [value for row in rows for value in row]
+
+    def test_nothing_without_an_ownership_map(self):
+        stones, size = board(self.POSITION)
+        assert scoring.estimate(size, stones, None, komi=0, captures={}, lead=1.0) is None
+        assert scoring.estimate(size, stones, [0.9] * 3, komi=0, captures={}, lead=1.0) is None
+
+    def test_a_settled_position_is_counted(self):
+        stones, size = board(self.POSITION)
+        ownership = self.ownership([[0.95, 0.9, -0.9, -0.95]] * 4)
+        estimated = scoring.estimate(size, stones, ownership, komi=0.5, captures=self.NO_CAPTURES, lead=-3.0)
+        assert estimated["count"]["territory"] == {"B": 4, "W": 4}
+        assert estimated["count"]["result"] == "W+0.5"
+        # The count wins over KataGo's lead: it is what the board says.
+        assert estimated["lead"] == -0.5
+        assert len(estimated["points"]) == 8
+
+    #: A 9×9 board with most of its middle still in doubt: too much for a count.
+    OPEN = ["B.......W"] * 9
+    OPEN_OWNERSHIP = [0.9, 0.6, 0.6, 0.1, 0.0, -0.1, -0.6, -0.6, -0.9]
+
+    def test_an_open_position_takes_katagos_lead(self):
+        stones, size = board(self.OPEN)
+        ownership = self.ownership([self.OPEN_OWNERSHIP] * 9)
+        estimated = scoring.estimate(size, stones, ownership, komi=6.5, captures=self.NO_CAPTURES, lead=2.3)
+        assert estimated["count"] is None
+        assert estimated["lead"] == 2.5  # to the half point, as KaTrain rounds it
+        # Only what KataGo already gives to a side is marked.
+        marked = {(p["row"], p["col"]) for p in estimated["points"]}
+        assert marked == {(row, col) for row in range(9) for col in (1, 2, 6, 7)}
+
+    def test_an_open_position_before_any_lead_has_none(self):
+        stones, size = board(self.OPEN)
+        ownership = self.ownership([self.OPEN_OWNERSHIP] * 9)
+        estimated = scoring.estimate(size, stones, ownership, komi=6.5, captures=self.NO_CAPTURES)
+        assert estimated["lead"] is None
+
+    def test_a_stone_given_to_the_opponent_is_dead(self):
+        # A white stone dropped into Black's side, which KataGo already gives to Black.
+        stones, size = board(["B..W", "BW.W", "B..W", "B..W"])
+        ownership = self.ownership([[0.95, 0.95, -0.95, -0.95]] * 4)
+        estimated = scoring.estimate(size, stones, ownership, komi=0, captures=self.NO_CAPTURES, lead=0)
+        assert estimated["dead"] == [(1, 1)]
+        count = estimated["count"]
+        # Its point becomes Black's, and the stone a prisoner, as in a real count.
+        assert count["territory"] == {"B": 4, "W": 4}
+        assert count["prisoners"]["B"] == 1
+
+    def test_a_dead_stone_is_marked_in_an_open_position_too(self):
+        stones, size = board(self.OPEN)
+        stones[(1, 1)] = "W"
+        ownership = self.ownership([self.OPEN_OWNERSHIP] * 9)
+        estimated = scoring.estimate(size, stones, ownership, komi=0, captures=self.NO_CAPTURES, lead=4)
+        assert estimated["count"] is None
+        assert estimated["dead"] == [(1, 1)]
+
+    def test_too_much_doubt_leaves_the_position_open(self):
+        stones, size = board(["B" * 9] + ["." * 9] * 7 + ["W" * 9])
+        ownership = [0.95] * 9 + [0.5] * 63 + [-0.95] * 9
+        assert scoring.settled_count(size, stones, ownership, komi=0, captures=self.NO_CAPTURES) is None
+
+    def test_the_total_adds_up_as_in_a_real_count(self):
+        stones, size = board(self.POSITION)
+        ownership = self.ownership([[0.9, 0.9, -0.9, -0.9]] * 4)
+        count = scoring.settled_count(size, stones, ownership, komi=6.5, captures={"by_black": 3, "by_white": 1})
+        assert count["black"] == count["territory"]["B"] + count["prisoners"]["B"]
+        assert count["white"] == count["territory"]["W"] + count["prisoners"]["W"] + 6.5

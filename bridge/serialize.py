@@ -78,6 +78,8 @@ def game_state(
     ai_settings: Optional[Dict[str, Any]] = None,
     review: Optional[Dict[str, Any]] = None,
     extra: Optional[Dict[str, Any]] = None,
+    estimating: bool = False,
+    estimate: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     node = game.current_node
     payload = {
@@ -103,17 +105,34 @@ def game_state(
     if extra is not None:
         payload.update(extra)
     if scoring is not None:
-        # Every component of the total travels with it, so the panel can show a sum
-        # that adds up instead of a bare figure.
-        payload["scoring"] = {
-            "black": scoring["black"],
-            "white": scoring["white"],
-            "komi": scoring["komi"],
-            "territory": scoring["territory"],
-            "prisoners": scoring.get("prisoners"),
-            "stones": scoring.get("stones"),
-            "result": scoring["result"],
-            "points": scoring["points"],
-            "dead_stones": [{"row": r, "col": c} for r, c in sorted(dead or [])],
+        payload["scoring"] = count(scoring, dead)
+    # The estimate is asked for, then waited on: KataGo's ownership map may not
+    # be back yet, and the app says so rather than showing nothing.
+    payload["estimating"] = estimating
+    if estimate is not None:
+        payload["estimate"] = {
+            "lead": estimate["lead"],
+            "points": estimate["points"],
+            "dead_stones": [{"row": r, "col": c} for r, c in estimate["dead"]],
+            "count": None if estimate["count"] is None else count(estimate["count"], estimate["count"]["dead"]),
         }
     return payload
+
+
+def count(scoring: Dict[str, Any], dead: Optional[List[tuple]]) -> Dict[str, Any]:
+    """A count as the app reads it, final or estimated.
+
+    Every component of the total travels with it, so the panel can show a sum that
+    adds up instead of a bare figure.
+    """
+    return {
+        "black": scoring["black"],
+        "white": scoring["white"],
+        "komi": scoring["komi"],
+        "territory": scoring["territory"],
+        "prisoners": scoring.get("prisoners"),
+        "stones": scoring.get("stones"),
+        "result": scoring["result"],
+        "points": scoring["points"],
+        "dead_stones": [{"row": r, "col": c} for r, c in sorted(dead or [])],
+    }

@@ -631,6 +631,26 @@ public final class GameSession {
         return lead.map { $0 * sign }
     }
 
+    /// Whether the score estimate is on: the bridge's word, not ours.
+    public var isEstimating: Bool { state?.estimating == true }
+
+    /// The estimate needs KataGo reading the position: in a game, in a review, and
+    /// in a game followed with the analysis on. Not once the game is counted.
+    public var canEstimate: Bool {
+        guard phase == .running, let state else { return false }
+        switch state.status {
+        case .playing, .review: return true
+        case .following: return state.analysis == true
+        case .scoring, .finished: return false
+        }
+    }
+
+    /// Shows the estimate, or hides it. It stays on move after move until hidden.
+    public func toggleEstimate() {
+        guard canEstimate || isEstimating else { return }
+        bridge.send(.estimate(id: nextID(), on: !isEstimating))
+    }
+
     /// True when the player may act: a game is running and it is their turn.
     ///
     /// `isHumanTurn` is already false under review, so nothing extra is needed here.

@@ -43,7 +43,13 @@ public struct ScoringPanel: View {
         }
     }
 
-    private var rows: [PlayerTable.Row] {
+    private var rows: [PlayerTable.Row] { Self.rows(for: detail) }
+
+    private var outcome: some View { CountOutcome(detail: detail) }
+
+    /// One row per component of the total, then the total: shared with the estimate,
+    /// so the count reads the same before the end of the game as after it.
+    static func rows(for detail: ScoringDetail) -> [PlayerTable.Row] {
         var rows: [PlayerTable.Row] = [
             PlayerTable.Row(
                 "Territoire",
@@ -76,8 +82,13 @@ public struct ScoringPanel: View {
         )
         return rows
     }
+}
 
-    private var outcome: some View {
+/// Who wins a count, and by how much.
+struct CountOutcome: View {
+    let detail: ScoringDetail
+
+    var body: some View {
         Group {
             if let outcome = detail.outcome {
                 HStack(spacing: 6) {

@@ -58,6 +58,12 @@ class BridgeSession(KaTrainHost):
         #: local move with what it costs. Off, KataGo computes nothing.
         self._follow_analysis = False
         self._dead: set = set()
+        #: The player asked to see the score estimated from KataGo's ownership map.
+        #: It stays on, move after move, until they turn it off.
+        self._estimating = False
+        #: What the last state said of the estimate, so a fresher ownership map is
+        #: sent only when it changes the count.
+        self._emitted_estimate: Optional[tuple] = None
         # -- review state, all empty outside a review
         #: The main line of the record, cached once. A variation adds nodes to the
         #: tree, so recomputing it would make the record's own length move.
@@ -107,6 +113,8 @@ class BridgeSession(KaTrainHost):
         if self.game is None:
             return
         self._emit_new_scores()
+        if self._estimating and self._estimate_key(self._estimate()) != self._emitted_estimate:
+            self._emit_state()
         if self._status == "review":
             self._on_review_advanced()
             return
@@ -230,7 +238,13 @@ class BridgeSession(KaTrainHost):
             self._writer.emit(
                 "state",
                 command_id,
-                **serialize.game_state(self.game, self._human_color, status="following", extra=self._follow_extra()),
+                **serialize.game_state(
+                    self.game,
+                    self._human_color,
+                    status="following",
+                    extra=self._follow_extra(),
+                    **self._estimate_fields(),
+                ),
             )
             return
         result = self.game.current_node.end_state if self._status == "finished" else None
@@ -255,8 +269,51 @@ class BridgeSession(KaTrainHost):
                 dead=sorted(self._dead),
                 ai_strategy=self._ai_strategy,
                 ai_settings=self.config(f"ai/{self._ai_strategy}"),
+                **self._estimate_fields(),
             ),
         )
+
+    # -- score estimate ------------------------------------------------------
+
+    def set_estimate(self, command_id, on):
+        """Shows or hides the score estimated from KataGo's ownership map."""
+        self._require_game()
+        self._estimating = bool(on)
+        self._emit_state(command_id)
+
+    def _estimate(self) -> Optional[Dict[str, Any]]:
+        """The score KataGo's ownership map points to, while the player asks for it.
+
+        Averaged with the position before, as KaTrain's own manual score does: the
+        map leans towards whoever is to move, and the mean takes that lean out.
+        Nothing once the game is being counted for real.
+        """
+        if not self._estimating or self._status in ("scoring", "finished"):
+            return None
+        node = self.game.current_node
+        ownership = node.ownership
+        before = node.parent.ownership if node.parent is not None else None
+        if ownership and before and len(before) == len(ownership):
+            ownership = [(now + then) / 2 for now, then in zip(ownership, before)]
+        return scoring.estimate(
+            size=self._size(),
+            stones=serialize.stone_map(self.game),
+            ownership=ownership,
+            komi=self.game.root.komi,
+            captures=serialize.captures(self.game),
+            rules=str(self.game.root.ruleset or "japanese"),
+            lead=node.score,
+        )
+
+    def _estimate_key(self, counted: Optional[Dict[str, Any]]) -> Optional[tuple]:
+        if counted is None:
+            return None
+        return (id(self.game.current_node), counted["lead"], len(counted["points"]), len(counted["dead"]))
+
+    def _estimate_fields(self) -> Dict[str, Any]:
+        counted = self._estimate()
+        self._emitted_estimate = self._estimate_key(counted)
+        return {"estimating": self._estimating, "estimate": counted}
 
     # -- end of game ---------------------------------------------------------
 
@@ -886,6 +943,7 @@ class BridgeSession(KaTrainHost):
                     "local_wanted": self._local_wanted
                     or bool(self._local_extension and self._local_extension["wanted"]),
                 },
+                **self._estimate_fields(),
             ),
         )
 

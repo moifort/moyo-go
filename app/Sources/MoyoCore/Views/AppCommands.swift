@@ -44,6 +44,14 @@ public struct GameCommands: Commands {
 
             Divider()
 
+            Button(session?.isEstimating == true ? "Masquer l'estimation" : "Estimer le score") {
+                session?.toggleEstimate()
+            }
+            .keyboardShortcut("e", modifiers: .command)
+            .disabled(session?.canEstimate != true && session?.isEstimating != true)
+
+            Divider()
+
             Button("Abandonner") { session?.resign() }
                 .disabled(session?.state?.status != .playing)
 

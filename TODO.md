@@ -45,6 +45,17 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 
 - **Teaching mode.** KaTrain's per-move feedback on mistakes and better options.
 
+- **The score estimate only counts a settled position.** "Estimer le score" (⌘E)
+  counts the board like a finished game once KataGo's ownership map leaves at most
+  ten points in doubt, as KaTrain's `Game.manual_score` does. Before that it shows
+  KataGo's lead to the half point, and the board marks only the points KataGo gives
+  to a side with some confidence. Counting an open position by thresholding the map
+  was tried and dropped: on real games it strayed from KataGo's lead by ten to
+  thirty points at any threshold, because most of the board is still in doubt, and
+  a table whose total contradicts the score just above it is worse than no table.
+  A count of an open position would need KataGo's expected territory per point,
+  fractional figures included, and a way to show them.
+
 - **Replaying the AI's old answer after an undo.** A move replayed after an undo
   lands on the node KaTrain kept, with the AI's former reply still below it. The
   bridge now has the AI think afresh, so the reply may differ and the tree grows a

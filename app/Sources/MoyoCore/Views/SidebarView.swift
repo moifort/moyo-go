@@ -29,9 +29,13 @@ public struct SidebarView: View {
                     caption: leadCaption
                 )
                 divider
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionTitle("Joueurs")
-                    PlayerTable(rows: playingRows(state), humanColor: state.humanColor)
+                if session.isEstimating {
+                    EstimateSection(estimate: state.estimate, humanColor: state.humanColor)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionTitle("Joueurs")
+                        PlayerTable(rows: playingRows(state), humanColor: state.humanColor)
+                    }
                 }
                 divider
                 opponentSection
@@ -197,15 +201,22 @@ public struct SidebarView: View {
             )
             divider
         }
-        VStack(alignment: .leading, spacing: 8) {
-            SectionTitle("Joueurs")
-            PlayerTable(rows: playingRows(state))
+        if session.isEstimating && session.canEstimate {
+            EstimateSection(estimate: state.estimate, humanColor: nil)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionTitle("Joueurs")
+                PlayerTable(rows: playingRows(state))
+            }
         }
         Spacer(minLength: 0)
         Text("Les coups joués sur le plateau s'affichent ici. La partie se termine sur Kifu.")
             .font(.system(size: 11))
             .foregroundStyle(Theme.secondaryText)
             .lineLimit(3)
+        if session.followsWithAnalysis {
+            EstimateButton(session: session)
+        }
         PhoneButton(session: session)
         Toggle(isOn: $session.followsWithAnalysis) {
             Text("Analyse KataGo")
@@ -222,6 +233,8 @@ public struct SidebarView: View {
 
     private func actions(_ state: GameState) -> some View {
         VStack(spacing: 7) {
+            EstimateButton(session: session)
+
             Button {
                 session.undo()
             } label: {
@@ -309,7 +322,11 @@ struct ReviewPanel: View {
             divider
             SectionTitle("Joueurs")
             players
-            PlayerTable(rows: rows)
+            if session.isEstimating {
+                EstimateSection(estimate: state.estimate, humanColor: nil)
+            } else {
+                PlayerTable(rows: rows)
+            }
             Spacer(minLength: 0)
             footer
         }
@@ -525,6 +542,7 @@ struct ReviewPanel: View {
             }
             stepHint
             navigation
+            EstimateButton(session: session)
             PhoneButton(session: session)
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
