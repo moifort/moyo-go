@@ -69,9 +69,12 @@ public enum ScoreCurve {
     }
 
     /// The midline is halfway down; a lead rises above it, a deficit sinks below.
-    public static func y(value: Double, scale: Double, height: CGFloat) -> CGFloat {
+    ///
+    /// The peak stops `inset` short of the edge: drawn right on it, half the stroke
+    /// and the current-move dot would be cut off.
+    public static func y(value: Double, scale: Double, height: CGFloat, inset: CGFloat = 0) -> CGFloat {
         let half = height / 2
-        let magnitude = CGFloat(min(1, abs(value) / scale)) * half
+        let magnitude = CGFloat(min(1, abs(value) / scale)) * max(0, half - inset)
         return value >= 0 ? half - magnitude : half + magnitude
     }
 }

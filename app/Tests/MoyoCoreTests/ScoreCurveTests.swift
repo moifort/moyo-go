@@ -77,6 +77,13 @@ struct ScoreCurveTests {
         #expect(ScoreCurve.y(value: 500, scale: 5, height: 40) == 0)
         #expect(ScoreCurve.y(value: -500, scale: 5, height: 40) == 40)
     }
+
+    @Test("Avec une marge, le pic s'arrête avant le bord au lieu d'y être rogné")
+    func insetKeepsThePeakOffTheEdge() {
+        #expect(ScoreCurve.y(value: 5, scale: 5, height: 40, inset: 3) == 3)
+        #expect(ScoreCurve.y(value: -5, scale: 5, height: 40, inset: 3) == 37)
+        #expect(ScoreCurve.y(value: 0, scale: 5, height: 40, inset: 3) == 20)
+    }
 }
 
 @Suite("Mise en forme du chiffre de score")

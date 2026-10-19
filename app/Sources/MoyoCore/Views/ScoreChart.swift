@@ -28,6 +28,10 @@ public struct ScoreChart: View {
 
     private var lineWidth: CGFloat { height < 30 ? 1 : 1.5 }
 
+    /// Room left above the highest lead and below the deepest deficit, wide enough
+    /// for the current-move dot.
+    private var inset: CGFloat { height < 30 ? lineWidth / 2 : 3 }
+
     public var body: some View {
         Canvas { context, size in
             let span = ScoreCurve.span(moveNumber: moveNumber, moveCount: moveCount)
@@ -47,7 +51,7 @@ public struct ScoreChart: View {
             let position = { (point: ScoreCurve.Point) in
                 CGPoint(
                     x: ScoreCurve.x(move: point.move, span: span, width: size.width),
-                    y: ScoreCurve.y(value: point.value, scale: scale, height: size.height)
+                    y: ScoreCurve.y(value: point.value, scale: scale, height: size.height, inset: inset)
                 )
             }
             // Analysed moves are drawn solid and filled; a hole between them, still
