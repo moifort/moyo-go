@@ -64,11 +64,28 @@ class BridgeSession(KaTrainHost):
         #: What the last state said of the estimate, so a fresher ownership map is
         #: sent only when it changes the count.
         self._emitted_estimate: Optional[tuple] = None
+        # -- analysis: which side of the toggle, and the tree the player builds
+        #: "live" plays or follows the game; "analysis" walks the tree, stones placed
+        #: by hand. A record with no game behind it, or a game over, is always read
+        #: in analysis.
+        self._view = "live"
+        #: The head of the game being played or followed, kept aside while the
+        #: player is in analysis. In live view it is the current node itself.
+        self._live = None
+        #: Nodes the player placed in analysis, by `id`. Holding them keeps the ids
+        #: from being reused while the session runs.
+        self._analysis_nodes: Dict[int, Any] = {}
+        #: The numbers the app knows nodes by, both ways. Never reused.
+        self._node_numbers: Dict[int, int] = {}
+        self._numbered: Dict[int, Any] = {}
+        #: For each node, the child last walked through: → goes back the same way.
+        self._last_child: Dict[int, Any] = {}
+        #: The shape of the tree as the app last received it.
+        self._emitted_tree: Optional[tuple] = None
         # -- review state, all empty outside a review
         #: The main line of the record, cached once. A variation adds nodes to the
         #: tree, so recomputing it would make the record's own length move.
         self._line: List[Any] = []
-        self._index = 0
         #: One entry per variation move: (parent, node, we created it).
         #: `Game.play` reuses a matching child, so KataGo's move landing on the move
         #: actually played walks into the record itself — which must never be pruned.
@@ -121,7 +138,7 @@ class BridgeSession(KaTrainHost):
         self._emit_new_scores()
         if self._estimating and self._estimate_key(self._estimate()) != self._emitted_estimate:
             self._emit_state()
-        if self._status == "review":
+        if self._analysing():
             self._on_review_advanced()
             return
         if self._status == "following":
@@ -139,8 +156,9 @@ class BridgeSession(KaTrainHost):
 
     def _on_review_advanced(self) -> None:
         """An analysis came back while reviewing: move the gauge, and the marker."""
-        self._emit_progress()
-        self._send_analysed_record()
+        if self._status == "review":
+            self._emit_progress()
+            self._send_analysed_record()
         best = self._best_move()
         key = None if best is None else (best["row"], best["col"])
         # The local move's cost is measured against this very analysis, so a
@@ -174,13 +192,13 @@ class BridgeSession(KaTrainHost):
     SCORE_EPSILON = 0.05
 
     def _score_nodes(self) -> List[Any]:
-        """The nodes whose score belongs on the chart.
+        """The nodes whose score belongs on the chart: the line of the game.
 
-        While playing, the line up to the current move — there is nothing beyond it.
-        While reviewing, the whole record, so stepping back does not blank out the
-        part of the chart that lies ahead. Variation nodes are in neither list.
+        While playing, the line up to the move being played — there is nothing
+        beyond it. While reviewing, the whole record, so stepping back does not blank
+        out the part of the chart that lies ahead. Branches are never on the chart.
         """
-        return self._line if self._status == "review" else self.game.current_node.nodes_from_root
+        return self._main_line()
 
     def _emit_new_scores(self) -> None:
         for node in self._score_nodes():
@@ -236,7 +254,8 @@ class BridgeSession(KaTrainHost):
         would wait forever.
         """
         node = self.game.current_node
-        if not self._ai_pending:
+        if not self._ai_pending or self._analysing():
+            # In analysis the AI waits: the game resumes where it was left.
             return
         if not (node.analysis_complete and not self.game.end_result):
             return
@@ -258,7 +277,9 @@ class BridgeSession(KaTrainHost):
     # -- commands ------------------------------------------------------------
 
     def _emit_state(self, command_id: Optional[int] = None) -> None:
-        if self._status == "review":
+        # The tree first: the state names its nodes by number.
+        self._emit_tree()
+        if self._analysing():
             self._emit_review_state(command_id)
             return
         if self._status == "following":
@@ -269,7 +290,7 @@ class BridgeSession(KaTrainHost):
                     self.game,
                     self._human_color,
                     status="following",
-                    extra=self._follow_extra(),
+                    extra={**self._follow_extra(), **self._view_fields()},
                     **self._estimate_fields(),
                 ),
             )
@@ -296,6 +317,7 @@ class BridgeSession(KaTrainHost):
                 dead=sorted(self._dead),
                 ai_strategy=self._ai_strategy,
                 ai_settings=self.config(f"ai/{self._ai_strategy}"),
+                extra=self._view_fields(),
                 **self._estimate_fields(),
             ),
         )
@@ -313,9 +335,10 @@ class BridgeSession(KaTrainHost):
 
         Averaged with the position before, as KaTrain's own manual score does: the
         map leans towards whoever is to move, and the mean takes that lean out.
-        Nothing once the game is being counted for real.
+        Nothing while the game is being counted for real. A game over is read in
+        analysis, where the estimate is a question asked of any position.
         """
-        if not self._estimating or self._status in ("scoring", "finished"):
+        if not self._estimating or self._status == "scoring":
             return None
         node = self.game.current_node
         ownership = node.ownership
@@ -399,6 +422,7 @@ class BridgeSession(KaTrainHost):
             raise CommandError("not_scoring", "the game is not being counted")
         self._status = "finished"
         self.game.current_node.end_state = self._count()["result"]
+        self._enter_analysis()
         self._emit_state(command_id)
 
     def resume_game(self, command_id):
@@ -427,6 +451,7 @@ class BridgeSession(KaTrainHost):
         if ai_settings:
             self.config(f"ai/{ai_strategy}").update(ai_settings)
         self._clear_review()
+        self._clear_tree()
         self._emitted_scores.clear()
         self._dead = set()
         self._status = "playing"
@@ -438,12 +463,19 @@ class BridgeSession(KaTrainHost):
 
     def play(self, command_id, row, col):
         self._require_game()
+        coords = to_engine_coords(row, col, self._size())
+        if self._status == "following" and not self._analysing():
+            # The real board is played on the real board: a click here asks a question.
+            self._enter_analysis()
+        if self._analysing():
+            self._play_in_analysis(command_id, coords)
+            return
         if self._status != "playing":
             raise CommandError("not_playing", "the game is over")
         node = self.game.current_node
         if self.players_info[node.next_player].ai:
             raise CommandError("not_your_turn", "it is the AI's turn")
-        move = Move(coords=to_engine_coords(row, col, self._size()), player=node.next_player)
+        move = Move(coords=coords, player=node.next_player)
         try:
             self.game.play(move)
         except IllegalMoveException as exc:
@@ -452,6 +484,9 @@ class BridgeSession(KaTrainHost):
 
     def play_pass(self, command_id):
         self._require_game()
+        if self._analysing():
+            self._play_in_analysis(command_id, None)
+            return
         if self._status != "playing":
             raise CommandError("not_playing", "the game is over")
         node = self.game.current_node
@@ -477,10 +512,13 @@ class BridgeSession(KaTrainHost):
         """Steps back until it is the human's turn again, two moves in the usual case.
 
         Not once the game is over: a resignation or an accepted count is final, and
-        the next game starts from the new-game sheet.
+        the next game starts from the new-game sheet. In analysis it takes back the
+        stone just placed by hand, never a move of the game.
         """
         self._require_game()
-        self._refuse_in_review()
+        if self._analysing():
+            self._undo_in_analysis(command_id)
+            return
         self._refuse_when_over()
         self._refuse_when_following()
         self._status = "playing"
@@ -502,12 +540,13 @@ class BridgeSession(KaTrainHost):
         self._refuse_in_review()
         if self._status != "playing":
             raise CommandError("not_playing", "the game is over")
-        self._status = "finished"
         self._dead = set()
         self._ai_pending = False
         # Only the player can resign, and may do so while the AI is thinking: the
         # winner is the AI, whoever happens to be to move. The result names the winner.
-        self.game.current_node.end_state = f"{self._ai_color}+R"
+        self._live_node().end_state = f"{self._ai_color}+R"
+        self._enter_analysis()
+        self._status = "finished"
         self._writer.emit("thinking", None, value=False)
         self._emit_state(command_id)
 
@@ -519,7 +558,6 @@ class BridgeSession(KaTrainHost):
 
     def _clear_review(self) -> None:
         self._line = []
-        self._index = 0
         self._variation = []
         self._anchor_pv = []
         self._variation_kind = "best"
@@ -546,10 +584,12 @@ class BridgeSession(KaTrainHost):
             raise CommandError("no_engine", "engine not started")
         root = review.parse(contents)
         self._clear_review()
+        self._clear_tree()
         self._emitted_scores.clear()
         self._dead = set()
         self._ai_pending = False
         self._status = "review"
+        self._view = "analysis"
         # Nobody is to move: a record is read, not played on.
         for color in ("B", "W"):
             self.players_info[color].update(PLAYER_HUMAN, PLAYING_NORMAL)
@@ -560,48 +600,41 @@ class BridgeSession(KaTrainHost):
         self._game_info = review.game_info(self.game.root)
         self._recorded = list(self.game.root.nodes_in_tree)
         self._record_command = command_id
-        self._index = len(self._line) - 1
-        self.game.set_current_node(self._line[self._index])
-        self._boost_window()
-        self._request_local(ask=True)
-        self._emit_state(command_id)
+        self._show(self._line[-1], command_id)
 
     def export_sgf(self, command_id, black_name, white_name):
         """Hands the game over as SGF text, for the app to write where the player chose.
 
-        A game against the AI goes out as the line actually on the board: moves taken
-        back stay in KaTrain's tree but were never part of the game. A record under
-        review goes out whole, as it came in — names, result, branches — plus the
-        variation being walked, which is how a reading of KataGo's is kept.
+        What goes out is what the tree shows: the line of the game, the branches the
+        record came with, and every branch the player built in analysis, with the
+        variation being walked, which is how a reading of KataGo's is kept. Moves
+        taken back against the AI, and the corrections made while following the
+        real board, stay in KaTrain's tree but were never part of the game.
         """
         self._require_game()
+        nodes = self._visible_nodes()
         if self._status == "review":
-            text = record.text(self.game.root)
+            text = record.text(self.game.root, nodes=nodes)
         else:
             text = record.text(
                 self.game.root,
-                nodes=self.game.current_node.nodes_from_root,
+                nodes=nodes,
                 properties={
                     "AP": "Moyo",
                     "DT": record.sgf_date(self.game.root.get_property("DT", None)),
                     "PB": black_name or None,
                     "PW": white_name or None,
-                    "RE": self.game.end_result or None,
+                    "RE": self._live_node().end_state or None,
                 },
             )
         self._writer.emit("sgf", command_id, contents=text)
 
     def goto(self, command_id, move_number):
-        """Jumps to a position in the main line. Out-of-range asks are clamped."""
+        """Jumps to a position in the line of the game. Out-of-range asks are clamped."""
         self._require_review()
-        self._prune_variation()
-        self._local_wanted = False
-        self._index = max(0, min(int(move_number), len(self._line) - 1))
-        self.game.set_current_node(self._line[self._index])
-        self._emitted_best = None
-        self._boost_window()
-        self._request_local(ask=True)
-        self._emit_state(command_id)
+        line = self._main_line()
+        self._leave_preview()
+        self._show(line[max(0, min(int(move_number), len(line) - 1))], command_id)
 
     def step_variation(self, command_id, step, kind="best"):
         """Walks a continuation one move per call, colours alternating.
@@ -616,8 +649,7 @@ class BridgeSession(KaTrainHost):
         self._local_wanted = False
         if int(step) > 0:
             if self._variation and kind != self._variation_kind:
-                self._prune_variation()
-                self.game.set_current_node(self._line[self._index])
+                self._leave_preview()
             if kind == "local" and not self._variation:
                 self._request_local(ask=True)
             if kind == "local" and not self._variation and self._local_pending():
@@ -631,7 +663,7 @@ class BridgeSession(KaTrainHost):
 
     def _anchor_line(self) -> List[str]:
         """The continuation the current variation follows, as it stands right now."""
-        anchor = self._line[self._index]
+        anchor = self._anchor()
         if self._variation_kind == "best":
             return review.variation(anchor)
         reading = self._local.get(id(anchor))
@@ -658,7 +690,7 @@ class BridgeSession(KaTrainHost):
         self._anchor_pv = fresh
 
     def _push_variation(self, command_id) -> None:
-        anchor = self._line[self._index]
+        anchor = self._anchor()
         if not self._variation:
             self._anchor_pv = self._anchor_line()
         else:
@@ -708,7 +740,7 @@ class BridgeSession(KaTrainHost):
                 return False
             extension["wanted"] = extension["wanted"] or wanted
             return True
-        reading = self._local.get(id(self._line[self._index]))
+        reading = self._local.get(id(self._anchor()))
         if not reading or reading["zone"] is None:
             return False
         node = self.game.current_node
@@ -757,22 +789,49 @@ class BridgeSession(KaTrainHost):
     def _pop_variation(self, command_id) -> None:
         if not self._variation:
             raise CommandError("no_variation", "il n'y a pas de variante à remonter")
+        self._pop_one()
+        self._emit_state(command_id)
+
+    def _pop_one(self) -> None:
         parent, node, created = self._variation.pop()
         self.game.set_current_node(parent)
-        if created:
-            parent.children = [child for child in parent.children if child is not node]
+        self._drop_preview_node(parent, node, created)
         self._local_extension = None
         if not self._variation:
             self._anchor_pv = []
             self._variation_kind = "best"
-        self._emit_state(command_id)
 
     def _prune_variation(self) -> None:
         """Drops the whole variation branch, keeping whatever belongs to the record."""
         while self._variation:
             parent, node, created = self._variation.pop()
+            self._drop_preview_node(parent, node, created)
+        self._anchor_pv = []
+        self._variation_kind = "best"
+        self._local_extension = None
+
+    def _drop_preview_node(self, parent, node, created) -> None:
+        """Takes a preview move off the tree, unless it has become worth keeping.
+
+        A move of the real board may have walked into it while the player looked
+        on, or the player may have placed a stone from it: either way it stays.
+        """
+        if created and not self._kept(node):
+            parent.children = [child for child in parent.children if child is not node]
+
+    def _leave_preview(self):
+        """Back to the position the preview started from; returns it."""
+        anchor = self._anchor()
+        self._prune_variation()
+        self.game.set_current_node(anchor)
+        return anchor
+
+    def _keep_preview(self) -> None:
+        """A stone placed from inside a preview: the moves walked become a branch."""
+        for _, node, created in self._variation:
             if created:
-                parent.children = [child for child in parent.children if child is not node]
+                self._analysis_nodes[id(node)] = node
+        self._variation = []
         self._anchor_pv = []
         self._variation_kind = "best"
         self._local_extension = None
@@ -781,14 +840,16 @@ class BridgeSession(KaTrainHost):
         """Pushes the current node and the ones just behind it to the front of the queue."""
         if self._engine is None:
             return
-        lower = max(0, self._index - self.PRIORITY_WINDOW)
-        # Reversed: the position on screen is asked for first, its neighbours after.
-        for node in reversed(self._line[lower : self._index + 1]):
+        # The position on screen is asked for first, the ones behind it after.
+        node = self.game.current_node
+        for _ in range(self.PRIORITY_WINDOW + 1):
+            if node is None:
+                break
             key = id(node)
-            if key in self._boosted or node.analysis_complete:
-                continue
-            self._boosted.add(key)
-            node.analyze(self._engine, priority=PRIORITY_DEFAULT)
+            if key not in self._boosted and not node.analysis_complete:
+                self._boosted.add(key)
+                node.analyze(self._engine, priority=PRIORITY_DEFAULT)
+            node = node.parent
 
     def _best_move(self) -> Optional[Dict[str, Any]]:
         """The point to mark: KataGo's first choice, or the variation's next move.
@@ -801,7 +862,7 @@ class BridgeSession(KaTrainHost):
         size = serialize.board_size(self.game)
         depth = len(self._variation)
         if depth == 0:
-            return review.best_move(self._line[self._index], size)
+            return review.best_move(self._anchor(), size)
         if self._variation_kind != "best":
             return None
         return self._next_in_variation(0.0)
@@ -832,16 +893,14 @@ class BridgeSession(KaTrainHost):
                 raise CommandError("bad_arguments", str(exc)) from exc
         self._drawn_zone = zone
         self._local_wanted = False
-        if self._variation:
-            self._prune_variation()
-            self.game.set_current_node(self._line[self._index])
+        self._leave_preview()
         # A zone just drawn is a question asked: read it straight away.
         self._request_local(ask=True)
         self._emit_state(command_id)
 
     def _focus_node(self):
         """The position the local reading is about: the record's, or the game's own."""
-        return self._line[self._index] if self._status == "review" else self.game.current_node
+        return self._anchor() if self._analysing() else self.game.current_node
 
     def _request_local(self, ask: bool = False) -> None:
         """Places the zone of the position on screen; `ask` also has KataGo read it.
@@ -886,7 +945,7 @@ class BridgeSession(KaTrainHost):
             self._on_local_extension(analysis, zone)
             return
         reading = self._local.get(id(node))
-        if reading is None or self._status not in ("review", "following"):
+        if reading is None or not (self._analysing() or self._status == "following"):
             return  # another record has been opened since
         if zone is not None and reading["zone"] != zone:
             return  # the answer to a zone redrawn since
@@ -941,19 +1000,30 @@ class BridgeSession(KaTrainHost):
         return local.best_move(reading["analysis"], node, self._size(), prefer)
 
     def _emit_review_state(self, command_id: Optional[int] = None) -> None:
+        """The state in analysis, whatever game lies behind it.
+
+        `status` still says what that game is — a record alone, a game played or
+        followed and left aside, or one that is over — and `move_number` is the
+        position on screen counted from the root, branch or not.
+        """
+        line = self._main_line()
+        if self._status == "review":
+            result, info = self._game_info.get("result"), self._game_info
+        else:
+            result, info = self._live_node().end_state or None, review.game_info(self.game.root)
         self._writer.emit(
             "state",
             command_id,
             **serialize.game_state(
                 self.game,
                 self._human_color,
-                status="review",
-                result=self._game_info.get("result"),
+                status=self._status,
+                result=result,
                 review={
-                    "move_number": self._index,
-                    "move_count": len(self._line) - 1,
-                    "score_history": [node.score for node in self._line],
-                    "game_info": self._game_info,
+                    "move_number": len(self._anchor().nodes_from_root) - 1,
+                    "move_count": len(line) - 1,
+                    "score_history": [node.score for node in line],
+                    "game_info": info,
                     "variation_depth": len(self._variation),
                     "variation_kind": self._variation_kind if self._variation else None,
                     "best_move": self._best_move(),
@@ -964,13 +1034,14 @@ class BridgeSession(KaTrainHost):
                     "local_wanted": self._local_wanted
                     or bool(self._local_extension and self._local_extension["wanted"]),
                 },
+                extra=self._view_fields(),
                 **self._estimate_fields(),
             ),
         )
 
     def _require_review(self) -> None:
-        if self._status != "review":
-            raise CommandError("not_reviewing", "aucune partie n'est en cours de revue")
+        if not self._analysing():
+            raise CommandError("not_reviewing", "aucune analyse n'est en cours")
 
     def _refuse_when_over(self) -> None:
         if self._status == "finished":
@@ -984,6 +1055,316 @@ class BridgeSession(KaTrainHost):
         if self._status == "review":
             raise CommandError("not_playing", "la partie est en revue, pas en cours")
 
+
+    # -- analysis: the view, the tree, the cursors ----------------------------
+
+    def _clear_tree(self) -> None:
+        """A new game or record: a new tree, and nothing read on the old one."""
+        self._view = "live"
+        self._live = None
+        self._analysis_nodes = {}
+        self._node_numbers = {}
+        self._numbered = {}
+        self._last_child = {}
+        self._emitted_tree = None
+
+    def _analysing(self) -> bool:
+        """A record alone is always read in analysis; a game only when asked."""
+        return self._status == "review" or self._view == "analysis"
+
+    def _live_node(self):
+        """The head of the game being played or followed; None for a record alone."""
+        if self._status == "review":
+            return None
+        return self.game.current_node if self._view == "live" else self._live
+
+    def _main_line(self) -> List[Any]:
+        """The line of the game: the record's main line, or the root to the live head."""
+        if self._status == "review":
+            return self._line
+        live = self._live_node()
+        return live.nodes_from_root if live is not None else []
+
+    def _anchor(self):
+        """The position on screen: where the preview being walked started, if any."""
+        return self._variation[0][0] if self._variation else self.game.current_node
+
+    def _kept(self, node) -> bool:
+        """Whether a node belongs to the game, the record, or the player's analysis."""
+        return (
+            id(node) in self._analysis_nodes
+            or any(node is other for other in self._recorded)
+            or any(node is other for other in self._main_line())
+        )
+
+    def _origins(self) -> Dict[int, str]:
+        """What each node of the tree is, by `id`: the four kinds the app can show.
+
+        Anything else — a move taken back against the AI, a correction made while
+        following — is hidden, unless a branch the player built hangs from it.
+        """
+        origins: Dict[int, str] = {}
+        for node in self._recorded:
+            origins[id(node)] = "record"
+        for key in self._analysis_nodes:
+            origins[key] = "analysis"
+        for _, node, _ in self._variation:
+            origins.setdefault(id(node), "preview")
+        for node in self._main_line():
+            origins[id(node)] = "game"
+        return origins
+
+    def _visible_nodes(self) -> List[Any]:
+        """The tree the player sees, root first, each parent before its children."""
+        origins = self._origins()
+        shown = set()
+        for node in self.game.root.nodes_in_tree:
+            if id(node) not in origins:
+                continue
+            while node is not None and id(node) not in shown:
+                shown.add(id(node))
+                node = node.parent
+        out: List[Any] = []
+        stack = [self.game.root]
+        while stack:
+            node = stack.pop()
+            if id(node) in shown:
+                out.append(node)
+                stack.extend(reversed(node.ordered_children))
+        return out
+
+    def _number(self, node) -> int:
+        key = id(node)
+        if key not in self._node_numbers:
+            number = len(self._numbered) + 1
+            self._node_numbers[key] = number
+            self._numbered[number] = node
+        return self._node_numbers[key]
+
+    def _node(self, number):
+        """The node the app named, if it is still in the tree."""
+        node = self._numbered.get(int(number))
+        walker = node
+        while walker is not None and walker.parent is not None:
+            if all(child is not walker for child in walker.parent.children):
+                return None
+            walker = walker.parent
+        return node if walker is self.game.root else None
+
+    def _view_fields(self) -> Dict[str, Any]:
+        live = self._live_node()
+        return {
+            "view": "analysis" if self._analysing() else "live",
+            "node_id": self._number(self.game.current_node),
+            "live_node_id": None if live is None else self._number(live),
+        }
+
+    def _emit_tree(self) -> None:
+        """Sends the visible tree when its shape has changed since the last time."""
+        if self.game is None:
+            return
+        origins = self._origins()
+        size = self._size()
+        nodes = []
+        for node in self._visible_nodes():
+            move = node.move
+            point = (
+                to_display_coords(move.coords, size)
+                if move is not None and not move.is_pass
+                else {"row": None, "col": None}
+            )
+            nodes.append(
+                {
+                    "id": self._number(node),
+                    "parent": None if node.parent is None else self._number(node.parent),
+                    "color": None if move is None else move.player,
+                    "row": point["row"],
+                    "col": point["col"],
+                    "pass": bool(move is not None and move.is_pass),
+                    # An ancestor kept only for a branch hanging from it reads as a branch.
+                    "origin": origins.get(id(node), "analysis"),
+                }
+            )
+        shape = tuple(tuple(sorted(node.items())) for node in nodes)
+        if shape == self._emitted_tree:
+            return
+        self._emitted_tree = shape
+        self._writer.emit("tree", None, nodes=nodes)
+
+    def _enter_analysis(self) -> None:
+        """Sets the live head aside and starts reading from it."""
+        if self._analysing():
+            return
+        self._live = self.game.current_node
+        self._view = "analysis"
+        self._emitted_best = None
+        self._remember_path(self._live)
+        self._boost_window()
+        self._request_local(ask=True)
+
+    def set_view(self, command_id, view):
+        """The toggle at the top of the window: the game itself, or the analysis."""
+        self._require_game()
+        if view == "analysis":
+            if self._status == "scoring":
+                raise CommandError("not_now", "le décompte doit d'abord être tranché")
+            if not self._analysing():
+                self._enter_analysis()
+                if self._ai_pending:
+                    self._writer.emit("thinking", None, value=False)
+            self._emit_state(command_id)
+            return
+        if view != "live":
+            raise CommandError("bad_arguments", f"unknown view '{view}'")
+        if self._status in ("review", "finished"):
+            raise CommandError("no_live_game", "aucune partie n'est en cours")
+        if self._view == "analysis":
+            self._leave_preview()
+            self._local_wanted = False
+            self.game.set_current_node(self._live)
+            self._live = None
+            self._view = "live"
+            self._emitted_best = None
+            if self._status == "following":
+                self._request_local(ask=self._follow_analysis)
+        self._emit_state(command_id)
+        if self._ai_pending:
+            self._writer.emit("thinking", None, value=True)
+            self._maybe_play_ai_move()
+
+    def _remember_path(self, node) -> None:
+        for step in node.nodes_from_root[1:]:
+            self._last_child[id(step.parent)] = step
+
+    def _show(self, node, command_id) -> None:
+        """Puts a node on screen, with what a position on screen is owed."""
+        self._local_wanted = False
+        self.game.set_current_node(node)
+        self._remember_path(node)
+        self._emitted_best = None
+        self._boost_window()
+        self._request_local(ask=True)
+        self._emit_state(command_id)
+
+    def goto_node(self, command_id, node_id):
+        """A click in the tree. From the live view, it is a step into analysis."""
+        self._require_game()
+        node = self._node(node_id)
+        if node is None:
+            raise CommandError("no_node", "ce coup n'est plus dans l'arbre")
+        if not self._analysing():
+            if self._status == "scoring":
+                raise CommandError("not_now", "le décompte doit d'abord être tranché")
+            self._enter_analysis()
+        if any(node is walked for _, walked, _ in self._variation):
+            # A move of the preview: walk back to it rather than drop it.
+            while self.game.current_node is not node:
+                self._pop_one()
+            self._emit_state(command_id)
+            return
+        self._leave_preview()
+        self._show(node, command_id)
+
+    #: Where each `navigate` target leads from the position on screen.
+    NAVIGATION = ("back", "forward", "previous_sibling", "next_sibling", "start", "end", "game")
+
+    def navigate(self, command_id, to):
+        """The arrow keys, in the tree. Nowhere to go keeps the position on screen."""
+        self._require_review()
+        if to not in self.NAVIGATION:
+            raise CommandError("bad_arguments", f"unknown destination '{to}'")
+        node = self._leave_preview()
+        if to == "back":
+            target = node.parent or node
+        elif to == "forward":
+            target = self._next_child(node) or node
+        elif to in ("previous_sibling", "next_sibling"):
+            target = self._sibling(node, -1 if to == "previous_sibling" else 1) or node
+        elif to == "start":
+            target = self.game.root
+        elif to == "end":
+            target = node
+            while (following := self._next_child(target)) is not None:
+                target = following
+        else:
+            on_line = {id(other) for other in self._main_line()}
+            target = node
+            while id(target) not in on_line and target.parent is not None:
+                target = target.parent
+        self._show(target, command_id)
+
+    def _visible_children(self, node) -> List[Any]:
+        shown = {id(other) for other in self._visible_nodes()}
+        return [child for child in node.ordered_children if id(child) in shown]
+
+    def _next_child(self, node):
+        """The child last walked through; failing that the game's own, then the first."""
+        children = self._visible_children(node)
+        if not children:
+            return None
+        remembered = self._last_child.get(id(node))
+        if any(child is remembered for child in children):
+            return remembered
+        line = self._main_line()
+        for child in children:
+            if any(child is other for other in line):
+                return child
+        return children[0]
+
+    def _sibling(self, node, step):
+        if node.parent is None:
+            return None
+        siblings = self._visible_children(node.parent)
+        index = next(i for i, other in enumerate(siblings) if other is node) + step
+        return siblings[index] if 0 <= index < len(siblings) else None
+
+    def _play_in_analysis(self, command_id, coords) -> None:
+        """A stone placed by hand: the colour to move, captures as on any board.
+
+        A move already there is walked into rather than doubled. From inside a
+        preview, the moves walked so far are kept: the stone continues them.
+        """
+        if self._variation:
+            self._keep_preview()
+        node = self.game.current_node
+        before = list(node.children)
+        try:
+            played = self.game.play(Move(coords=coords, player=node.next_player))
+        except IllegalMoveException as exc:
+            raise CommandError("illegal_move", str(exc)) from exc
+        if all(child is not played for child in before):
+            self._analysis_nodes[id(played)] = played
+        self._show(played, command_id)
+
+    def delete_branch(self, command_id, node_id):
+        """Drops a node placed in analysis, and everything played after it."""
+        self._require_review()
+        node = self._node(node_id)
+        if node is None or id(node) not in self._analysis_nodes or not self._deletable(node):
+            raise CommandError("not_analysis_node", "seule une variante d'analyse peut être supprimée")
+        anchor = self._leave_preview()
+        parent = node.parent
+        parent.children = [child for child in parent.children if child is not node]
+        for gone in node.nodes_in_tree:
+            self._analysis_nodes.pop(id(gone), None)
+        on_screen = any(step is node for step in anchor.nodes_from_root)
+        self._show(parent if on_screen else anchor, command_id)
+
+    def _deletable(self, node) -> bool:
+        """Nothing under the node belongs to the game: the real board may have walked in."""
+        line = {id(other) for other in self._main_line()}
+        return all(id(other) not in line for other in node.nodes_in_tree)
+
+    def _undo_in_analysis(self, command_id) -> None:
+        """⌘Z in analysis: the last stone placed by hand, never a move of the game."""
+        if self._variation:
+            self._pop_one()
+            self._emit_state(command_id)
+            return
+        node = self.game.current_node
+        if id(node) not in self._analysis_nodes or node.children or not self._deletable(node):
+            raise CommandError("nothing_to_undo", "aucune pierre posée à la main à retirer ici")
+        self.delete_branch(command_id, self._number(node))
 
     # -- following a game on a real board ------------------------------------
 
@@ -999,6 +1380,7 @@ class BridgeSession(KaTrainHost):
             self.players_info[color].update(PLAYER_HUMAN, PLAYING_NORMAL)
         self._human_color = "B"
         self._clear_review()
+        self._clear_tree()
         self._emitted_scores.clear()
         self._dead = set()
         self._ai_pending = False
@@ -1024,12 +1406,26 @@ class BridgeSession(KaTrainHost):
         if self._follow_fresh:
             self._follow_fresh = False
             if target:
+                # A new game replaces the tree: nothing read on the empty board survives.
+                self._clear_tree()
                 self._join_halfway(target, size)
             self._follow_in_sync = True
             self._emit_state(command_id)
             return
-        self._follow_in_sync = self._reach(target)
-        self._request_local(ask=self._follow_analysis)
+        if not self._analysing():
+            self._follow_in_sync = self._reach(target)
+            self._request_local(ask=self._follow_analysis)
+            self._emit_state(command_id)
+            return
+        # In analysis the game is followed out of sight: the live head moves, the
+        # position the player is reading does not.
+        cursor = self.game.current_node
+        self.game.set_current_node(self._live)
+        try:
+            self._follow_in_sync = self._reach(target)
+        finally:
+            self._live = self.game.current_node
+            self.game.set_current_node(cursor)
         self._emit_state(command_id)
 
     def _follow_extra(self) -> Dict[str, Any]:
@@ -1131,16 +1527,16 @@ class BridgeSession(KaTrainHost):
         self._require_following()
         if result:
             self.game.root.set_property("RE", result)
-        line = self.game.current_node.nodes_from_root
+        # The player may be in analysis already: they stay on the position they read.
+        cursor = self._leave_preview() if self._analysing() else None
+        line = self._live_node().nodes_from_root
         self._clear_review()
         self._status = "review"
+        self._view = "analysis"
+        self._live = None
         self._line = line
         self._game_info = review.game_info(self.game.root)
-        self._index = len(line) - 1
-        self.game.set_current_node(line[self._index])
-        self._boost_window()
-        self._request_local(ask=True)
-        self._emit_state(command_id)
+        self._show(cursor or line[-1], command_id)
 
     def _require_following(self) -> None:
         if self._status != "following":

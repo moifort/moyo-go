@@ -74,9 +74,18 @@ def test_nobody_is_to_move_on_the_mac(session, stream):
     assert state["status"] == "following"
     assert state["in_sync"] is True
     with pytest.raises(CommandError):
-        session.play(3, 4, 4)
-    with pytest.raises(CommandError):
         session.undo(3)
+
+
+def test_a_click_while_following_opens_the_analysis(session, stream):
+    session.follow_board(3, rows((2, 2, "B")))
+    live = session.game.current_node
+    session.play(4, 4, 4)
+    state = last_state(stream)
+    assert state["view"] == "analysis"
+    assert state["status"] == "following"
+    assert session.game.current_node.parent is live
+    assert session._live is live
 
 
 def test_one_new_stone_is_a_move(session, stream):

@@ -61,6 +61,14 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         session.submit(
             session.step_variation, command_id, int(command["step"]), command.get("kind") or "best"
         )
+    elif name == "set_view":
+        session.submit(session.set_view, command_id, command["view"])
+    elif name == "goto_node":
+        session.submit(session.goto_node, command_id, int(command["node_id"]))
+    elif name == "navigate":
+        session.submit(session.navigate, command_id, command["to"])
+    elif name == "delete_branch":
+        session.submit(session.delete_branch, command_id, int(command["node_id"]))
     elif name == "set_local_zone":
         session.submit(session.set_local_zone, command_id, command.get("zone"))
     elif name == "follow_start":

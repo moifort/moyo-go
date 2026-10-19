@@ -120,11 +120,10 @@ def test_no_marker_while_nothing_has_been_analysed(reviewing):
     assert last_state(reviewing)["best_move"] is None
 
 
-def test_playing_commands_are_refused_while_reviewing(reviewing):
-    run(reviewing, reviewing.play, 2, 0, 0)
+def test_a_record_cannot_be_resigned_nor_its_moves_taken_back(reviewing):
     run(reviewing, reviewing.undo, 3)
     run(reviewing, reviewing.resign, 4)
-    assert [e["code"] for e in errors(reviewing)] == ["not_playing"] * 3
+    assert [e["code"] for e in errors(reviewing)] == ["nothing_to_undo", "not_playing"]
 
 
 def test_navigation_is_refused_outside_a_review(session):

@@ -27,6 +27,9 @@ def session():
     stream = io.StringIO()
     bridge = BridgeSession(EventWriter(stream))
     bridge._engine = FakeEngine()
+    # A game over is read in analysis, which asks for local readings a fake engine
+    # cannot build.
+    bridge._send_local_query = lambda node, zone: None
     bridge.new_game(1, 9, 6.5, "japanese", "B", "ai:human", {})
     bridge._stream = stream
     return bridge
@@ -230,19 +233,30 @@ class TestResigning:
         session.resign(2)
         assert "scoring" not in last_state(session)
 
-    @pytest.mark.parametrize("action", ["play", "pass", "resign", "undo"])
-    def test_nothing_more_is_played_after_resigning(self, session, action):
+    @pytest.mark.parametrize("action, code", [("resign", "not_playing"), ("undo", "nothing_to_undo")])
+    def test_nothing_more_is_played_after_resigning(self, session, action, code):
         session.resign(2)
         attempt = {
-            "play": lambda: session.play(3, 4, 4),
-            "pass": lambda: session.play_pass(3),
             "resign": lambda: session.resign(3),
             "undo": lambda: session.undo(3),
         }[action]
         with pytest.raises(CommandError) as exc:
             attempt()
-        assert exc.value.code == "not_playing"
+        assert exc.value.code == code
         assert session.game.end_result == "W+R"
+
+    def test_a_resigned_game_opens_in_analysis(self, session):
+        session.resign(2)
+        assert last_state(session)["view"] == "analysis"
+
+    @pytest.mark.parametrize("action", ["play", "pass"])
+    def test_a_stone_after_resigning_is_a_branch_not_a_move(self, session, action):
+        session.resign(2)
+        end = session.game.current_node
+        {"play": lambda: session.play(3, 4, 4), "pass": lambda: session.play_pass(3)}[action]()
+        assert session.game.current_node.parent is end
+        assert last_state(session)["status"] == "finished"
+        assert last_state(session)["result"] == "W+R"
 
     def test_a_new_game_starts_afresh(self, session):
         session.resign(2)
