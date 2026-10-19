@@ -303,6 +303,16 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   afresh from the last corners is not the answer: on that trial the detector landed
   100 px off, pulled by the board's edges.
 
+- **The grid refit stops at the first local optimum.** `fitCorners` climbs greedily, one
+  corner or the whole grid at a time, and keeps the first move that scores better. On
+  `rasante-support-decale` the CI runner's JPEG decoder, which differs from the Mac's by a
+  hundredth of a gray level on average, sent it 3 to 6 px elsewhere; that grid scores
+  higher than the Mac's, which had stopped short. The reader now takes a lone stone read on
+  either grid, so the test no longer depends on where the climb stops. Trying every move
+  before keeping the best, or several starts, would make the refit land in the same place
+  for nearly identical frames; left for now because each refit already samples the grid a
+  few hundred times every two seconds, and live frames differ by far more than a decoder.
+
 - **Stone height is a constant.** The reader lifts its disk by 0.4 spacings of stone
   thickness (a 9 mm stone on a 22 mm grid), scaled by the local viewing angle and capped
   at 0.45. Thinner stones or a bigger board would want another value; measuring it from

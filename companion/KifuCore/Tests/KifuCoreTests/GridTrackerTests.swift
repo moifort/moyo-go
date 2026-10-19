@@ -34,6 +34,22 @@ final class GridTrackerTests: XCTestCase {
         XCTAssertNil(tracker.update(image, at: 100))
     }
 
+    /// Same frame, read on the grid the refit settles on with the CI runner's JPEG decoder: it
+    /// fits the lines better than the fixture's, and the new stone at (2,9), set off its
+    /// intersection, gives a disk too uneven for a stone next to others. Alone, it is taken.
+    func testLoneOffCentreStoneIsReadOnTheBestFittingGrid() throws {
+        let dir = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures", withExtension: nil))
+        let json = dir.appendingPathComponent("rasante-support-decale.json")
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: json))
+        let photo = dir.appendingPathComponent("rasante-support-decale.jpg")
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(photo as CFURL, nil))
+        let image = try XCTUnwrap(GrayImage(cgImage: try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))))
+        let corners = [(1194.0, 1230.5), (2776.7, 1224.3), (3920.4, 2617.8), (556.6, 2828.2)].map { Point(x: $0.0, y: $0.1) }
+        let reader = IntersectionReader(geometry: try XCTUnwrap(BoardGeometry(calibration: Calibration(corners: corners))))
+        XCTAssertGreaterThan(reader.measure(image, at: Intersection(col: 2, row: 9)).deviation, reader.settings.maxNewStoneDeviation)
+        XCTAssertEqual(reader.read(image, previous: nil).position, Position(parsing: fixture.expected.joined(separator: "\n")))
+    }
+
     func testTrackerWaitsForItsPeriod() throws {
         var scene = SyntheticScene()
         scene.stones = [Intersection(col: 3, row: 3): .black]

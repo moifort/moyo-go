@@ -37,7 +37,9 @@ public struct ReaderSettings: Sendable, Equatable, Codable {
     /// A stone that was not there before is only taken when the disk is this uniform: inside
     /// a stone's body the deviation stays under 20 on real photos, while a disk straddling the
     /// rim of the neighbour's stone, which leans into this cell, reaches 45 and more. Such an
-    /// intersection is left unreadable, and keeps what it had.
+    /// intersection is left unreadable, and keeps what it had. With no stone around, nothing
+    /// leans in: the disk is uneven because the stone sits off the intersection, up to 50 when
+    /// the grid is refitted a few pixels away, and the stone is taken.
     public var maxNewStoneDeviation = 40.0
 
     public init() {}
@@ -283,14 +285,32 @@ public struct IntersectionReader: Sendable {
     /// intersection in front of one lands in its cast shadow.
     /// Nil when a new stone shows but the disk is not uniform enough to take it.
     private func classify(_ m: Measure, at i: Intersection, previous: Stone?, in image: GrayImage) -> Stone? {
+        let stone = classifyAnyway(m, at: i, previous: previous, in: image)
+        return isUneven(stone, m, previous: previous) ? nil : stone
+    }
+
+    /// `classify` without the uniformity check on new stones.
+    private func classifyAnyway(_ m: Measure, at i: Intersection, previous: Stone?, in image: GrayImage) -> Stone {
         var stone = Self.classify(m, previous: previous, settings: settings)
         if stone == .black, stoneShift(at: i, in: image) != (0, 0) {
             let flat = measure(image, at: i, shift: (0, 0))
             let onIntersection = Measure(stone: flat.stone, wood: m.wood, deviation: flat.deviation)
             stone = Self.classify(onIntersection, previous: previous, settings: settings) == .black ? .black : .empty
         }
-        if stone != .empty, stone != previous, m.deviation > settings.maxNewStoneDeviation { return nil }
         return stone
+    }
+
+    /// True for a new stone whose disk is not uniform enough to take it next to another stone.
+    private func isUneven(_ stone: Stone, _ m: Measure, previous: Stone?) -> Bool {
+        stone != .empty && stone != previous && m.deviation > settings.maxNewStoneDeviation
+    }
+
+    private func hasNeighbour(_ i: Intersection, in occupied: Set<Intersection>) -> Bool {
+        (-1...1).contains { dy in
+            (-1...1).contains { dx in
+                (dx != 0 || dy != 0) && occupied.contains(Intersection(col: i.col + dx, row: i.row + dy))
+            }
+        }
     }
 
     public static func classify(_ m: Measure, previous: Stone?, settings: ReaderSettings) -> Stone {
@@ -314,6 +334,7 @@ public struct IntersectionReader: Sendable {
         var position = Position(size: geometry.lines)
         var unreadable: Set<Intersection> = []
         var measures: [Intersection: Measure] = [:]
+        var uneven: Set<Intersection> = []
         for i in position.all {
             let m = measure(image, at: i)
             measures[i] = m
@@ -321,13 +342,18 @@ public struct IntersectionReader: Sendable {
                 unreadable.insert(i)
                 position[i] = previous?[i] ?? .empty
             } else {
-                if let stone = classify(m, at: i, previous: previous?[i], in: image) {
-                    position[i] = stone
-                } else {
-                    unreadable.insert(i)
-                    position[i] = previous?[i] ?? .empty
-                }
+                let stone = classifyAnyway(m, at: i, previous: previous?[i], in: image)
+                position[i] = stone
+                if isUneven(stone, m, previous: previous?[i]) { uneven.insert(i) }
             }
+        }
+        // An uneven new stone may be the rim of a neighbour leaning into the cell: with a stone
+        // around it stays unreadable, alone it is a stone set off its intersection.
+        var others = Set(position.stones.keys).subtracting(uneven)
+        if let previous { others.formUnion(previous.stones.keys) }
+        for i in uneven where hasNeighbour(i, in: others) {
+            unreadable.insert(i)
+            position[i] = previous?[i] ?? .empty
         }
 
         var occupied = Set(position.stones.keys)
@@ -335,12 +361,7 @@ public struct IntersectionReader: Sendable {
         let first = position
         var lone: [Intersection: Stone] = [:]
         for i in first.all where !unreadable.contains(i) {
-            let hasNeighbour = (-1...1).contains { dy in
-                (-1...1).contains { dx in
-                    (dx != 0 || dy != 0) && occupied.contains(Intersection(col: i.col + dx, row: i.row + dy))
-                }
-            }
-            if hasNeighbour {
+            if hasNeighbour(i, in: occupied) {
                 if covered(i, by: occupied.subtracting([i]), in: image) {
                     unreadable.insert(i)
                     position[i] = previous?[i] ?? .empty
