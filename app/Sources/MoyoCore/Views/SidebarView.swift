@@ -125,7 +125,7 @@ public struct SidebarView: View {
         if state.status == .finished, let result = state.result, state.winnerByResignation == nil {
             return result
         }
-        return "Coup \(state.moveNumber) · \(Theme.name(state.toPlay)) au trait"
+        return "Coup \(state.moveNumber) · À \(Theme.name(state.toPlay)) de jouer"
     }
 
     private func leadCaption(_ lead: Double) -> String {
