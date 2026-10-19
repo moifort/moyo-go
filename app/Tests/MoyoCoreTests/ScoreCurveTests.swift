@@ -18,6 +18,13 @@ struct ScoreCurveTests {
         #expect(points.map(\.move) == [0, 3])
     }
 
+    @Test("Les trous coupent la courbe en tronçons de coups consécutifs")
+    func holesSplitTheCurveIntoRuns() {
+        let points = ScoreCurve.points(scores: [0: 0.5, 1: 1.0, 2: 0.8, 40: -3.0, 41: -2.0, 60: 1.0], upTo: 60)
+        #expect(ScoreCurve.runs(points).map { $0.map(\.move) } == [[0, 1, 2], [40, 41], [60]])
+        #expect(ScoreCurve.runs([]).isEmpty)
+    }
+
     @Test("Les coups annulés ne sont plus tracés")
     func stopsAtTheCurrentMove() {
         let points = ScoreCurve.points(scores: [0: 0.5, 1: 1.0, 2: 2.0], upTo: 1)

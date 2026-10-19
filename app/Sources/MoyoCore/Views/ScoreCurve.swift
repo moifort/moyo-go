@@ -3,9 +3,11 @@ import CoreGraphics
 /// The geometry of the score curve: which moves it passes through, how wide the
 /// game is, how tall a lead is.
 ///
-/// One point per analysed move. A move without an analysis is simply absent and
-/// the line crosses the gap, the way lichess draws a game whose engine is still
-/// catching up: a hole drawn at zero would read as a sudden equality.
+/// One point per analysed move. A move without an analysis is simply absent: a
+/// hole drawn at zero would read as a sudden equality. The chart bridges a hole
+/// with a faint dotted line rather than a solid one, so a game whose engine is
+/// still catching up does not show a confident diagonal across moves nobody has
+/// looked at yet.
 public enum ScoreCurve {
     public struct Point: Equatable, Sendable {
         public let move: Int
@@ -34,6 +36,20 @@ public enum ScoreCurve {
             .filter { $0 >= 0 && $0 <= moveNumber }
             .sorted()
             .compactMap { move in scores[move].map { Point(move: move, value: $0) } }
+    }
+
+    /// The points cut into runs of consecutive moves: each run is drawn solid, the
+    /// holes between them are only bridged.
+    public static func runs(_ points: [Point]) -> [[Point]] {
+        var runs: [[Point]] = []
+        for point in points {
+            if let previous = runs.last?.last, point.move == previous.move + 1 {
+                runs[runs.count - 1].append(point)
+            } else {
+                runs.append([point])
+            }
+        }
+        return runs
     }
 
     /// Moves the chart spans: the whole record under review, the game so far

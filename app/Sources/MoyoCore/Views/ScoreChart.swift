@@ -44,21 +44,34 @@ public struct ScoreChart: View {
                 lineWidth: 0.5
             )
 
-            guard let first = allPoints.first, let last = allPoints.last else { return }
             let position = { (point: ScoreCurve.Point) in
                 CGPoint(
                     x: ScoreCurve.x(move: point.move, span: span, width: size.width),
                     y: ScoreCurve.y(value: point.value, scale: scale, height: size.height)
                 )
             }
+            // Analysed moves are drawn solid and filled; a hole between them, still
+            // being computed, is only bridged by a faint dotted line.
             var line = Path()
-            line.move(to: position(first))
-            for point in allPoints.dropFirst() { line.addLine(to: position(point)) }
-
-            var area = line
-            area.addLine(to: CGPoint(x: position(last).x, y: half))
-            area.addLine(to: CGPoint(x: position(first).x, y: half))
-            area.closeSubpath()
+            var area = Path()
+            var bridges = Path()
+            var previous: ScoreCurve.Point?
+            for run in ScoreCurve.runs(allPoints) {
+                guard let first = run.first, let last = run.last else { continue }
+                if let previous {
+                    bridges.move(to: position(previous))
+                    bridges.addLine(to: position(first))
+                }
+                previous = last
+                var segment = Path()
+                segment.move(to: position(first))
+                for point in run.dropFirst() { segment.addLine(to: position(point)) }
+                line.addPath(segment)
+                segment.addLine(to: CGPoint(x: position(last).x, y: half))
+                segment.addLine(to: CGPoint(x: position(first).x, y: half))
+                segment.closeSubpath()
+                area.addPath(segment)
+            }
 
             let above = CGRect(x: 0, y: 0, width: size.width, height: half)
             let below = CGRect(x: 0, y: half, width: size.width, height: half)
@@ -81,6 +94,7 @@ public struct ScoreChart: View {
                     layer.opacity = dim ? 0.3 : 1
                     layer.fill(area, with: .color(fill))
                     layer.stroke(line, with: .color(colour), style: stroke)
+                    layer.stroke(bridges, with: .color(colour.opacity(0.5)), style: bridgeStroke)
                 }
             }
 
@@ -106,6 +120,10 @@ public struct ScoreChart: View {
 
     private var stroke: StrokeStyle {
         StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+    }
+
+    private var bridgeStroke: StrokeStyle {
+        StrokeStyle(lineWidth: 1, lineCap: .round, dash: [1, 3])
     }
 
     /// The bare magnitude, with a French decimal comma. No sign: the colour already
