@@ -8,8 +8,8 @@ public struct BoardView: View {
     public let onPlay: (Point) -> Void
     /// Set in review: a drag across the board draws the zone of the local reading.
     public let onDrawZone: ((LocalZone) -> Void)?
-    /// The local reading is on show: Option held, or its sequence being walked.
-    /// A zone the player drew stays visible either way.
+    /// The local reading is on show: always in a review, with the analysis while
+    /// following. A zone the player drew stays visible either way.
     public let showsLocal: Bool
 
     /// The intersection under the pointer, for the caption of a proposed move.

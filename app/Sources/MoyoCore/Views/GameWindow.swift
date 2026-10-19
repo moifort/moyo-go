@@ -22,9 +22,6 @@ public struct GameWindow: View {
         }
         .navigationTitle(title)
         .navigationSubtitle(subtitle)
-        .onModifierKeysChanged(mask: .option, initial: false) { _, keys in
-            session.isOptionHeld = keys.contains(.option)
-        }
         .toolbar {
             if columnVisibility == .detailOnly {
                 ToolbarItem(placement: .primaryAction) { compactStatus }

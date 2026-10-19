@@ -548,21 +548,12 @@ public final class GameSession {
         bridge.send(.variation(id: nextID(), step: delta > 0 ? 1 : -1, kind: kind))
     }
 
-    /// Option is held down. The local layer — zone, blue disc, loader — shows only
-    /// then, or while its sequence is walked: by default the board shows the best
-    /// move alone. The first press of a position asks KataGo to read it.
-    public var isOptionHeld = false {
-        didSet {
-            guard isOptionHeld, !oldValue, let state, state.isReviewing, state.localZone != nil else { return }
-            bridge.send(.readLocal(id: nextID()))
-        }
-    }
-
-    /// Whether the board shows the local reading right now.
+    /// Whether the board shows the local reading — zone, blue disc, loader — next to
+    /// the best move. Always in a review, where the bridge reads every position it
+    /// lands on; while following, only with KataGo's analysis on.
     public var showsLocalReading: Bool {
         if state?.isFollowing == true { return state?.analysis == true }
-        guard let state, state.isReviewing else { return false }
-        return isOptionHeld || state.variationKind == .local || state.localWanted == true
+        return state?.isReviewing == true
     }
 
     /// Reads the fight inside a zone drawn on the board, until it is cleared.

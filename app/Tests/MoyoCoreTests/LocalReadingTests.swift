@@ -129,17 +129,9 @@ struct LocalPendingTests {
     }
 }
 
-@Suite("La lecture locale ne se montre qu'à la demande")
-struct LocalOnDemandTests {
-    @Test("La commande de lecture locale ne porte que son nom")
-    func readLocalEncoding() throws {
-        let line = try BridgeCommand.readLocal(id: 4).encodedLine()
-        let object = try #require(try JSONSerialization.jsonObject(with: line) as? [String: Any])
-        #expect(object["cmd"] as? String == "read_local")
-        #expect(object.count == 2)
-    }
-
-    @Test("Sans Option, la pastille bleue n'a pas de libellé")
+@Suite("La lecture locale masquée")
+struct HiddenLocalTests {
+    @Test("Masquée, la pastille bleue n'a pas de libellé")
     func hiddenLocalHasNoCaption() throws {
         let line = """
             {"event":"state","id":1,"size":19,"stones":[],"to_play":"B","move_number":3,\

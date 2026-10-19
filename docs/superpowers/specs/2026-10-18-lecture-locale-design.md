@@ -21,15 +21,16 @@ deux côtés.
 | Fin de séquence | Une nouvelle lecture est demandée depuis le dernier coup lu, dès qu'on l'atteint, dans la même zone ; fin quand KataGo passe ou sort de la zone, 60 coups au plus | Suivre le combat jusqu'au bout, pas jusqu'au bout d'une ligne de KataGo |
 | Coût | `points_lost` contre l'analyse globale du nœud | Souvent la leçon elle-même |
 | Coup global déjà dans la zone | Il est aussi le coup local, coût nul | La recherche locale ne pourrait différer que par le bruit |
-| Quand | À la demande : maintenir ⌥ lance la lecture de la position affichée, une fois | Ne pas doubler le travail de KataGo sur les positions seulement traversées |
-| Affichage | Rien de local par défaut ; zone, pastille bleue et chargement tant que ⌥ est tenue ou que la séquence est déroulée ; une zone tracée reste visible | Le goban montre d'abord le meilleur coup, le local est une question qu'on pose |
+| Quand | À chaque position où la revue s'arrête, une fois par position et par zone | Le goban la montre toujours ; la demander sur ⌥ faisait attendre à chaque fois (auparavant : à la demande, pour ne pas doubler le travail de KataGo sur les positions seulement traversées) |
+| Affichage | Zone, pastille bleue et chargement toujours visibles en revue, à côté de la pastille verte | Le combat local est presque toujours la question qu'on se pose ; le cacher derrière ⌥ obligeait à la reposer à chaque coup |
 | ⌥→ trop tôt | Le pont garde l'appui et joue le premier coup dès que la lecture arrive | Sinon l'appui se perd et le goban semble bloqué |
 | Rendu | Cadre pointillé bleu sous la grille, pastille bleue ; anneau bleu autour de la verte si elles coïncident | Les deux propositions ne se confondent jamais |
 
 ## Protocole
 
-- `read_local` — demande la lecture locale de la position affichée ; l'état dit
-  `local_pending` tant qu'elle n'est pas revenue, et `local_wanted` si ⌥→ attend.
+- La lecture locale de la position affichée est demandée par le pont lui-même ;
+  l'état dit `local_pending` tant qu'elle n'est pas revenue, et `local_wanted` si
+  ⌥→ attend. (Une commande `read_local` la demandait sur ⌥ ; elle a disparu.)
 - `variation {step, kind}` — `kind` vaut `best` (défaut) ou `local`. Passer de l'une
   à l'autre revient d'abord au record.
 - L'état de revue gagne `variation_kind` (`best`, `local` ou `null`), `local_zone`

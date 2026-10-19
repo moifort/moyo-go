@@ -63,8 +63,6 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         )
     elif name == "set_local_zone":
         session.submit(session.set_local_zone, command_id, command.get("zone"))
-    elif name == "read_local":
-        session.submit(session.read_local, command_id)
     elif name == "follow_start":
         session.submit(
             session.follow_start,

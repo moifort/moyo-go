@@ -45,6 +45,10 @@ def stream():
 def session(stream):
     bridge = BridgeSession(EventWriter(stream))
     bridge._engine = FakeEngine()
+    # The review a game ends in reads locally, through a query builder a fake engine
+    # cannot feed.
+    bridge._local_queries = []
+    bridge._send_local_query = lambda node, zone: bridge._local_queries.append((node, zone))
     bridge.follow_start(1, SIZE, 6.5, "japanese")
     bridge.follow_board(2, rows())
     return bridge

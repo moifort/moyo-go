@@ -245,18 +245,11 @@ def local_answer(pv, score_lead=0.0):
     return {"moveInfos": [{"move": pv[0], "order": 0, "scoreLead": score_lead, "pv": list(pv)}]}
 
 
-def test_nothing_is_read_locally_until_the_player_asks(reviewing):
-    # Opening and walking the record places zones but asks KataGo nothing.
+def test_every_position_landed_on_is_read_locally_once(reviewing):
+    # Opening the record reads the position it opens at; each move reached, its own.
     run(reviewing, reviewing.goto, 2, 2)
     run(reviewing, reviewing.goto, 3, 5)
-    assert reviewing._local_queries == []
     assert last_state(reviewing)["local_zone"] is not None
-
-    run(reviewing, reviewing.read_local, 4)
-    run(reviewing, reviewing.goto, 5, 2)
-    run(reviewing, reviewing.read_local, 6)
-    run(reviewing, reviewing.goto, 7, 5)
-    run(reviewing, reviewing.read_local, 8)
     # Coming back to a position already read does not ask again.
     assert [node for node, _ in reviewing._local_queries] == [reviewing._line[5], reviewing._line[2]]
 
@@ -379,7 +372,6 @@ def test_a_drawn_zone_replaces_the_inferred_one(reviewing):
 
 def test_an_answer_for_a_replaced_zone_is_dropped(reviewing):
     node = reviewing._line[5]
-    run(reviewing, reviewing.read_local, 2)
     inferred = reviewing._local_queries[-1][1]
     run(reviewing, reviewing.set_local_zone, 2, DRAWN)
     run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]), inferred)
@@ -389,7 +381,6 @@ def test_an_answer_for_a_replaced_zone_is_dropped(reviewing):
 def test_a_drawn_zone_follows_the_player_through_the_record(reviewing):
     run(reviewing, reviewing.set_local_zone, 2, DRAWN)
     run(reviewing, reviewing.goto, 3, 0)  # no fight to infer there
-    run(reviewing, reviewing.read_local, 4)
     assert reviewing._local_queries[-1] == (reviewing._line[0], DRAWN)
     assert last_state(reviewing)["local_zone"] == DRAWN
 
@@ -435,8 +426,6 @@ def test_a_zone_is_drawn_in_review_only(session):
 
 
 def test_the_local_reading_says_when_it_is_still_coming(reviewing):
-    assert last_state(reviewing)["local_pending"] is False
-    run(reviewing, reviewing.read_local, 2)
     assert last_state(reviewing)["local_pending"] is True
     node = reviewing._line[5]
     run(reviewing, reviewing._on_local_analysis, node, local_answer(["G6"]), reviewing._local[id(node)]["zone"])
@@ -473,7 +462,6 @@ def test_moving_on_forgets_an_early_press(reviewing):
 def walk_local_to_the_end_of(reviewing, pv):
     node = reviewing._line[5]
     zone = reviewing._local.get(id(node), {}).get("zone") or last_state(reviewing)["local_zone"]
-    run(reviewing, reviewing.read_local, 90)
     run(reviewing, reviewing._on_local_analysis, node, local_answer(pv), zone)
     for step in range(len(pv)):
         run(reviewing, reviewing.step_variation, 91 + step, 1, "local")

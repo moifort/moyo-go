@@ -84,12 +84,20 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   Reading several would mean one more KataGo query per zone and a way to tell their
   markers apart.
 
-- **The first local reading of a record can be slow.** It is asked for only when
-  Option is held, at a priority above the whole-board analyses, but KataGo finishes
-  the queries already running first. Just after a record is opened, while every
+- **The first local reading of a record can be slow.** It is asked for on every
+  position the review lands on, at a priority above the whole-board analyses, but
+  KataGo finishes the queries already running first. Just after a record is opened, while every
   position is being analysed, the loader can stay up for ten to twenty seconds.
   Pausing the background analysis while a local reading is waited on would cut
   that, at the cost of a gauge that stalls; not done until the wait is felt again.
+
+- **Positions only passed through are read locally too.** Since the local
+  reading is shown by default, the review asks for it on every move it lands on,
+  so holding an arrow key queues one zone-bound query per position skipped over.
+  Waiting for the player to pause before asking, or dropping the queries of
+  positions already left, would save that work; neither is done until KataGo is
+  seen to lag behind the arrows. Showing it on Option only, as before, made the
+  player ask the same question on every move.
 
 - **The local sequence stops where KataGo leaves the zone.** Each reading keeps both
   colours inside for twelve moves, and a new one is asked from the end of the last,

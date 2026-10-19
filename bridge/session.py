@@ -531,7 +531,7 @@ class BridgeSession(KaTrainHost):
         self._index = len(self._line) - 1
         self.game.set_current_node(self._line[self._index])
         self._boost_window()
-        self._request_local()
+        self._request_local(ask=True)
         self._emit_state(command_id)
 
     def export_sgf(self, command_id, black_name, white_name):
@@ -568,7 +568,7 @@ class BridgeSession(KaTrainHost):
         self.game.set_current_node(self._line[self._index])
         self._emitted_best = None
         self._boost_window()
-        self._request_local()
+        self._request_local(ask=True)
         self._emit_state(command_id)
 
     def step_variation(self, command_id, step, kind="best"):
@@ -807,19 +807,6 @@ class BridgeSession(KaTrainHost):
         self._request_local(ask=True)
         self._emit_state(command_id)
 
-    def read_local(self, command_id):
-        """The player holds Option: have KataGo read the zone of the position on screen.
-
-        Nothing local is read until then. Most positions of a record are only passed
-        through, and a query per position would double KataGo's work for readings
-        nobody looks at. Inside a variation the anchor's reading is the one that
-        counts, and it was asked for on the way in.
-        """
-        self._require_review()
-        if not self._variation:
-            self._request_local(ask=True)
-        self._emit_state(command_id)
-
     def _focus_node(self):
         """The position the local reading is about: the record's, or the game's own."""
         return self._line[self._index] if self._status == "review" else self.game.current_node
@@ -828,7 +815,9 @@ class BridgeSession(KaTrainHost):
         """Places the zone of the position on screen; `ask` also has KataGo read it.
 
         The zone costs nothing and is placed on every move, so the keys and buttons
-        know whether there is a fight to read. The reading is asked for once per
+        know whether there is a fight to read. A review asks for the reading of every
+        position it lands on, since the board shows it next to the best move; a
+        followed game only when its analysis is on. The reading is asked for once per
         position and zone.
         """
         node = self._focus_node()
@@ -1118,7 +1107,7 @@ class BridgeSession(KaTrainHost):
         self._index = len(line) - 1
         self.game.set_current_node(line[self._index])
         self._boost_window()
-        self._request_local()
+        self._request_local(ask=True)
         self._emit_state(command_id)
 
     def _require_following(self) -> None:
