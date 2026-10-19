@@ -16,6 +16,10 @@ func fail(_ message: String) -> Never {
 }
 
 var args = Array(CommandLine.arguments.dropFirst())
+if args.first == "eval", args.count >= 2 {
+    runEval(Array(args.dropFirst()))
+    exit(0)
+}
 guard args.first == "read", args.count >= 2 else {
     fail("usage: kifu-tool read <photo> --corners x,y,x,y,x,y,x,y [--lines 19] [--height 0] [--fit 15] [--rough] [--overlay out.png] [--measures] [--lifts] [--debug col,row]")
 }
