@@ -173,6 +173,13 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   the floor, every move squeezes the curve a little more; a scrolling window would
   keep the last moves readable at the cost of losing the opening from view.
 
+- **One extreme score flattens the whole curve.** The vertical scale is the largest
+  lead in the record, so a final position at −32 — often the first thing analysed
+  besides the opening — squashes every move before it onto the midline. Clamping
+  the scale to a percentile, or a non-linear axis like a win-rate curve, would keep
+  the opening legible; neither is done because a capped curve misreads a real
+  blowout, and the readout above the chart already gives the exact figure.
+
 - **A record under review is read-only.** Clicking the board does nothing, not even
   on the green marker; dragging across it draws the zone of the local reading.
   Playing the marked move with a click would be the obvious gesture, but it
