@@ -43,18 +43,24 @@ public final class RecordOpeningDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Menu items for reading a record, and the arrow keys that go with them.
+/// The Analyse menu: the toggle, the tree, KataGo's lines, and every key with them.
 ///
-/// The shortcuts are bare arrows, which is what a review is played on. They can be
-/// bare because every item here is disabled outside a review, and a disabled menu
-/// item does not swallow its key — the arrows stay with the text fields and the
-/// steppers of the new-game sheet.
+/// Every shortcut of the analysis lives here, with its key shown, so it can be found
+/// without being known. The arrows are bare, which is what a tree is walked with.
+/// They can be bare because every item is disabled outside the analysis, and a
+/// disabled menu item does not swallow its key — the arrows stay with the text
+/// fields and the steppers of the new-game sheet.
 public struct ReviewCommands: Commands {
     @FocusedValue(\.gameSession) private var session
 
     public init() {}
 
-    private var isReviewing: Bool { session?.isReviewing == true }
+    private var isAnalysing: Bool { session?.isAnalysing == true }
+
+    private var canDeleteOnScreen: Bool {
+        guard let session, let id = session.state?.nodeId else { return false }
+        return session.isAnalysing && session.isDeletable(id)
+    }
 
     public var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -70,7 +76,17 @@ public struct ReviewCommands: Commands {
                 .disabled(session?.canExport != true)
         }
 
-        CommandMenu("Revue") {
+        CommandMenu("Analyse") {
+            Button("Partie en cours") { session?.setView(.live) }
+                .keyboardShortcut("1", modifiers: .command)
+                .disabled(session?.canSwitchView != true || !isAnalysing)
+
+            Button("Analyse") { session?.setView(.analysis) }
+                .keyboardShortcut("2", modifiers: .command)
+                .disabled(session?.canSwitchView != true || isAnalysing)
+
+            Divider()
+
             Button("Coup précédent") { session?.step(-1) }
                 .keyboardShortcut(.leftArrow, modifiers: [])
                 .disabled(session?.canStepBackward != true)
@@ -79,23 +95,39 @@ public struct ReviewCommands: Commands {
                 .keyboardShortcut(.rightArrow, modifiers: [])
                 .disabled(session?.canStepForward != true)
 
+            Button("Variante précédente") { session?.navigate(.previousSibling) }
+                .keyboardShortcut(.upArrow, modifiers: [])
+                .disabled(session?.hasPreviousSibling != true)
+
+            Button("Variante suivante") { session?.navigate(.nextSibling) }
+                .keyboardShortcut(.downArrow, modifiers: [])
+                .disabled(session?.hasNextSibling != true)
+
+            Button("Début de la partie") { session?.navigate(.start) }
+                .keyboardShortcut(.leftArrow, modifiers: .command)
+                .disabled(!isAnalysing)
+
+            Button("Fin de la variante") { session?.navigate(.end) }
+                .keyboardShortcut(.rightArrow, modifiers: .command)
+                .disabled(session?.canStepForward != true)
+
+            Button("Revenir à la partie") { session?.navigate(.game) }
+                .keyboardShortcut(.upArrow, modifiers: .command)
+                .disabled(session?.isInBranch != true)
+
             Divider()
 
-            Button("Début de la partie") { session?.goto(moveNumber: 0) }
-                .keyboardShortcut(.leftArrow, modifiers: .command)
-                .disabled(!isReviewing)
-
-            Button("Fin de la partie") {
-                if let count = session?.state?.moveCount { session?.goto(moveNumber: count) }
+            Button("Supprimer la variante") {
+                if let id = session?.state?.nodeId { session?.deleteBranch(id) }
             }
-            .keyboardShortcut(.rightArrow, modifiers: .command)
-            .disabled(!isReviewing)
+            .keyboardShortcut(.delete, modifiers: .command)
+            .disabled(!canDeleteOnScreen)
 
             Divider()
 
             Button("Dérouler la proposition") { session?.stepVariation(1) }
                 .keyboardShortcut(.rightArrow, modifiers: [.option, .shift])
-                .disabled(!isReviewing)
+                .disabled(!isAnalysing)
 
             Button("Remonter la proposition") { session?.stepVariation(-1) }
                 .keyboardShortcut(.leftArrow, modifiers: [.option, .shift])
@@ -104,7 +136,7 @@ public struct ReviewCommands: Commands {
             Divider()
 
             // The bare Option arrows go to the local sequence: reading the fight out
-            // is what a review is mostly for, the whole-board line comes second.
+            // is what an analysis is mostly for, the whole-board line comes second.
             Button("Dérouler la séquence locale") { session?.stepVariation(1, kind: .local) }
                 .keyboardShortcut(.rightArrow, modifiers: .option)
                 .disabled(session?.canWalkLocal != true)

@@ -134,6 +134,10 @@ public final class GameSession {
     /// The record's file name, for the window title.
     public private(set) var recordName: String?
 
+    /// The tree of variations as the bridge last sent it, and its layout.
+    public private(set) var tree: [TreeNode] = []
+    public private(set) var treeLayout = TreeLayout(nodes: [])
+
     /// The record on screen as it was read from disk, and the `load_sgf` that
     /// opened it. Its analysis is written back to that file, and only an answer to
     /// that very command may write it.
@@ -229,6 +233,10 @@ public final class GameSession {
         case .state(_, let newState):
             apply(newState)
 
+        case .tree(let nodes):
+            tree = nodes
+            treeLayout = TreeLayout(nodes: nodes)
+
         case .thinking(let value):
             value ? thinking.began() : thinking.ended()
 
@@ -277,16 +285,15 @@ public final class GameSession {
 
     private func apply(_ newState: GameState) {
         // Moves beyond the current one no longer exist, typically after an undo —
-        // but a record under review has a future as well as a past, and stepping
-        // back through it must not rub out the part of the chart that lies ahead.
-        if !newState.isReviewing {
-            scoreByMove = scoreByMove.filter { $0.key <= newState.moveNumber }
-        }
+        // but in analysis the game has a future as well as a past, and stepping back
+        // through it, or into a branch, must not rub out the chart of the game.
+        let lastOfGame = newState.isAnalysing ? newState.moveCount ?? newState.moveNumber : newState.moveNumber
+        scoreByMove = scoreByMove.filter { $0.key <= lastOfGame }
         for (index, score) in newState.scoreHistory.enumerated() {
             if let score { scoreByMove[index] = score }
         }
         state = newState
-        if newState.status != .playing { thinking.ended() }
+        if newState.status != .playing || newState.isAnalysing { thinking.ended() }
     }
 
     // -- following a game on a real board ------------------------------------
@@ -439,12 +446,12 @@ public final class GameSession {
     }
 
     public func play(row: Int, col: Int) {
-        guard canAct else { return }
+        guard canPlace else { return }
         bridge.send(.play(id: nextID(), row: row, col: col))
     }
 
     public func passTurn() {
-        guard canAct else { return }
+        guard canAct || isAnalysing else { return }
         bridge.send(.pass(id: nextID()))
     }
 
@@ -466,8 +473,16 @@ public final class GameSession {
     }
 
     public func undo() {
-        guard state != nil, state?.status == .playing else { return }
+        guard canUndo else { return }
         bridge.send(.undo(id: nextID()))
+    }
+
+    /// Against the AI, the last moves played; in analysis, the stone just placed by
+    /// hand or the last move of KataGo's line being walked.
+    public var canUndo: Bool {
+        guard let state else { return false }
+        if state.isAnalysing { return (state.variationDepth ?? 0) > 0 || isOnLeafOfAnalysis }
+        return state.status == .playing
     }
 
     public func resign() {
@@ -480,10 +495,75 @@ public final class GameSession {
         lastErrorMessage = nil
     }
 
-    // -- review --------------------------------------------------------------
+    // -- analysis ------------------------------------------------------------
 
-    /// True once a record is open and being read.
+    /// True once a record is open and being read, with no game behind it.
     public var isReviewing: Bool { state?.isReviewing ?? false }
+
+    /// The board shows the tree: stones placed by hand, both colours in turn.
+    public var isAnalysing: Bool { state?.isAnalysing ?? false }
+
+    /// The toggle at the top of the window has something to switch to.
+    public var hasLiveGame: Bool { state?.hasLiveGame ?? false }
+
+    /// The toggle can be moved: not while the dead stones are being agreed on.
+    public var canSwitchView: Bool { phase == .running && hasLiveGame && state?.status != .scoring }
+
+    /// Switches between the game itself and its analysis.
+    public func setView(_ view: GameView) {
+        guard canSwitchView, state?.isAnalysing != (view == .analysis) else { return }
+        bridge.send(.setView(id: nextID(), view: view))
+    }
+
+    /// A click in the tree.
+    public func gotoNode(_ id: Int) {
+        guard phase == .running, state?.status != .scoring else { return }
+        bridge.send(.gotoNode(id: nextID(), nodeID: id))
+    }
+
+    /// The arrow keys, in the tree.
+    public func navigate(_ destination: TreeDestination) {
+        guard isAnalysing else { return }
+        bridge.send(.navigate(id: nextID(), to: destination))
+    }
+
+    /// Drops a branch placed in analysis, from this node down.
+    public func deleteBranch(_ id: Int) {
+        guard isAnalysing, isDeletable(id) else { return }
+        bridge.send(.deleteBranch(id: nextID(), nodeID: id))
+    }
+
+    /// Only the player's own stones can be deleted, never the game nor the record.
+    public func isDeletable(_ id: Int) -> Bool {
+        tree.first { $0.id == id }?.origin == .analysis
+    }
+
+    /// The node on screen, as the tree knows it.
+    public var currentNode: TreeNode? {
+        guard let id = state?.nodeId else { return nil }
+        return tree.first { $0.id == id }
+    }
+
+    /// The node on screen was placed by hand and nothing follows it.
+    public var isOnLeafOfAnalysis: Bool {
+        guard let node = currentNode, node.origin == .analysis else { return false }
+        return !tree.contains { $0.parent == node.id }
+    }
+
+    /// The node on screen is in a branch, off the line of the game.
+    public var isInBranch: Bool {
+        guard let node = currentNode else { return false }
+        return node.origin != .game
+    }
+
+    /// Siblings of the node on screen, to step across with ↑ and ↓.
+    private var siblings: [TreeNode] {
+        guard let node = currentNode, let parent = node.parent else { return [] }
+        return tree.filter { $0.parent == parent }
+    }
+
+    public var hasPreviousSibling: Bool { siblings.first.map { $0.id != state?.nodeId } ?? false }
+    public var hasNextSibling: Bool { siblings.last.map { $0.id != state?.nodeId } ?? false }
 
     /// Opens a record, replacing whatever the window was showing.
     ///
@@ -559,23 +639,22 @@ public final class GameSession {
         }
     }
 
-    /// Moves to a position in the record. The bridge clamps anything out of range.
+    /// Moves to a position in the line of the game. The bridge clamps anything out
+    /// of range.
     public func goto(moveNumber: Int) {
-        guard isReviewing else { return }
+        guard isAnalysing else { return }
         bridge.send(.goto(id: nextID(), moveNumber: moveNumber))
     }
 
-    /// One move back or forward along the record.
+    /// One move back or forward in the tree: back to the parent, forward along the
+    /// branch last walked. Inside KataGo's line, a plain arrow leaves it first.
     public func step(_ delta: Int) {
-        guard let state, state.isReviewing else { return }
-        // Inside a variation, a plain arrow leaves it first: the bridge prunes the
-        // branch and lands on the record's own position.
-        goto(moveNumber: state.moveNumber + delta)
+        navigate(delta < 0 ? .back : .forward)
     }
 
     /// One move of a continuation, added or taken back: KataGo's own, or the local one.
     public func stepVariation(_ delta: Int, kind: VariationKind = .best) {
-        guard isReviewing else { return }
+        guard isAnalysing else { return }
         bridge.send(.variation(id: nextID(), step: delta > 0 ? 1 : -1, kind: kind))
     }
 
@@ -583,13 +662,13 @@ public final class GameSession {
     /// the best move. Always in a review, where the bridge reads every position it
     /// lands on; while following, only with KataGo's analysis on.
     public var showsLocalReading: Bool {
-        if state?.isFollowing == true { return state?.analysis == true }
-        return state?.isReviewing == true
+        if state?.isAnalysing == true { return true }
+        return state?.isFollowing == true && state?.analysis == true
     }
 
     /// Reads the fight inside a zone drawn on the board, until it is cleared.
     public func drawLocalZone(_ zone: LocalZone) {
-        guard isReviewing else { return }
+        guard isAnalysing else { return }
         bridge.send(.setLocalZone(id: nextID(), zone: zone))
     }
 
@@ -600,12 +679,12 @@ public final class GameSession {
     }
 
     public var hasDrawnZone: Bool {
-        isReviewing && state?.localZoneDrawn == true
+        isAnalysing && state?.localZoneDrawn == true
     }
 
     /// Whether the local sequence can be started or walked further.
     public var canWalkLocal: Bool {
-        guard let state, state.isReviewing else { return false }
+        guard let state, state.isAnalysing else { return false }
         return state.localZone != nil
     }
 
@@ -615,13 +694,14 @@ public final class GameSession {
     }
 
     public var canStepBackward: Bool {
-        guard let state, state.isReviewing else { return false }
+        guard let state, state.isAnalysing else { return false }
         return state.moveNumber > 0 || (state.variationDepth ?? 0) > 0
     }
 
+    /// Something follows the position on screen in the tree.
     public var canStepForward: Bool {
-        guard let state, state.isReviewing, let count = state.moveCount else { return false }
-        return state.moveNumber < count
+        guard let state, state.isAnalysing, let id = state.nodeId else { return false }
+        return tree.contains { $0.parent == id }
     }
 
     /// Scores flipped to the human player's side: positive means they are ahead.
@@ -646,8 +726,11 @@ public final class GameSession {
     public var currentLead: Double? {
         guard let state else { return nil }
         let sign: Double = state.humanColor == .black ? 1 : -1
+        // In a branch the chart's figure for that move number is the game's, not the
+        // position on screen: the position's own score comes first there.
         let lead =
-            scoreByMove[state.moveNumber]
+            (isInBranch ? state.scoreLead : nil)
+            ?? scoreByMove[state.moveNumber]
             ?? state.scoreLead
             ?? Self.latestLead(in: scoreByMove, upTo: state.moveNumber)
         return lead.map { $0 * sign }
@@ -660,6 +743,7 @@ public final class GameSession {
     /// in a game followed with the analysis on. Not once the game is counted.
     public var canEstimate: Bool {
         guard phase == .running, let state else { return false }
+        if state.isAnalysing { return true }
         switch state.status {
         case .playing, .review: return true
         case .following: return state.analysis == true
@@ -675,8 +759,15 @@ public final class GameSession {
 
     /// True when the player may act: a game is running and it is their turn.
     ///
-    /// `isHumanTurn` is already false under review, so nothing extra is needed here.
+    /// `isHumanTurn` is false in analysis, where `canPlace` takes over.
     public var canAct: Bool {
-        phase == .running && (state?.isHumanTurn ?? false)
+        phase == .running && !isAnalysing && (state?.isHumanTurn ?? false)
+    }
+
+    /// A click on the board places a stone: the player's move against the AI, any
+    /// colour in analysis, and while following a question that opens the analysis.
+    public var canPlace: Bool {
+        guard phase == .running, let state else { return false }
+        return canAct || state.isAnalysing || state.status == .following
     }
 }

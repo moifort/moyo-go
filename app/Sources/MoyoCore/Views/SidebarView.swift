@@ -30,10 +30,10 @@ public struct SidebarView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let state = session.state, state.isFollowing {
-                followingPanel(state)
-            } else if let state = session.state, state.isReviewing {
+            if let state = session.state, state.isAnalysing {
                 ReviewPanel(session: session, state: state)
+            } else if let state = session.state, state.isFollowing {
+                followingPanel(state)
             } else if let state = session.state, let scoring = state.scoring {
                 ScoringPanel(detail: scoring, humanColor: state.humanColor) {
                     NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
@@ -307,11 +307,12 @@ struct Tag: View {
     }
 }
 
-/// What the sidebar shows while a record is being read.
+/// What the sidebar shows in analysis: a record read, or a game set aside to study.
 ///
-/// A review has no turn to announce and no action to offer: what it has is a
-/// position in a record, the two players, and an engine still catching up. The chart
-/// covers the whole game from the start, since every move of it already exists.
+/// No turn to announce: both colours are placed by hand. What it has is a position
+/// in the tree, the chart of the game, the two players, and an engine still catching
+/// up. The chart covers the whole game from the start, since every move of it
+/// already exists; the tree below it holds every branch tried.
 struct ReviewPanel: View {
     @Bindable var session: GameSession
     let state: GameState
@@ -333,6 +334,16 @@ struct ReviewPanel: View {
             if let progress = session.analysisProgress {
                 gauge(done: progress.done, total: progress.total)
             }
+            divider
+            SectionTitle("Variantes")
+            VariationTree(
+                layout: session.treeLayout,
+                currentID: state.nodeId,
+                liveID: state.liveNodeId,
+                onSelect: { session.gotoNode($0) },
+                canDelete: { session.isDeletable($0) },
+                onDelete: { session.deleteBranch($0) }
+            )
             divider
             SectionTitle("Joueurs")
             players
@@ -376,6 +387,14 @@ struct ReviewPanel: View {
                 Text("\(local ? "Séquence locale" : "Proposition de KataGo"), \(depth) coup\(depth > 1 ? "s" : "")")
                     .font(.system(size: 11))
                     .foregroundStyle(local ? Theme.localMove : Theme.bestMove)
+            } else if session.isInBranch {
+                Text("Variante · \(Theme.name(state.toPlay)) au trait")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.localMove)
+            } else if !state.isReviewing, let result = state.result {
+                Text(result)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
             } else if let event = state.gameInfo?.event {
                 Text(event)
                     .font(.system(size: 11))
@@ -446,44 +465,59 @@ struct ReviewPanel: View {
         ]
     }
 
-    /// The same moves as the Revue menu and its arrow keys, within reach of the mouse:
+    /// The same moves as the Analyse menu and its keys, within reach of the mouse:
     /// a record dropped on the window is read with the pointer as often as with keys.
+    /// Each button names its shortcut on hover, so the keys are learnt by using it.
     private var navigation: some View {
         VStack(spacing: 7) {
             HStack(spacing: 7) {
-                step("Début de la partie", systemImage: "backward.end.fill", enabled: session.canStepBackward) {
-                    session.goto(moveNumber: 0)
+                step("Début de la partie (⌘←)", systemImage: "backward.end.fill", enabled: session.canStepBackward) {
+                    session.navigate(.start)
                 }
-                step("Coup précédent", systemImage: "backward.frame.fill", enabled: session.canStepBackward) {
+                step("Coup précédent (←)", systemImage: "backward.frame.fill", enabled: session.canStepBackward) {
                     session.step(-1)
                 }
-                step("Coup suivant", systemImage: "forward.frame.fill", enabled: session.canStepForward) {
+                step("Coup suivant (→)", systemImage: "forward.frame.fill", enabled: session.canStepForward) {
                     session.step(1)
                 }
-                step("Fin de la partie", systemImage: "forward.end.fill", enabled: session.canStepForward) {
-                    if let count = state.moveCount { session.goto(moveNumber: count) }
+                step("Fin de la variante (⌘→)", systemImage: "forward.end.fill", enabled: session.canStepForward) {
+                    session.navigate(.end)
+                }
+            }
+            HStack(spacing: 7) {
+                step("Variante précédente (↑)", systemImage: "chevron.up", enabled: session.hasPreviousSibling) {
+                    session.navigate(.previousSibling)
+                }
+                step("Variante suivante (↓)", systemImage: "chevron.down", enabled: session.hasNextSibling) {
+                    session.navigate(.nextSibling)
+                }
+                step("Revenir à la partie (⌘↑)", systemImage: "arrow.turn.left.up", enabled: session.isInBranch) {
+                    session.navigate(.game)
+                }
+                step("Passer (⌘P)", systemImage: "hand.raised", enabled: true) {
+                    session.passTurn()
                 }
             }
             HStack(spacing: 7) {
                 step(
-                    "Remonter la proposition de KataGo", systemImage: "arrow.uturn.backward",
+                    "Remonter la proposition de KataGo (⇧⌥←)", systemImage: "arrow.uturn.backward",
                     enabled: (state.variationDepth ?? 0) > 0
                 ) {
                     session.stepVariation(-1)
                 }
-                step("Dérouler la proposition de KataGo", systemImage: "sparkles", enabled: true) {
+                step("Dérouler la proposition de KataGo (⇧⌥→)", systemImage: "sparkles", enabled: true) {
                     session.stepVariation(1)
                 }
             }
             HStack(spacing: 7) {
                 step(
-                    "Remonter la séquence locale", systemImage: "arrow.uturn.backward.circle",
+                    "Remonter la séquence locale (⌥←)", systemImage: "arrow.uturn.backward.circle",
                     enabled: session.isWalkingLocal
                 ) {
                     session.stepVariation(-1, kind: .local)
                 }
                 step(
-                    "Dérouler la séquence locale", systemImage: "scope", enabled: session.canWalkLocal,
+                    "Dérouler la séquence locale (⌥→)", systemImage: "scope", enabled: session.canWalkLocal,
                     busy: state.isReadingLocally && session.showsLocalReading
                 ) {
                     session.stepVariation(1, kind: .local)
@@ -548,7 +582,7 @@ struct ReviewPanel: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if session.isFollowing {
+            if session.isFollowing, state.isReviewing {
                 Text("La prochaine partie commencée sur Kifu s'affichera ici.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)

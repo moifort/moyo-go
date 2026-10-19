@@ -175,9 +175,11 @@ struct BridgeEventTests {
         #expect(state.gameInfo?.label(for: .black) == "Shusaku 4d")
         #expect(state.gameInfo?.label(for: .white) == nil)
         #expect(state.gameInfo?.event == "Ear-reddening")
-        // Un record se lit, il ne se joue pas.
-        #expect(!state.acceptsClicks)
+        // Un record se lit en analyse : un clic y pose une pierre, des deux couleurs.
+        #expect(state.isAnalysing)
+        #expect(state.acceptsClicks)
         #expect(!state.isHumanTurn)
+        #expect(!state.hasLiveGame)
     }
 
     @Test("Une partie en cours ne porte aucun champ de revue")

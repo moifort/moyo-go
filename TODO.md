@@ -20,15 +20,26 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   mean a folder inside the container nobody browses, or a security-scoped bookmark
   and a preference to choose it. A game lost to a quit is the price until then.
 
-- **Only one variation survives a save.** Leaving a variation prunes it, so a saved
-  review carries the record plus the continuation on screen at that moment. Keeping
-  every reading walked would need the bridge to stop pruning, and the review to tell
-  the record's own branches from ours.
+- **A branch cannot become the main line.** The tree shows every branch, the
+  record's own and the player's, but the line of the game stays the record's
+  `children[0]`, or the moves actually played. Promoting a branch means deciding what
+  the chart, "Coup N sur M" and the analysis written back to the file follow
+  afterwards, and nobody has asked for it yet.
 
-- **Variations in an imported record.** A review follows `children[0]` throughout and
-  ignores every branch the file carries. Records from a server have none; records
-  from a teaching session are mostly branches. Showing them means a tree in the
-  sidebar, which is a screen of its own.
+- **The game against the AI cannot resume from a branch.** "What if I had played
+  that?" against the AI would need the live game to jump to another node, its
+  result and the moves taken back with it. The analysis answers the question with
+  KataGo's own lines, which is what it is mostly asked for.
+
+- **The tree does not fold.** Its area in the sidebar is capped at 280 points and
+  scrolls in both directions; a record from a teaching session, all branches, will
+  scroll a lot. Folding a branch to a single dot is the usual answer, and wants a
+  gesture of its own.
+
+- **A game over no longer shows its count.** An accepted count or a resignation
+  opens the game in analysis, as asked, so the territory table of the count is
+  seen only while the dead stones are being agreed on. The result stays in the
+  sidebar and the window's subtitle.
 
 - **A stored analysis is trusted as it is.** A record written back with its analysis
   is read again without asking KataGo anything, even if the engine now runs deeper
@@ -165,15 +176,11 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   sends a position when it changes. If the next game starts on a board identical to
   the end of the previous one, the Mac stays on the record until the first move.
 
-- **A followed record keeps its corrections.** A misread stone corrected a move
-  later leaves the misread branch in KaTrain's tree. The review follows the line
-  actually played, but a save writes the whole tree, the dead branch included.
-
 - **Following reads one local fight per move.** With "Analyse KataGo" on, every
   move seen on the real board costs a second, zone-bound query on top of the
   whole-board analysis. The switch is all or nothing — score, curve and markers
   together — because a score without its markers saves almost none of the work. A drawn zone, or walking KataGo's line from a live position,
-  is left to the review the game opens into at its end.
+  belongs to the analysis: a click on the board opens it, with KataGo on.
 
 - **A game joined halfway loses its order.** The stones already on the board are
   placed as a setup, and who moves first is guessed from the count until the first
@@ -200,12 +207,6 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   the opening legible; neither is done because a capped curve misreads a real
   blowout, and the readout above the chart already gives the exact figure.
 
-- **A record under review is read-only.** Clicking the board does nothing, not even
-  on the green marker; dragging across it draws the zone of the local reading.
-  Playing the marked move with a click would be the obvious gesture, but it
-  collides with the arrow keys owning navigation, and it wants a decision about
-  what happens to the branch afterwards.
-
 - **Revisit the icon at 16 px.** Generated with Gemini 3 Pro Image, then masked to
   the macOS squircle by `app/Scripts/make-icon.py`. The wood grain and the grid
   turn to mush at the smallest sizes; a hand-drawn 16 and 32 px variant, with the
@@ -219,9 +220,10 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   for a document has not been checked.
 
 - **The new-game sheet is the only way out of a finished game.** After a
-  resignation or an accepted count, undo is refused by the bridge as well as by the
-  app. Taking back the last moves of a lost game to try again would be a gift to the
-  player, but it means reopening a result already written into the record.
+  resignation or an accepted count, the game opens in analysis, where any position
+  can be replayed by hand; undo there only takes back stones placed by hand. Taking
+  back the last moves of the game itself to try again against the AI would mean
+  reopening a result already written into the record.
 
 - **An unexplained crash in the macOS 27 menu bar.** On 10 October 2026, opening
   records from the Finder crashed Moyo five times on the main thread, inside

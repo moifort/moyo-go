@@ -87,7 +87,6 @@ dans l'état courant est grisé, jamais caché, pour que le menu garde sa forme.
 | Dérouler / Remonter la séquence locale | `⌥→` `⌥←` | Inchangé |
 | Dérouler / Remonter la proposition | `⇧⌥→` `⇧⌥←` | Inchangé |
 | Revenir à la zone automatique | `Échap` | Inchangé |
-| Lire le combat local | `⌥` maintenue | Élément grisé, présent pour faire connaître le geste : une touche maintenue ne se déclenche pas depuis un menu |
 
 Dans le menu « Partie », existant :
 
@@ -138,11 +137,15 @@ Commandes nouvelles ou étendues :
 - `set_view {view}` — `live` ou `analysis`. `live` refusé sans partie vivante, et
   pendant le comptage.
 - `goto_node {node_id}` — affiche ce nœud ; passe en Analyse si on était en En cours.
-- `step_sibling {step}` — `-1` / `+1`, variante sœur.
-- `back_to_game` — remonte au coup de la ligne de la partie d'où part la branche.
+- `navigate {to}` — les flèches : `back`, `forward`, `previous_sibling`,
+  `next_sibling`, `start`, `end`, `game` (le coup de la partie d'où part la branche).
+  Sans destination possible, la position reste.
 - `delete_branch {node_id}` — refusé (`not_analysis_node`) sur un nœud de la partie ou
   importé.
-- `play`, `pass` — acceptés en Analyse, sur le nœud affiché.
+- `play`, `pass` — acceptés en Analyse, sur le nœud affiché. En suivi, `play` depuis
+  la vue En cours passe d'abord en Analyse.
+- `undo` — en Analyse, retire la dernière pierre posée à la main (ou recule d'un coup
+  dans l'aperçu de KataGo) ; `nothing_to_undo` sinon.
 - `goto {move_number}` reste, sur la ligne de la partie.
 
 État :
@@ -157,9 +160,10 @@ Commandes nouvelles ou étendues :
 
 - `tree {nodes}` — envoyé quand la forme de l'arbre visible change (nœud ajouté,
   supprimé, rendu visible), pas à chaque état. Chaque nœud :
-  `{id, parent, color, row, col, pass, origin}` où `origin` vaut `game`, `record` ou
-  `analysis`, dans l'ordre des enfants de KaTrain. Le numéro du coup se déduit de la
-  profondeur.
+  `{id, parent, color, row, col, pass, origin}` où `origin` vaut `game`, `record`,
+  `analysis` ou `preview` (aperçu de KataGo en cours), dans l'ordre des enfants de
+  KaTrain. Un ancêtre caché gardé pour relier une branche compte comme `analysis`.
+  Le numéro du coup se déduit de la profondeur.
 
 ## App
 

@@ -23,6 +23,9 @@ public struct GameWindow: View {
         .navigationTitle(title)
         .navigationSubtitle(subtitle)
         .toolbar {
+            if session.hasLiveGame {
+                ToolbarItem(placement: .principal) { viewToggle }
+            }
             if columnVisibility == .detailOnly {
                 ToolbarItem(placement: .primaryAction) { compactStatus }
             }
@@ -114,7 +117,7 @@ public struct GameWindow: View {
                             session.play(row: point.row, col: point.col)
                         }
                     },
-                    onDrawZone: state.isReviewing ? { session.drawLocalZone($0) } : nil,
+                    onDrawZone: state.isAnalysing ? { session.drawLocalZone($0) } : nil,
                     showsLocal: session.showsLocalReading
                 )
                 .padding(20)
@@ -138,11 +141,30 @@ public struct GameWindow: View {
         }
     }
 
-    /// While counting, clicks mark groups rather than play stones. A record under
-    /// review takes none: `canAct` is already false there, and there is nothing to
-    /// count, so both branches land on nothing.
+    /// While counting, clicks mark groups rather than play stones. Otherwise a click
+    /// places a stone wherever one may go: the player's move, any colour in
+    /// analysis, and while following a question that opens the analysis.
     private func isBoardInteractive(_ state: GameState) -> Bool {
-        state.status == .scoring ? true : session.canAct
+        state.status == .scoring ? true : session.canPlace
+    }
+
+    /// The game itself, or its analysis. Shown only while there is a game to go
+    /// back to; a record alone and a game over are read in analysis, nothing else.
+    private var viewToggle: some View {
+        Picker(
+            "Affichage",
+            selection: Binding(
+                get: { session.isAnalysing ? GameView.analysis : GameView.live },
+                set: { session.setView($0) }
+            )
+        ) {
+            Text("En cours").tag(GameView.live)
+            Text("Analyse").tag(GameView.analysis)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .disabled(!session.canSwitchView)
+        .help("Partie en cours (⌘1) · Analyse (⌘2)")
     }
 
     private var title: String {

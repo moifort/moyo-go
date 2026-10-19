@@ -26,6 +26,9 @@ public struct BridgeCommand: Encodable, Sendable {
     var result: String?
     var analysis: Bool?
     var on: Bool?
+    var view: GameView?
+    var nodeId: Int?
+    var to: TreeDestination?
 
     public static func newGame(
         id: Int,
@@ -71,6 +74,27 @@ public struct BridgeCommand: Encodable, Sendable {
     /// Jumps to a position in the record. The bridge clamps anything out of range.
     public static func goto(id: Int, moveNumber: Int) -> BridgeCommand {
         BridgeCommand(id: id, cmd: "goto", moveNumber: moveNumber)
+    }
+
+    /// The toggle at the top of the window: the game itself, or the analysis.
+    public static func setView(id: Int, view: GameView) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "set_view", view: view)
+    }
+
+    /// A click in the tree. From the live view, it is a step into analysis.
+    public static func gotoNode(id: Int, nodeID: Int) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "goto_node", nodeId: nodeID)
+    }
+
+    /// The arrow keys, in the tree.
+    public static func navigate(id: Int, to destination: TreeDestination) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "navigate", to: destination)
+    }
+
+    /// Drops a node placed in analysis and everything after it. The bridge refuses
+    /// a move of the game or of the record.
+    public static func deleteBranch(id: Int, nodeID: Int) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "delete_branch", nodeId: nodeID)
     }
 
     /// Walks a continuation: +1 adds a move, -1 takes one back.

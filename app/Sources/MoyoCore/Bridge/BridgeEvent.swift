@@ -168,6 +168,60 @@ public enum VariationKind: String, Codable, Sendable {
     case local
 }
 
+/// Which side of the toggle at the top of the window the player is on.
+public enum GameView: String, Codable, Sendable {
+    /// The game itself: played against the AI, or followed on the real board.
+    case live
+    /// The tree: stones placed by hand, both colours, KataGo reading each position.
+    case analysis
+}
+
+/// Where an arrow key leads in the tree.
+public enum TreeDestination: String, Codable, Sendable {
+    case back, forward, start, end
+    case previousSibling = "previous_sibling"
+    case nextSibling = "next_sibling"
+    /// The move of the game the branch on screen starts from.
+    case game
+}
+
+/// One position of the tree the sidebar draws, as the bridge numbers it.
+public struct TreeNode: Codable, Sendable, Hashable, Identifiable {
+    public enum Origin: String, Codable, Sendable {
+        /// The line of the game: the record's main line, or the moves played.
+        case game
+        /// A branch the record came with.
+        case record
+        /// A stone the player placed in analysis, or a move kept to reach one.
+        case analysis
+        /// A move of KataGo's line being walked, gone once the walk is left.
+        case preview
+    }
+
+    public let id: Int
+    /// nil for the root, the empty board or its setup.
+    public let parent: Int?
+    /// nil for the root.
+    public let color: PlayerColor?
+    public let row: Int?
+    public let col: Int?
+    public let pass: Bool
+    public let origin: Origin
+
+    public init(
+        id: Int, parent: Int?, color: PlayerColor?, row: Int? = nil, col: Int? = nil,
+        pass: Bool = false, origin: Origin
+    ) {
+        self.id = id
+        self.parent = parent
+        self.color = color
+        self.row = row
+        self.col = col
+        self.pass = pass
+        self.origin = origin
+    }
+}
+
 /// What the record says about the game it holds. Every field may be absent.
 public struct GameInfo: Codable, Sendable, Hashable {
     public let blackName: String?
@@ -301,6 +355,15 @@ public struct GameState: Codable, Sendable {
     /// ⌥→ was pressed before the reading came back; the first move is on its way.
     public let localWanted: Bool?
 
+    // -- the analysis tree; absent from an older bridge
+
+    /// Which side of the toggle the player is on.
+    public let view: GameView?
+    /// The node on screen, as numbered in the last `tree` event.
+    public let nodeId: Int?
+    /// The head of the game played or followed; nil for a record alone or a game over.
+    public let liveNodeId: Int?
+
     // -- following only
 
     /// False when the last position the phone sent could not be reached by any move.
@@ -312,7 +375,15 @@ public struct GameState: Codable, Sendable {
 
     public var isReadingLocally: Bool { localPending == true }
 
+    /// A record with no game behind it: no live view to go back to.
     public var isReviewing: Bool { status == .review }
+
+    /// The board shows the tree: stones are placed by hand, both colours.
+    public var isAnalysing: Bool { view == .analysis || status == .review }
+
+    /// There is a game to go back to: played against the AI, or followed. A game
+    /// over has none — its end is the end of the line in analysis.
+    public var hasLiveGame: Bool { status == .playing || status == .scoring || status == .following }
 
     public var isHumanTurn: Bool { status == .playing && toPlay == humanColor }
 
@@ -327,8 +398,11 @@ public struct GameState: Codable, Sendable {
 
     /// Points the player can act on: play a stone, or mark a group dead.
     ///
-    /// A record under review accepts none: it is read, not played on.
-    public var acceptsClicks: Bool { status == .playing || status == .scoring }
+    /// In analysis every point takes a stone; following, a click is a question asked
+    /// of the position, and opens the analysis.
+    public var acceptsClicks: Bool {
+        isAnalysing || status == .playing || status == .scoring || status == .following
+    }
 }
 
 public enum BridgeEvent: Sendable {
@@ -343,6 +417,9 @@ public enum BridgeEvent: Sendable {
     /// A record analysed to the end, analysis included, for the app to write over
     /// the file it came from. `id` is the `load_sgf` that opened it.
     case recordAnalysed(id: Int?, contents: String)
+    /// The tree the sidebar draws, sent whenever its shape changes. Root first,
+    /// each parent before its children, children in the order to draw them.
+    case tree([TreeNode])
     case failure(id: Int?, code: String, message: String)
     case engineFailed(message: String)
 
@@ -354,7 +431,7 @@ public enum BridgeEvent: Sendable {
 extension BridgeEvent: Decodable {
     private enum Keys: String, CodingKey {
         case event, id, katago, model, value, moveNumber, scoreLead, code, message
-        case strategies, aiSettings, done, total, contents
+        case strategies, aiSettings, done, total, contents, nodes
     }
 
     public init(from decoder: any Decoder) throws {
@@ -390,6 +467,8 @@ extension BridgeEvent: Decodable {
             self = .sgf(id: id, contents: try container.decode(String.self, forKey: .contents))
         case "record_analysed":
             self = .recordAnalysed(id: id, contents: try container.decode(String.self, forKey: .contents))
+        case "tree":
+            self = .tree(try container.decode([TreeNode].self, forKey: .nodes))
         case "error":
             self = .failure(
                 id: id,

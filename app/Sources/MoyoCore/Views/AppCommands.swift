@@ -34,13 +34,15 @@ public struct GameCommands: Commands {
         }
 
         CommandMenu("Partie") {
+            // In analysis the pass joins the branch, and the undo takes back the
+            // stone just placed by hand, never a move of the game.
             Button("Passer") { session?.passTurn() }
                 .keyboardShortcut("p", modifiers: .command)
-                .disabled(session?.canAct != true)
+                .disabled(session?.canAct != true && session?.isAnalysing != true)
 
             Button("Annuler le coup") { session?.undo() }
                 .keyboardShortcut("z", modifiers: .command)
-                .disabled(session?.canAct != true)
+                .disabled(session?.canAct != true && !(session?.isAnalysing == true && session?.canUndo == true))
 
             Divider()
 
