@@ -58,24 +58,46 @@ elles partent, comme un graphe git.
 | Score affiché | Celui de la position affichée, branche comprise | C'est la question qu'on pose en essayant un coup |
 | Analyse KataGo en Analyse | La position affichée est toujours analysée, même si l'analyse du suivi iPhone est éteinte | *Mon choix.* Un mode Analyse sans KataGo n'a pas de sens ; l'interrupteur du suivi ne gouverne que la partie vivante |
 | Passer | Un bouton « Passer » en Analyse, qui ajoute une passe à la branche | *Mon choix.* Un tenuki se lit en passant ; sans lui, on ne peut pas étudier « et si je ne réponds pas ? » |
-| Supprimer une branche | Clic droit sur un nœud d'analyse : « Supprimer la variante » retire ce nœud et tout ce qui en descend. Refusé sur un nœud de la partie ou d'un SGF importé | *Mon choix.* Un clic de travers créerait sinon une branche gardée jusque dans le SGF |
+| Supprimer une branche | Clic droit sur un nœud d'analyse, ou `⌘⌫` : « Supprimer la variante » retire ce nœud et tout ce qui en descend. Refusé sur un nœud de la partie ou d'un SGF importé | *Mon choix.* Un clic de travers créerait sinon une branche gardée jusque dans le SGF |
 | Curseur dans une branche supprimée | Il remonte au parent du nœud supprimé | Le seul endroit sûr |
 
-## Navigation au clavier
+## Menu Analyse et raccourcis
 
-Les raccourcis de la revue restent ; leur sens s'étend à l'arbre.
+Demandé : chaque raccourci se retrouve dans un menu de la barre de menus, avec sa
+touche affichée, pour qu'on puisse le découvrir sans le connaître. C'est déjà la règle
+de `GameCommands` (« every action lives here as well as in the sidebar ») ; le menu
+« Revue » devient le menu « Analyse » et la reprend entièrement. Un élément inutilisable
+dans l'état courant est grisé, jamais caché, pour que le menu garde sa forme.
 
-| Touche | Effet |
-|---|---|
-| `←` | Coup précédent : le parent du nœud affiché, dans une branche comme dans la partie |
-| `→` | Coup suivant : l'enfant par lequel on est passé en dernier, à défaut le premier |
-| `↑` `↓` | Variante sœur précédente / suivante au même coup, si elle existe |
-| `⌘←` | Début de la partie |
-| `⌘→` | Fin de la branche affichée (fin de la partie si on est sur la ligne de la partie) |
-| `⌘↑` | Revenir à la partie : le coup de la ligne de la partie d'où part la branche affichée |
-| `⌥→` `⌥←`, `⇧⌥→` `⇧⌥←`, `Échap` | Inchangés : séquence locale, proposition de KataGo, zone automatique |
+| Élément du menu Analyse | Touche | Effet |
+|---|---|---|
+| Partie en cours | `⌘1` | Sélecteur sur En cours ; grisé sans partie vivante ou pendant le comptage |
+| Analyse | `⌘2` | Sélecteur sur Analyse |
+| — | | |
+| Coup précédent | `←` | Le parent du nœud affiché, dans une branche comme dans la partie |
+| Coup suivant | `→` | L'enfant par lequel on est passé en dernier, à défaut le premier |
+| Variante précédente | `↑` | Variante sœur précédente au même coup |
+| Variante suivante | `↓` | Variante sœur suivante au même coup |
+| Début de la partie | `⌘←` | La racine |
+| Fin de la variante | `⌘→` | Fin de la branche affichée (fin de la partie sur la ligne de la partie) |
+| Revenir à la partie | `⌘↑` | Le coup de la ligne de la partie d'où part la branche affichée |
+| — | | |
+| Supprimer la variante | `⌘⌫` | Supprime le nœud affiché et sa descendance ; grisé hors nœud d'analyse |
+| — | | |
+| Dérouler / Remonter la séquence locale | `⌥→` `⌥←` | Inchangé |
+| Dérouler / Remonter la proposition | `⇧⌥→` `⇧⌥←` | Inchangé |
+| Revenir à la zone automatique | `Échap` | Inchangé |
+| Lire le combat local | `⌥` maintenue | Élément grisé, présent pour faire connaître le geste : une touche maintenue ne se déclenche pas depuis un menu |
 
-Le menu « Revue » devient le menu « Analyse ».
+Dans le menu « Partie », existant :
+
+- **Passer** (`⌘P`) passe aussi en Analyse : la passe s'ajoute à la branche.
+- **Annuler le coup** (`⌘Z`) en Analyse retire la dernière pierre posée quand le nœud
+  affiché est une feuille d'analyse ; grisé sinon. *Mon choix* : c'est le geste
+  qu'on attend après un clic de travers, et `←` suffit pour reculer sans effacer.
+
+Les boutons de la barre latérale (Passer, Revenir à la partie) restent : le menu les
+double, il ne les remplace pas.
 
 ## Pont
 
