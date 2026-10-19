@@ -269,3 +269,25 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 - **A stone hidden behind another on the far line cannot be read.** The stone just in front
   leans over the far line, so the intersection behind it is left unreadable and keeps what it
   had: a stone played there after its neighbour is never seen. Physical, from this angle.
+
+- **The 3D reader works in gray.** It tells a white stone from pale wood by brightness
+  alone, and wood in direct sunlight comes close; it needs a stone to explain its pixels
+  clearly better than the wood to count it. The camera hands over chroma for free (4:2:0),
+  and wood is coloured where stones are not, but every trial frame saved so far is gray,
+  so there is nothing to tune it on yet.
+
+- **The 3D reader ignores the lens.** The grid lines of the 24 mm lens bow by up to 12 px
+  across the near row, and `kifu-tool eval --refine` fits a radial term with the grid. The
+  app reads the 73 verified frames perfectly without it, and the tracker refits plain
+  corners, so the lens stays out of the app until a frame needs it.
+
+- **Cast shadows are not rendered.** A shadow is modelled as darker wood, anywhere between
+  half the wood and the wood itself, so a shadow never needs a stone to be explained. A
+  grazing sun from behind the board throws a stone's shadow towards the camera, onto the
+  next row; it is read right on the fixtures, but rendering each stone's shadow from a
+  light direction fitted on the frame would be the sound answer.
+
+- **The 3D reader renders again from scratch when the grid moves a pixel.** Rendering the
+  board costs a cold reading, about a second on the Mac, so it is only redone when a corner
+  moved a pixel or more since the last rendering; the tracker's smaller nudges are ignored.
+  Moving the rendered silhouettes instead of recomputing them would keep the warm start.

@@ -1,6 +1,6 @@
 import Foundation
 
-/// PROTOTYPE (spike). Reads the board by analysis by synthesis: every stone is an ellipsoid
+/// Reads the board by analysis by synthesis: every stone is an ellipsoid
 /// standing on its intersection, seen through the camera recovered from the calibration; each
 /// pixel shows the nearest object along its ray. A position is scored by how well the image it
 /// predicts matches the photo, and the reading is the position that scores best. A stone hidden
@@ -10,7 +10,7 @@ public struct SceneSettings: Sendable, Equatable {
     public var stoneRadius = 0.44
     public var stoneHeight = 0.40
     /// The image is reduced so that the smallest spacing is about this many pixels.
-    public var targetSpacing = 14.0
+    public var targetSpacing = 10.0
     /// Cost of a stone, against a pixel cost of about 1 for a residual of one deviation.
     public var stonePrior = 8.0
     /// Residuals are truncated at this many deviations, so shadows and glints are not decisive.
@@ -23,6 +23,8 @@ public struct SceneSettings: Sendable, Equatable {
     public var rounds = 4
     /// An intersection whose best alternative costs less than this more is reported unsure.
     public var unsureBelow = 4.0
+    /// ... plus this much per pixel of the stone's silhouette on its intersection.
+    public var unsurePerPixel = 0.1
     /// Wood map cells per line spacing: fine enough to follow the edge of a patch of sunlight.
     public var woodCells = 2
     /// Wood in a cast shadow: this fraction of the wood, at this extra cost per pixel, so that a
@@ -105,22 +107,38 @@ public final class SceneReader {
     let lens: Lens
 
     /// `calibration` holds undistorted corners when `k1` is not zero.
-    public init?(image full: GrayImage, calibration: Calibration, k1: Double = 0, settings: SceneSettings = SceneSettings()) {
+    public convenience init?(image full: GrayImage, calibration: Calibration, k1: Double = 0, settings: SceneSettings = SceneSettings()) {
+        self.init(calibration: calibration, imageWidth: full.width, imageHeight: full.height, k1: k1, settings: settings)
+        load(full)
+    }
+
+    /// Renders the board for frames of the given size, once per calibration: every frame then
+    /// only samples its pixels.
+    public init?(calibration: Calibration, imageWidth: Int, imageHeight: Int, k1: Double = 0, settings: SceneSettings = SceneSettings()) {
         self.settings = settings
         lines = calibration.lines
         guard let fullGeometry = BoardGeometry(calibration: calibration) else { return nil }
         let f = max(1, Int(fullGeometry.minSpacing / settings.targetSpacing))
         scale = f
-        let image = Self.reduce(full, by: f)
-        width = image.width; height = image.height
-        lens = Lens(k1: k1, width: image.width, height: image.height)
+        width = imageWidth / f; height = imageHeight / f
+        lens = Lens(k1: k1, width: width, height: height)
         let corners = calibration.corners.map { Point(x: ($0.x + 0.5) / Double(f) - 0.5, y: ($0.y + 0.5) / Double(f) - 0.5) }
         guard let g = BoardGeometry(calibration: Calibration(lines: lines, corners: corners)) else { return nil }
         geometry = g
         camera = g.camera(imageWidth: width, imageHeight: height)
-        build(image)
+        build()
         state = [UInt8](repeating: 0, count: lines * lines)
         stamp = [Int32](repeating: 0, count: intensity.count)
+    }
+
+    /// Samples `full`, a frame of the size the reader was built for.
+    public func load(_ full: GrayImage) {
+        let image = Self.reduce(full, by: scale)
+        precondition(image.width == width && image.height == height, "frame size changed")
+        image.pixels.withUnsafeBufferPointer { px in
+            for p in 0..<intensity.count { intensity[p] = Float(px[Int(pixelIndex[p])]) }
+        }
+        boardMedian = Self.median(zip(intensity, onBoard).filter { $0.1 }.map { $0.0 })
     }
 
     static func reduce(_ image: GrayImage, by f: Int) -> GrayImage {
@@ -203,7 +221,7 @@ public final class SceneReader {
 
     // MARK: Sampling
 
-    private func build(_ image: GrayImage) {
+    private func build() {
         prepareRays()
         let n = Double(lines - 1), m = settings.margin
         let count = lines * lines
@@ -277,7 +295,7 @@ public final class SceneReader {
                 guard inside || !hits.isEmpty else { continue }
                 hits.sort { $0.0 < $1.0 }
                 let index = Int32(intensity.count)
-                intensity.append(Float(image[x, y]))
+                intensity.append(0)
                 boardX.append(Float(bp.x)); boardY.append(Float(bp.y))
                 onBoard.append(inside)
                 let fx = abs(bp.x - bp.x.rounded()), fy = abs(bp.y - bp.y.rounded())
@@ -313,7 +331,6 @@ public final class SceneReader {
             }
         }
         wood = [Float](repeating: 128, count: intensity.count)
-        boardMedian = Self.median(zip(intensity, onBoard).filter { $0.1 }.map { $0.0 })
     }
 
     // MARK: Appearance
@@ -602,24 +619,49 @@ public final class SceneReader {
         }
     }
 
+    /// Whether an image was read already: the next one starts from what it showed.
+    private var warm = false
+
+    /// Reads the image last loaded. A first reading starts from scratch, or from `previous`;
+    /// the next ones start from `previous` with the appearance the last image left, which the
+    /// last reading learned with every stone accounted for. A wood map learned before a new
+    /// stone is found would follow that stone and absorb it.
     public func read(previous: Position?) -> SceneReading {
+        let last = state
         if let previous {
             for i in previous.all {
-                state[i.row * lines + i.col] = Self.code(colour: previous[i] == .black ? 1 : previous[i] == .white ? 2 : 0, variant: 0)
+                let k = i.row * lines + i.col
+                let colour: UInt8 = previous[i] == .black ? 1 : previous[i] == .white ? 2 : 0
+                // Keep where the stone was found sitting, when it is still the same stone.
+                state[k] = Self.colour(last[k]) == colour ? last[k] : Self.code(colour: colour, variant: 0)
             }
         } else {
             state = [UInt8](repeating: 0, count: lines * lines)
         }
-        estimateAppearance(colours: false)
-        // A coarse wood map first: a fine one would follow the stones not yet found and absorb
-        // them. Once they are found, a fine one follows the edge of a patch of sunlight.
-        for _ in 0..<settings.rounds {
+        let start = state
+        if warm {
+            timed("refresh") { refreshCosts() }
             optimise()
-            estimateAppearance(colours: true)
+            estimateAppearance(colours: true, fine: true)
+            optimise()
+            // A move changes one intersection. More means the last image taught a wrong
+            // appearance, a hand over the board most often: read this one afresh.
+            let changed = (0..<(lines * lines)).filter { Self.colour(state[$0]) != Self.colour(start[$0]) }.count
+            if changed > 2 { warm = false; state = start }
         }
-        optimise()
-        estimateAppearance(colours: true, fine: true)
-        optimise()
+        if !warm {
+            estimateAppearance(colours: false)
+            // A coarse wood map first: a fine one would follow the stones not yet found and absorb
+            // them. Once they are found, a fine one follows the edge of a patch of sunlight.
+            for _ in 0..<settings.rounds {
+                optimise()
+                estimateAppearance(colours: true)
+            }
+            optimise()
+            estimateAppearance(colours: true, fine: true)
+            optimise()
+            warm = true
+        }
         var position = Position(size: lines)
         var margins: [Intersection: Double] = [:]
         var unsure: Set<Intersection> = []
@@ -628,9 +670,9 @@ public final class SceneReader {
             let colour = Self.colour(state[k])
             position[i] = colour == 1 ? .black : colour == 2 ? .white : .empty
             let others = Self.codes.filter { Self.colour($0) != colour }
-            let margin = deltas(k, others).min() ?? 0
+            let margin = timed("margins") { deltas(k, others).min() ?? 0 }
             margins[i] = Double(margin)
-            if Double(margin) < settings.unsureBelow { unsure.insert(i) }
+            if Double(margin) < settings.unsureBelow + settings.unsurePerPixel * Double(area[k * Self.variantCount]) { unsure.insert(i) }
         }
         return SceneReading(position: position, margins: margins, unsure: unsure)
     }
@@ -754,7 +796,8 @@ extension SceneReader {
         return sum / Double(2 * lines * samples)
     }
 
-    /// PROTOTYPE: refits the grid and the lens, coarse to fine. On a reduced image the lines are
+    /// Refits the grid and the lens, coarse to fine. Used by `kifu-tool eval --refine` only: the
+    /// app reads well without the lens, and the tracker keeps the plain corners. On a reduced image the lines are
     /// wide smudges, so the score still rises a quarter of a cell away from them. Returns the
     /// undistorted corners and the lens, both for the full image.
     public static func fitGrid(_ corners: [Point], lines: Int, in image: GrayImage) -> ([Point], Lens) {
@@ -801,5 +844,15 @@ extension SceneReader {
 
     public static func score(_ corners: [Point], lens: Lens, lines: Int, in image: GrayImage) -> Double {
         gridScore(corners, lens: lens, lines: lines, in: image)
+    }
+}
+
+extension SceneReader: BoardReader {
+    /// What the recorder sees: the stones of the best explanation, the intersections where
+    /// another one is nearly as good left unreadable.
+    public func read(_ image: GrayImage, previous: Position?) -> Readings {
+        timed("load") { load(image) }
+        let reading = timed("read") { read(previous: previous) }
+        return Readings(position: reading.position, unreadable: reading.unsure)
     }
 }

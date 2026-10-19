@@ -40,6 +40,13 @@ final class GameSession {
     enum Phase { case calibrating, recording, finished }
 
     nonisolated static let lines = 19
+    /// Reads the stones by rendering the board in 3D and comparing it with the frame; off, the
+    /// intersection reader measures each point against the wood around it.
+    nonisolated static let sceneReaderDefaultsKey = "sceneReader"
+    nonisolated static var useSceneReader: Bool { UserDefaults.standard.object(forKey: sceneReaderDefaultsKey) as? Bool ?? true }
+    /// The scene reader renders the board again only when a corner moved this far, in pixels:
+    /// rendering costs a cold reading, and the tracker nudges the corners by fractions of a pixel.
+    nonisolated static let sceneRebuildDistance = 1.0
     static let minimumComfortableSpacing = 12.0
     /// How far, in frame pixels, a precisely placed corner may be nudged onto the grid.
     static let cornerRefineRadius = 8
@@ -178,7 +185,13 @@ final class GameSession {
             Task { @MainActor in self.taps = []; self.calibrationFailed = true }
             return
         }
-        engine.reader = IntersectionReader(geometry: geometry)
+        guard let gray = engine.frozenGray ?? engine.latest?.gray,
+              let reader = Self.makeReader(calibration, width: gray.width, height: gray.height) else {
+            Task { @MainActor in self.taps = []; self.calibrationFailed = true }
+            return
+        }
+        engine.reader = reader
+        engine.readerCalibration = calibration
         engine.calibration = calibration
         engine.tracker = GridTracker(calibration: calibration)
         let points = Self.gridPoints(of: geometry)
@@ -188,6 +201,13 @@ final class GameSession {
             self.minSpacing = geometry.minSpacing
             self.frozen = nil
         }
+    }
+
+    private nonisolated static func makeReader(_ calibration: Calibration, width: Int, height: Int) -> BoardReader? {
+        if useSceneReader {
+            return SceneReader(calibration: calibration, imageWidth: width, imageHeight: height)
+        }
+        return BoardGeometry(calibration: calibration).map { IntersectionReader(geometry: $0) }
     }
 
     private nonisolated static func gridPoints(of geometry: BoardGeometry) -> [[Point]] {
@@ -200,10 +220,16 @@ final class GameSession {
         guard var tracker = engine.tracker, let moved = tracker.update(frame.gray, at: frame.time) else { return }
         engine.tracker = tracker
         guard let geometry = BoardGeometry(calibration: moved) else { return }
-        let reader = IntersectionReader(geometry: geometry)
-        engine.reader = reader
         engine.calibration = moved
-        engine.recorder?.follow(reader: reader)
+        let shift = engine.readerCalibration.map { last in
+            zip(last.corners, moved.corners).map { hypot($0.x - $1.x, $0.y - $1.y) }.max() ?? 0
+        } ?? .infinity
+        if !(engine.reader is SceneReader) || shift >= Self.sceneRebuildDistance,
+           let reader = Self.makeReader(moved, width: frame.gray.width, height: frame.gray.height) {
+            engine.reader = reader
+            engine.readerCalibration = moved
+            engine.recorder?.follow(reader: reader)
+        }
         let points = Self.gridPoints(of: geometry)
         Task { @MainActor in
             self.calibration = moved
@@ -312,7 +338,9 @@ final class GameSession {
 
     private final class Engine {
         var latest: CameraFrame?
-        var reader: IntersectionReader?
+        var reader: BoardReader?
+        /// The calibration `reader` was made for, which the tracker may since have nudged.
+        var readerCalibration: Calibration?
         var recorder: Recorder?
         var lastReadPosition = Position(size: GameSession.lines)
         var frozenGray: GrayImage?
@@ -329,8 +357,24 @@ final class GameSession {
     var savedCalibration = SavedCalibration.load()
     }
 
+    /// Frames waiting for or in the worker. A reading can take longer than the half second
+    /// between two frames: a frame arriving while one is waiting only refreshes the preview.
+    nonisolated(unsafe) private var queued = 0
+    nonisolated private let queuedLock = NSLock()
+
     private nonisolated func handle(_ frame: CameraFrame) {
+        let admitted = queuedLock.withLock { () -> Bool in
+            guard queued < 2 || frame.full != nil else { return false }
+            queued += 1
+            return true
+        }
+        guard admitted else {
+            let preview = frame.preview
+            Task { @MainActor in self.preview = preview }
+            return
+        }
         worker.async { [self] in
+            defer { queuedLock.withLock { queued -= 1 } }
             engine.latest = frame
             if frame.full != nil { engine.frozenGray = frame.gray }
             let size = CGSize(width: frame.gray.width, height: frame.gray.height)

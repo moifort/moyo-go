@@ -22,6 +22,22 @@ final class FixtureTests: XCTestCase {
     }
 
     func testAllFixturesReadCorrectly() throws {
+        try checkFixtures { image, calibration, fixture in
+            guard let geometry = BoardGeometry(calibration: calibration) else { return nil }
+            var settings = ReaderSettings()
+            if let height = fixture.stoneHeight { settings.stoneHeight = height }
+            return IntersectionReader(geometry: geometry, settings: settings).read(image, previous: nil).position
+        }
+    }
+
+    /// The scene reader needs no per-photo setting: the stone is the same everywhere.
+    func testSceneReaderReadsAllFixtures() throws {
+        try checkFixtures { image, calibration, _ in
+            SceneReader(calibration: calibration, imageWidth: image.width, imageHeight: image.height)?.read(image, previous: nil).position
+        }
+    }
+
+    private func checkFixtures(_ read: (GrayImage, Calibration, Fixture) -> Position?) throws {
         let dir = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures", withExtension: nil))
         let photos = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
             .filter { ["jpg", "jpeg", "heic", "png"].contains($0.pathExtension.lowercased()) }
@@ -42,17 +58,14 @@ final class FixtureTests: XCTestCase {
                 failures.append("\(name): unreadable image"); continue
             }
             let corners = fixture.corners.map { Point(x: $0[0], y: $0[1]) }
-            guard let geometry = BoardGeometry(calibration: Calibration(lines: fixture.lines ?? 19, corners: corners)) else {
+            guard let position = read(image, Calibration(lines: fixture.lines ?? 19, corners: corners), fixture) else {
                 failures.append("\(name): degenerate corners"); continue
             }
-            var settings = ReaderSettings()
-            if let height = fixture.stoneHeight { settings.stoneHeight = height }
-            let readings = IntersectionReader(geometry: geometry, settings: settings).read(image, previous: nil)
             let expected = Position(parsing: fixture.expected.joined(separator: "\n"))
             let ignored = Set((fixture.ignore ?? []).map { Intersection(col: $0[0], row: $0[1]) })
-            let wrong = expected.diff(to: readings.position).keys.filter { !ignored.contains($0) }.sorted()
+            let wrong = expected.diff(to: position).keys.filter { !ignored.contains($0) }.sorted()
             if !wrong.isEmpty {
-                failures.append("\(name): wrong at \(wrong.map(\.description).joined(separator: " "))\nexpected\n\(expected)\nread\n\(readings.position)")
+                failures.append("\(name): wrong at \(wrong.map(\.description).joined(separator: " "))\nexpected\n\(expected)\nread\n\(position)")
             }
         }
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n\n"))

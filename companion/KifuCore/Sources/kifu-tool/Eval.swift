@@ -4,7 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import KifuCore
 
-/// PROTOTYPE: `kifu-tool eval cases.json [--only name] [--overlays dir]` reads every case with
+/// `kifu-tool eval cases.json [--only name] [--overlays dir]` reads every case with
 /// the intersection reader and the scene reader, and counts each one's mistakes against the truth.
 struct EvalCase: Decodable {
     let name: String
@@ -165,4 +165,36 @@ func runEval(_ arguments: [String]) {
     }
     if !skipOld { print("lecteur actuel : " + old.line) }
     print("lecteur par rendu : " + new.line + String(format: ", %.2f s par image", newTime / Double(max(new.frames, 1))))
+}
+
+/// `kifu-tool replay cases.json`: reads the cases in order with one scene reader per set of
+/// corners, each image starting from the last reading, the way the app follows a game.
+func runReplay(_ arguments: [String]) {
+    guard let data = FileManager.default.contents(atPath: arguments[0]),
+          let cases = try? JSONDecoder().decode([EvalCase].self, from: data) else { fail("cannot read \(arguments[0])") }
+    var reader: SceneReader?
+    var corners: [[Double]] = []
+    var previous: Position?
+    var score = Score()
+    var times: [Double] = []
+    for c in cases {
+        guard let (image, _) = loadGray(c.image) else { continue }
+        let t = Date()
+        if reader == nil || c.corners != corners {
+            reader = SceneReader(calibration: Calibration(lines: 19, corners: c.corners.map { Point(x: $0[0], y: $0[1]) }), imageWidth: image.width, imageHeight: image.height)
+            corners = c.corners
+        }
+        let built = -t.timeIntervalSinceNow
+        let r = reader!.read(image, previous: previous)
+        let elapsed = -t.timeIntervalSinceNow
+        times.append(elapsed - built)
+        previous = r.position
+        let truth = Position(parsing: c.expected.joined(separator: "\n"))
+        let wrong = truth.all.filter { r.position[$0] != truth[$0] }
+        let unsure = truth.all.filter { r.unreadable.contains($0) }
+        score.add(wrong: wrong.count, unsure: unsure.count)
+        print(String(format: "%@ build %.2f read %.2f  %d faux %@  %d incertaines %@", c.name, built, elapsed - built, wrong.count, wrong.map(\.description).joined(), unsure.count, unsure.map(\.description).joined()))
+    }
+    if let reader { print(reader.timings.sorted { $0.key < $1.key }.map { "\($0.key) \(String(format: "%.2f", $0.value))" }.joined(separator: " ")) }
+    print("relecture : " + score.line + String(format: ", lecture médiane %.2f s", times.sorted()[times.count / 2]))
 }

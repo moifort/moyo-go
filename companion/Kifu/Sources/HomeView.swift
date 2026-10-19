@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var showGame = false
     @AppStorage(TrialLog.defaultsKey) private var trialMode = false
     @AppStorage(CameraSession.ultraWideDefaultsKey) private var ultraWide = false
+    @AppStorage(GameSession.sceneReaderDefaultsKey) private var sceneReader = true
     @AppStorage(BoardServer.viewpointDefaultsKey) private var viewpoint = BoardBroadcast.Viewpoint.leftPlayer.rawValue
 
     var body: some View {
@@ -30,6 +31,11 @@ struct HomeView: View {
                     }
                 } footer: {
                     Text("Gauche et droite de l'image du téléphone, posé sur le troisième côté de la table.")
+                }
+                Section {
+                    Toggle("Lecture en 3D", isOn: $sceneReader)
+                } footer: {
+                    Text("Compare l'image à un rendu 3D du goban : les pierres cachées derrière une autre sont lues sur leur partie visible. Désactivée, l'ancienne lecture mesure chaque intersection.")
                 }
                 Section {
                     Toggle("Mode d'essai", isOn: $trialMode)

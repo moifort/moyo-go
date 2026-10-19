@@ -16,6 +16,10 @@ func fail(_ message: String) -> Never {
 }
 
 var args = Array(CommandLine.arguments.dropFirst())
+if args.first == "replay", args.count >= 2 {
+    runReplay(Array(args.dropFirst()))
+    exit(0)
+}
 if args.first == "eval", args.count >= 2 {
     runEval(Array(args.dropFirst()))
     exit(0)
