@@ -39,7 +39,7 @@ public struct TurnIndicator: View {
         }
         .frame(width: diameter * 1.5, height: diameter * 1.5)
         .accessibilityLabel(
-            isThinking ? "\(Theme.name(color)) au trait, l'adversaire réfléchit" : "\(Theme.name(color)) au trait"
+            isThinking ? "À \(Theme.name(color)) de jouer, l'adversaire réfléchit" : "À \(Theme.name(color)) de jouer"
         )
     }
 }
