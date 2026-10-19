@@ -9,7 +9,26 @@ public struct SidebarView: View {
         self.session = session
     }
 
+    /// Scrolls once the panel outgrows the window. Without it the split view
+    /// stretched every column to the sidebar's height, and the board, sized on
+    /// that height, grew past the window and was cut off. The minimum height keeps
+    /// the footer pinned to the bottom whenever everything fits.
     public var body: some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                content
+                    .frame(minHeight: proxy.size.height, alignment: .top)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .background(Theme.sidebarVeil)
+        .help(session.engineDescription ?? "")
+        .sheet(isPresented: $isConfiguringAI) {
+            AISettingsSheet(session: session)
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let state = session.state, state.isFollowing {
                 followingPanel(state)
@@ -66,11 +85,6 @@ public struct SidebarView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Theme.sidebarVeil)
-        .help(session.engineDescription ?? "")
-        .sheet(isPresented: $isConfiguringAI) {
-            AISettingsSheet(session: session)
-        }
     }
 
     private var divider: some View {
