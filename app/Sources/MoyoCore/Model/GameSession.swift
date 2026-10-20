@@ -56,7 +56,6 @@ public final class GameSession {
 
     public private(set) var phase: Phase = .starting
     public private(set) var state: GameState?
-    public private(set) var engineDescription: String?
     public private(set) var lastErrorMessage: String?
     public var settings = Settings()
 
@@ -216,9 +215,8 @@ public final class GameSession {
     /// Internal rather than private so the tests can play the bridge's part.
     func handle(_ event: BridgeEvent) {
         switch event {
-        case .ready(let katago, let model, let strategies, let settings):
+        case .ready(_, _, let strategies, let settings):
             phase = .running
-            engineDescription = model.map { URL(fileURLWithPath: $0).lastPathComponent } ?? katago
             availableStrategies = strategies
             bridgeSettings = settings
             // A record double-clicked in the Finder launched the app: it is what the

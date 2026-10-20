@@ -22,7 +22,6 @@ public struct SidebarView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .background(Theme.sidebarVeil)
-        .help(session.engineDescription ?? "")
         .sheet(isPresented: $isConfiguringAI) {
             AISettingsSheet(session: session)
         }
