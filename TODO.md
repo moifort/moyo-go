@@ -9,7 +9,9 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   count, playouts, raw win rate, thread count, time per move. The first release
   ships a frozen engine configuration and no settings at all, because the AI mode
   already governs playing strength and every extra knob is a way to degrade the
-  experience.
+  experience. The name of the loaded model belongs there too: it used to be a
+  tooltip on the whole sidebar, which popped "play.bin.gz" up wherever the pointer
+  rested, so it was removed rather than moved to a spot nobody would find.
 
 - **Localisation.** The interface is hardcoded French (`Button("Nouvelle partie…")`
   and friends). The App Store listing is worldwide, so the strings should move to a
