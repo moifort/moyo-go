@@ -647,7 +647,8 @@ public final class GameSession {
     }
 
     /// One move back or forward in the tree: back to the parent, forward along the
-    /// branch last walked. Inside KataGo's line, a plain arrow leaves it first.
+    /// branch last walked. Inside KataGo's line, the moves walked so far stay as a
+    /// branch and the arrow steps along it; only ⌥← and ⇧⌥← take them back.
     public func step(_ delta: Int) {
         navigate(delta < 0 ? .back : .forward)
     }

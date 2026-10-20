@@ -181,7 +181,7 @@ def test_stepping_back_with_no_variation_says_so(reviewing):
     assert errors(reviewing)[-1]["code"] == "no_variation"
 
 
-def test_navigating_away_prunes_the_branch(reviewing):
+def test_navigating_away_keeps_the_line_walked_as_a_branch(reviewing):
     run(reviewing, reviewing.goto, 2, 1)
     anchor = reviewing.game.current_node
     analysed(anchor, ["A1"])
@@ -189,7 +189,7 @@ def test_navigating_away_prunes_the_branch(reviewing):
     assert len(anchor.children) == 2
 
     run(reviewing, reviewing.goto, 4, 4)
-    assert len(anchor.children) == 1
+    assert len(anchor.children) == 2
     assert last_state(reviewing)["variation_depth"] == 0
 
 
@@ -313,7 +313,7 @@ def test_switching_lines_starts_again_from_the_record(reviewing):
     assert state["variation_kind"] == "best"
     assert state["variation_depth"] == 1
     assert state["local_zone"] is None
-    assert len(node.children) == 1  # the local branch is gone
+    assert len(node.children) == 2  # the local line stays, a branch of its own
 
     run(reviewing, reviewing.step_variation, 5, -1)
     assert last_state(reviewing)["variation_kind"] is None
@@ -409,7 +409,8 @@ def test_drawing_a_zone_leaves_the_local_sequence(reviewing):
     run(reviewing, reviewing.set_local_zone, 3, DRAWN)
     state = last_state(reviewing)
     assert state["variation_depth"] == 0
-    assert len(node.children) == 0
+    assert reviewing.game.current_node is node
+    assert len(node.children) == 1  # the sequence read in the old zone is kept
 
 
 def test_a_new_record_forgets_the_drawn_zone(reviewing):

@@ -31,6 +31,13 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   result and the moves taken back with it. The analysis answers the question with
   KataGo's own lines, which is what it is mostly asked for.
 
+- **Every line of KataGo walked stays in the tree.** Leaving a sequence walked
+  with ⌥→ or ⇧⌥→ keeps it as a branch, so a long reading session leaves many short
+  branches behind; ⌘⌫ or a right click deletes one. Erasing them on the way out was
+  the first design, and it lost the very sequence the player had just tested when
+  they stepped back with ← to try another. Marking a branch as "only looked at" and
+  saving without those would sort the two, and nobody has asked for it yet.
+
 - **The tree does not fold.** Its area in the sidebar is capped at 280 points and
   scrolls in both directions; a record from a teaching session, all branches, will
   scroll a lot. Folding a branch to a single dot is the usual answer, and wants a

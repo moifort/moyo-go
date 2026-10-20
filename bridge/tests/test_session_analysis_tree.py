@@ -294,12 +294,30 @@ def test_the_tree_is_sent_only_when_its_shape_changes(reviewing):
 # -- the preview of KataGo's line ---------------------------------------------
 
 
-def test_a_preview_left_alone_leaves_no_trace(reviewing):
+def test_a_preview_left_with_the_arrows_stays_as_a_branch(reviewing):
     reviewing.goto(2, 2)
     anchor = analysed(reviewing.game.current_node, ["A1", "J9"])
     reviewing.step_variation(3, 1)
-    assert tree_node(reviewing, reviewing.game.current_node)["origin"] == "preview"
-    reviewing.navigate(4, "back")
+    first = reviewing.game.current_node
+    reviewing.step_variation(4, 1)
+    assert tree_node(reviewing, first)["origin"] == "preview"
+    reviewing.navigate(5, "back")
+    # One move back along what is now a branch, not out of it.
+    assert reviewing.game.current_node is first
+    assert reviewing._variation == []
+    assert tree_node(reviewing, first)["origin"] == "analysis"
+    reviewing.navigate(6, "back")
+    assert reviewing.game.current_node is anchor
+    reviewing.play(7, 8, 8)
+    assert len(anchor.children) == 3  # the game, KataGo's line kept, the new stone
+
+
+def test_a_preview_taken_back_with_its_own_key_leaves_no_trace(reviewing):
+    reviewing.goto(2, 2)
+    anchor = analysed(reviewing.game.current_node, ["A1", "J9"])
+    reviewing.step_variation(3, 1)
+    reviewing.step_variation(4, -1)
+    assert reviewing.game.current_node is anchor
     assert all(child is reviewing._line[3] for child in anchor.children)
 
 
@@ -316,15 +334,17 @@ def test_a_stone_placed_from_a_preview_keeps_it(reviewing):
     assert any(child is walked for child in anchor.children)
 
 
-def test_a_click_on_a_preview_move_walks_back_to_it(reviewing):
+def test_a_click_on_a_preview_move_keeps_the_whole_line(reviewing):
     reviewing.goto(2, 2)
     analysed(reviewing.game.current_node, ["A1", "J9", "A9"])
     reviewing.step_variation(3, 1)
     first = reviewing.game.current_node
     reviewing.step_variation(4, 1)
+    second = reviewing.game.current_node
     reviewing.goto_node(5, reviewing._number(first))
     assert reviewing.game.current_node is first
-    assert len(reviewing._variation) == 1
+    assert reviewing._variation == []
+    assert tree_node(reviewing, second)["origin"] == "analysis"
 
 
 # -- deleting -----------------------------------------------------------------

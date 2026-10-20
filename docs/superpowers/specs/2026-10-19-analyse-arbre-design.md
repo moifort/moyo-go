@@ -51,7 +51,7 @@ elles partent, comme un graphe git.
 | Fin d'une partie | Abandon, comptage accepté, fin annoncée par l'iPhone : on passe en Analyse sur la dernière position, le résultat reste affiché dans la barre latérale | Choisi par le joueur : « directement en Analyse » |
 | Sauvegarde | Le SGF contient la ligne de la partie et toutes les branches d'analyse, ainsi que les branches d'un SGF importé | Choisi par le joueur ; KaTrain, Sabaki et OGS les relisent |
 | Branches d'un SGF importé | Affichées dans l'arbre comme les autres, navigables, jouables | *Mon choix.* L'arbre est là ; les cacher serait arbitraire. Règle l'entrée correspondante de `TODO.md` |
-| Proposition de KataGo et séquence locale (⌥→, ⇧⌥→) | Restent un aperçu provisoire, élagué quand on en sort, comme aujourd'hui. Un clic posé depuis l'intérieur d'un aperçu le rend permanent : les coups déroulés jusque-là deviennent une branche, et la pierre cliquée s'y ajoute | *Mon choix.* Sinon chaque coup d'œil à KataGo encombrerait l'arbre ; mais un essai qui part de la ligne de KataGo doit pouvoir se garder |
+| Proposition de KataGo et séquence locale (⌥→, ⇧⌥→) | Les coups déroulés deviennent une branche dès qu'on quitte la ligne autrement que par sa propre touche de retour : ←, →, un clic dans l'arbre, une pierre posée, « Revenir à la partie », la vue En cours. Seuls ⌥← et ⇧⌥← retirent ses coups, un à un. Pendant le déroulé, ils apparaissent en pointillés (`preview`) | Corrigé le 20 octobre 2026 : le premier choix — un aperçu provisoire, élagué quand on en sort — effaçait la séquence testée dès que le joueur revenait à son début avec ← pour en essayer une autre |
 | Ce que l'arbre montre | La ligne de la partie, les nœuds d'analyse, les nœuds d'un SGF importé, et les ancêtres de tout cela. Les restes d'un « annuler » et les corrections du suivi iPhone restent cachés tant qu'aucune branche d'analyse n'en part | Ils sont dans l'arbre de KaTrain mais ne sont pas des essais du joueur. Même règle pour la sauvegarde |
 | Ligne de la partie | Contre l'IA ou en suivi : de la racine au nœud vivant. SGF importé : `children[0]` partout | Inchangé par rapport à aujourd'hui |
 | Courbe de score, « Coup N sur M », jauge d'analyse | Toujours sur la ligne de la partie, même quand le curseur est dans une branche | La courbe raconte la partie, pas les essais |
@@ -121,9 +121,9 @@ Le pont possède l'arbre et les deux curseurs ; l'app ne fait qu'afficher et dem
   attribut sur le nœud) est laissé à l'implémentation.
 - **Identifiants.** Chaque nœud reçoit un entier stable pour la durée de la session,
   attribué par le pont ; l'app ne connaît que lui.
-- **Élagage.** `_prune_variation` et `_pop_variation` ne concernent plus que l'aperçu
-  provisoire (⌥→, ⇧⌥→). Un clic posé depuis l'aperçu marque les nœuds déroulés comme
-  nœuds d'analyse et vide la pile de l'aperçu sans élaguer.
+- **Élagage.** Seul `_pop_variation` (⌥←, ⇧⌥←) retire un coup de l'aperçu. Toute
+  autre sortie passe par `_keep_preview`, qui marque les nœuds déroulés comme nœuds
+  d'analyse et vide la pile de l'aperçu sans élaguer.
 - **Sauvegarde.** `record.text` reçoit l'ensemble des nœuds à garder (ligne de la
   partie, nœuds d'analyse, nœuds importés, et leurs ancêtres) plutôt qu'une ligne
   unique.

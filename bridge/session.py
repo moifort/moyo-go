@@ -633,7 +633,7 @@ class BridgeSession(KaTrainHost):
         """Jumps to a position in the line of the game. Out-of-range asks are clamped."""
         self._require_review()
         line = self._main_line()
-        self._leave_preview()
+        self._keep_preview()
         self._show(line[max(0, min(int(move_number), len(line) - 1))], command_id)
 
     def step_variation(self, command_id, step, kind="best"):
@@ -801,15 +801,6 @@ class BridgeSession(KaTrainHost):
             self._anchor_pv = []
             self._variation_kind = "best"
 
-    def _prune_variation(self) -> None:
-        """Drops the whole variation branch, keeping whatever belongs to the record."""
-        while self._variation:
-            parent, node, created = self._variation.pop()
-            self._drop_preview_node(parent, node, created)
-        self._anchor_pv = []
-        self._variation_kind = "best"
-        self._local_extension = None
-
     def _drop_preview_node(self, parent, node, created) -> None:
         """Takes a preview move off the tree, unless it has become worth keeping.
 
@@ -820,14 +811,23 @@ class BridgeSession(KaTrainHost):
             parent.children = [child for child in parent.children if child is not node]
 
     def _leave_preview(self):
-        """Back to the position the preview started from; returns it."""
+        """Back to the position the preview started from, keeping it; returns it.
+
+        For a new line read from the same position — the other kind, or a zone
+        redrawn — so the board never shows half of each.
+        """
         anchor = self._anchor()
-        self._prune_variation()
+        self._keep_preview()
         self.game.set_current_node(anchor)
         return anchor
 
     def _keep_preview(self) -> None:
-        """A stone placed from inside a preview: the moves walked become a branch."""
+        """The moves of KataGo's line walked so far become a branch of the tree.
+
+        Leaving the line by any way but its own key back keeps it: a sequence read
+        out is worth coming back to, and the next one starts from where the player
+        steps to. Only ⌥← and ⇧⌥← take its moves back, one at a time.
+        """
         for _, node, created in self._variation:
             if created:
                 self._analysis_nodes[id(node)] = node
@@ -1219,7 +1219,7 @@ class BridgeSession(KaTrainHost):
         if self._status in ("review", "finished"):
             raise CommandError("no_live_game", "aucune partie n'est en cours")
         if self._view == "analysis":
-            self._leave_preview()
+            self._keep_preview()
             self._local_wanted = False
             self.game.set_current_node(self._live)
             self._live = None
@@ -1256,13 +1256,7 @@ class BridgeSession(KaTrainHost):
             if self._status == "scoring":
                 raise CommandError("not_now", "le décompte doit d'abord être tranché")
             self._enter_analysis()
-        if any(node is walked for _, walked, _ in self._variation):
-            # A move of the preview: walk back to it rather than drop it.
-            while self.game.current_node is not node:
-                self._pop_one()
-            self._emit_state(command_id)
-            return
-        self._leave_preview()
+        self._keep_preview()
         self._show(node, command_id)
 
     #: Where each `navigate` target leads from the position on screen.
@@ -1273,7 +1267,8 @@ class BridgeSession(KaTrainHost):
         self._require_review()
         if to not in self.NAVIGATION:
             raise CommandError("bad_arguments", f"unknown destination '{to}'")
-        node = self._leave_preview()
+        self._keep_preview()
+        node = self.game.current_node
         if to == "back":
             target = node.parent or node
         elif to == "forward":
@@ -1342,7 +1337,8 @@ class BridgeSession(KaTrainHost):
         node = self._node(node_id)
         if node is None or id(node) not in self._analysis_nodes or not self._deletable(node):
             raise CommandError("not_analysis_node", "seule une variante d'analyse peut être supprimée")
-        anchor = self._leave_preview()
+        self._keep_preview()
+        anchor = self.game.current_node
         parent = node.parent
         parent.children = [child for child in parent.children if child is not node]
         for gone in node.nodes_in_tree:
@@ -1528,7 +1524,10 @@ class BridgeSession(KaTrainHost):
         if result:
             self.game.root.set_property("RE", result)
         # The player may be in analysis already: they stay on the position they read.
-        cursor = self._leave_preview() if self._analysing() else None
+        cursor = None
+        if self._analysing():
+            self._keep_preview()
+            cursor = self.game.current_node
         line = self._live_node().nodes_from_root
         self._clear_review()
         self._status = "review"
