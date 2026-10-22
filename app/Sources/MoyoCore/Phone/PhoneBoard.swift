@@ -10,11 +10,14 @@ public struct PhoneBoard: Equatable, Sendable {
     public let status: String
     /// The rows as the phone wrote them, X for Black, O for White: what the bridge reads.
     public let rows: [String]
+    /// The game so far, sent only with the first board a Mac receives on connecting.
+    public let history: PhoneHistory?
 
-    public init(size: Int, stones: [Stone], status: String = "locked") {
+    public init(size: Int, stones: [Stone], status: String = "locked", history: PhoneHistory? = nil) {
         self.size = size
         self.stones = stones
         self.status = status
+        self.history = history
         var grid = Array(repeating: Array(repeating: Character("."), count: size), count: size)
         for stone in stones where stone.row < size && stone.col < size {
             grid[stone.row][stone.col] = stone.color == .black ? "X" : "O"
@@ -23,9 +26,14 @@ public struct PhoneBoard: Equatable, Sendable {
     }
 
     private struct Wire: Decodable {
+        struct History: Decodable {
+            let setup: [String: [[Int]]]?
+            let moves: [PhoneMove]?
+        }
         let size: Int
         let rows: [String]
         let status: String?
+        let history: History?
     }
 
     /// Decodes one line from the phone. Nil when it is not a board.
@@ -44,10 +52,41 @@ public struct PhoneBoard: Equatable, Sendable {
                 }
             }
         }
-        self.init(size: wire.size, stones: stones, status: wire.status ?? "locked")
+        let history = wire.history.map {
+            PhoneHistory(setupBlack: $0.setup?["B"] ?? [], setupWhite: $0.setup?["W"] ?? [], moves: $0.moves ?? [])
+        }
+        self.init(size: wire.size, stones: stones, status: wire.status ?? "locked", history: history)
     }
 
     public var points: Set<Point> { Set(stones.map(\.point)) }
+}
+
+/// The record the phone keeps, handed to the bridge so a game joined halfway keeps its
+/// order and its prisoners. Points are `[row, col]`, oriented like the rows.
+public struct PhoneHistory: Encodable, Equatable, Sendable {
+    public let setupBlack: [[Int]]
+    public let setupWhite: [[Int]]
+    public let moves: [PhoneMove]
+
+    public init(setupBlack: [[Int]], setupWhite: [[Int]], moves: [PhoneMove]) {
+        self.setupBlack = setupBlack
+        self.setupWhite = setupWhite
+        self.moves = moves
+    }
+}
+
+/// One move of the phone's record: no point for a pass; `erased`, the stones its referee
+/// removed without a capture before this move.
+public struct PhoneMove: Codable, Equatable, Sendable {
+    public let color: String
+    public let point: [Int]?
+    public let erased: [[Int]]?
+
+    public init(color: String, point: [Int]? = nil, erased: [[Int]]? = nil) {
+        self.color = color
+        self.point = point
+        self.erased = erased
+    }
 }
 
 /// The phone saying the game on the real board is over: `{"end":true,"result":"W+R"}`.

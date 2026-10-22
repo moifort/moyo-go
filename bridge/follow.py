@@ -95,3 +95,21 @@ def setup_properties(position: Position, size: int) -> Dict[str, List[str]]:
     white = len(properties.get("AW", []))
     properties["PL"] = ["B" if black <= white else "W"]
     return properties
+
+
+def history_properties(history: Dict, size: int) -> Dict[str, List[str]]:
+    """Root properties for the record the phone sent at connection: its setup, and
+    who moved first — the first move says, the count guesses when there is none.
+
+    The app hands it over as `setup_black`, `setup_white` and `moves`, points as
+    [row, col] in the board's display orientation.
+    """
+    position: Position = {}
+    for color, key in (("B", "setup_black"), ("W", "setup_white")):
+        for row, col in history.get(key) or []:
+            position[(row, col)] = color
+    properties = setup_properties(position, size)
+    moves = history.get("moves") or []
+    if moves:
+        properties["PL"] = [moves[0]["color"]]
+    return properties

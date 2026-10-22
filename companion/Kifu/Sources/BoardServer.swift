@@ -10,6 +10,8 @@ final class BoardServer: @unchecked Sendable {
     private var connections: [NWConnection] = []
     private let queue = DispatchQueue(label: "Kifu.server")
     private var lastLine: Data?
+    /// The same position with the record so far, for a Mac that connects mid-game.
+    private var newcomerLine: Data?
     /// Called on the server queue with the number of connected Macs.
     var onClientsChanged: ((Int) -> Void)?
 
@@ -35,14 +37,19 @@ final class BoardServer: @unchecked Sendable {
             connections.forEach { $0.cancel() }
             connections.removeAll()
             lastLine = nil
+            newcomerLine = nil
             onClientsChanged?(0)
         }
     }
 
     /// Sends the position to every Mac, unless it is the line they already have.
-    func publish(position: Position, status: Recorder.Status, toPlay: Stone) {
-        let data = BoardBroadcast.line(position: position, status: status, toPlay: toPlay, viewpoint: Self.viewpoint)
+    func publish(record: GameRecord, status: Recorder.Status) {
+        let viewpoint = Self.viewpoint
+        let data = BoardBroadcast.line(position: record.position, status: status, toPlay: record.toPlay, viewpoint: viewpoint)
+        let newcomer = BoardBroadcast.line(
+            position: record.position, status: status, toPlay: record.toPlay, viewpoint: viewpoint, history: record)
         queue.async { [self] in
+            newcomerLine = newcomer
             guard data != lastLine else { return }
             lastLine = data
             for c in connections where c.state == .ready {
@@ -57,8 +64,8 @@ final class BoardServer: @unchecked Sendable {
             guard let self, let connection else { return }
             switch state {
             case .ready:
-                // A newcomer gets the current board straight away.
-                if let line = self.lastLine { connection.send(content: line, completion: .contentProcessed { _ in }) }
+                // A newcomer gets the current board straight away, with the moves that led there.
+                if let line = self.newcomerLine ?? self.lastLine { connection.send(content: line, completion: .contentProcessed { _ in }) }
                 self.onClientsChanged?(self.readyCount)
             case .failed:
                 connection.cancel()

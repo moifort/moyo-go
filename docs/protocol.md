@@ -30,6 +30,24 @@ Envoyée à chaque changement de la position :
 | `follow` | booléen, facultatif    | Envoyé `true` par Kifu ; ignoré par Moyo, qui suit la partie dès que le joueur a choisi ce téléphone. |
 | `next`   | `B` / `W`, facultatif  | Le trait. Envoyé par Kifu, ignoré par Moyo pour l'instant (voir `TODO.md`). |
 
+### L'historique, à la connexion
+
+La première ligne qu'un Mac reçoit en se connectant porte en plus la partie telle que
+Kifu l'a enregistrée, pour qu'une partie rejointe en cours garde ses coups et ses
+prisonniers :
+
+```json
+{"history":{"moves":[{"color":"B","point":[3,15]},{"color":"W"},{"color":"B","point":[4,4],"erased":[[2,2]]}],"setup":{"B":[],"W":[]}},"next":"W","rows":["..."],"size":19,"status":"locked"}
+```
+
+| Champ              | Type                         | Sens |
+|--------------------|------------------------------|------|
+| `history.setup`    | `B`, `W` : listes de `[row, col]` | Les pierres de départ (handicap, partie commencée en cours sur le téléphone). |
+| `history.moves`    | liste d'objets               | Les coups dans l'ordre. `color` `B` ou `W` ; `point` `[row, col]`, absent pour une passe ; `erased`, facultatif, les pierres retirées sans capture que l'arbitre de Kifu a dû accepter avant ce coup. |
+
+Les points sont dans la même orientation que `rows`. Les lignes suivantes n'ont pas
+d'historique : seul un nouveau venu en a besoin.
+
 Une ligne qui ne se décode pas, ou dont `rows` n'a pas `size` rangées de `size`
 caractères, est ignorée.
 
@@ -59,10 +77,11 @@ avançant de un à six coups alternés (le téléphone envoie parfois le plateau
 retard), précédés au besoin d'une passe, en revenant à une position antérieure
 (un coup repris) ou en corrigeant une lecture jusqu'à trois coups en arrière ; chaque
 candidat est joué par le cœur de KaTrain et gardé seulement si le plateau obtenu est
-celui reçu, captures comprises. Une position qu'aucun coup n'explique est posée telle
+celui reçu, captures comprises. Une partie rejointe en cours rejoue l'historique
+envoyé à la connexion, puis atteint la position reçue de la même façon. Une position qu'aucun coup n'explique est posée telle
 quelle (`AE`, puis `AB`/`AW`) : Moyo montre le vrai plateau, signalé « Position non
-reconnue », et suit le coup suivant à partir de là. Une partie rejointe en cours place les pierres déjà
-posées comme position de départ.
+reconnue », et suit le coup suivant à partir de là. Sans historique, une partie rejointe en cours place les
+pierres déjà posées comme position de départ.
 
 ## Dans le code
 

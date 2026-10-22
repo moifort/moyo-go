@@ -209,6 +209,72 @@ def test_a_game_joined_halfway_starts_from_the_position_seen(stream):
     assert bridge.game.current_node.move.player == "W"
 
 
+def joined(stream, board, history):
+    bridge = BridgeSession(EventWriter(stream))
+    bridge._engine = FakeEngine()
+    bridge.follow_start(1, SIZE, 6.5, "japanese")
+    bridge.follow_board(2, board, history)
+    return bridge
+
+
+def test_a_game_joined_with_its_history_keeps_its_moves(stream):
+    # Black captures White's corner stone: the prisoner is counted on the Mac too.
+    history = {
+        "setup_black": [], "setup_white": [],
+        "moves": [
+            {"color": "B", "point": [0, 1]},
+            {"color": "W", "point": [0, 0]},
+            {"color": "B", "point": [1, 0]},
+            {"color": "W"},
+        ],
+    }
+    bridge = joined(stream, rows((0, 1, "B"), (1, 0, "B")), history)
+    node = bridge.game.current_node
+    assert node.depth == 4
+    assert node.is_pass
+    assert bridge.game.prisoner_count["W"] == 1
+    assert node.next_player == "B"
+    assert last_state(stream)["in_sync"] is True
+    bridge.follow_board(3, rows((0, 1, "B"), (1, 0, "B"), (4, 4, "B")))
+    assert bridge.game.current_node.depth == 5
+
+
+def test_the_history_starts_from_its_setup(stream):
+    history = {"setup_black": [[2, 2], [6, 6]], "setup_white": [], "moves": [{"color": "W", "point": [4, 4]}]}
+    bridge = joined(stream, rows((2, 2, "B"), (6, 6, "B"), (4, 4, "W")), history)
+    assert bridge.game.root.placements
+    assert bridge.game.current_node.depth == 1
+    assert bridge.game.current_node.move.player == "W"
+
+
+def test_erased_stones_are_cleared_before_their_move(stream):
+    history = {
+        "setup_black": [], "setup_white": [],
+        "moves": [{"color": "B", "point": [2, 2]}, {"color": "W", "point": [6, 6], "erased": [[2, 2]]}],
+    }
+    bridge = joined(stream, rows((6, 6, "W")), history)
+    assert board(bridge) == {(6, 6): "W"}
+    assert bridge.game.current_node.move.player == "W"
+    assert last_state(stream)["in_sync"] is True
+
+
+def test_a_history_that_misses_the_board_still_lands_on_it(stream):
+    history = {"setup_black": [], "setup_white": [], "moves": [{"color": "B", "point": [2, 2]}]}
+    bridge = joined(stream, rows((2, 2, "B"), (6, 6, "W")), history)
+    assert bridge.game.current_node.depth == 2
+    assert board(bridge) == {(2, 2): "B", (6, 6): "W"}
+
+
+def test_an_illegal_history_stops_where_the_rules_do(stream):
+    history = {
+        "setup_black": [], "setup_white": [],
+        "moves": [{"color": "B", "point": [2, 2]}, {"color": "W", "point": [2, 2]}],
+    }
+    bridge = joined(stream, rows((2, 2, "B")), history)
+    assert bridge.game.current_node.depth == 1
+    assert last_state(stream)["in_sync"] is True
+
+
 def test_the_end_opens_the_line_followed_as_a_record(session, stream):
     session.follow_board(3, rows((2, 2, "B")))
     session.follow_board(4, rows((2, 2, "B"), (6, 6, "W")))

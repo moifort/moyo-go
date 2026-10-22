@@ -395,7 +395,7 @@ public final class GameSession {
         if followedGameEnded || (state?.isFollowing == true && state?.size != board.size && state?.moveNumber == 0) {
             beginFollowedGame(size: board.size)
         }
-        bridge.send(.followBoard(id: nextID(), rows: board.rows))
+        bridge.send(.followBoard(id: nextID(), rows: board.rows, history: board.history))
     }
 
     /// The phone says the game is over: it opens as a record under review, and the

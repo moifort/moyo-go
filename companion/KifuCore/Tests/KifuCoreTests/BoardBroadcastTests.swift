@@ -51,6 +51,64 @@ final class BoardBroadcastTests: XCTestCase {
         XCTAssertEqual(String(left.reversed()), right)
     }
 
+    private struct HistoryWire: Decodable {
+        struct History: Decodable {
+            struct Move: Decodable { let color: String; let point: [Int]?; let erased: [[Int]]? }
+            let setup: [String: [[Int]]]
+            let moves: [Move]
+        }
+        let history: History?
+        let rows: [String]
+    }
+
+    func testANewcomerGetsTheMovesInTheBoardsOrientation() throws {
+        var record = GameRecord(start: Position(parsing: "...\n...\nX.."))
+        record.apply([Move(color: .white, point: Intersection(col: 2, row: 0)), Move(color: .black, point: nil)])
+        let data = BoardBroadcast.line(
+            position: record.position, status: .inSync, toPlay: record.toPlay, viewpoint: .leftPlayer, history: record)
+        let wire = try JSONDecoder().decode(HistoryWire.self, from: data.dropLast())
+        let history = try XCTUnwrap(wire.history)
+        // Every point lands where `rows` shows its stone.
+        XCTAssertEqual(history.setup["B"], [[2, 2]])
+        XCTAssertEqual(history.setup["W"], [])
+        XCTAssertEqual(wire.rows, ["O..", "...", "..X"])
+        XCTAssertEqual(history.moves.count, 2)
+        XCTAssertEqual(history.moves[0].color, "W")
+        let point = try XCTUnwrap(history.moves[0].point)
+        XCTAssertEqual(Array(wire.rows[point[0]])[point[1]], "O")
+        XCTAssertEqual(history.moves[1].color, "B")
+        XCTAssertNil(history.moves[1].point)
+        XCTAssertNil(history.moves[0].erased)
+    }
+
+    func testErasedStonesTravelWithTheirMove() throws {
+        var record = GameRecord(start: Position(parsing: "X..\n...\n..."))
+        record.force(to: Position(parsing: "...\n.O.\n..."))
+        let data = BoardBroadcast.line(
+            position: record.position, status: .inSync, toPlay: record.toPlay, viewpoint: .rightPlayer, history: record)
+        let history = try XCTUnwrap(JSONDecoder().decode(HistoryWire.self, from: data.dropLast()).history)
+        XCTAssertEqual(history.moves.first?.erased, [[0, 2]])
+    }
+
+    func testPointsTurnLikeTheBoard() {
+        let size = 5
+        for viewpoint in BoardBroadcast.Viewpoint.allCases {
+            for row in 0..<size {
+                for col in 0..<size {
+                    var p = Position(size: size)
+                    let point = Intersection(col: col, row: row)
+                    p[point] = .black
+                    XCTAssertEqual(viewpoint.orient(p)[viewpoint.orient(point, size: size)], .black)
+                }
+            }
+        }
+    }
+
+    func testOrdinaryLinesCarryNoHistory() throws {
+        let data = BoardBroadcast.line(position: Position(size: 9), status: .inSync, toPlay: .black, viewpoint: .leftPlayer)
+        XCTAssertNil(try JSONDecoder().decode(HistoryWire.self, from: data.dropLast()).history)
+    }
+
     func testStatusNames() {
         XCTAssertEqual(BoardBroadcast.statusName(.inSync), "locked")
         XCTAssertEqual(BoardBroadcast.statusName(.pending), "uncertain")

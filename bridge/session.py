@@ -1388,24 +1388,29 @@ class BridgeSession(KaTrainHost):
         self._writer.emit("thinking", None, value=False)
         self._emit_state(command_id)
 
-    def follow_board(self, command_id, rows):
+    def follow_board(self, command_id, rows, history=None):
         """The position on the real board changed: find the moves that lead there.
 
         Forward first — a move, a pass and a move, one move each — then back to an
         earlier position, a move taken back, then a correction a few moves back.
         Every candidate is played through the core and kept only if the board it
-        produces is the one seen, captures included.
+        produces is the one seen, captures included. `history`, the record the phone
+        sends with its first board, rebuilds a game joined halfway move by move.
         """
         self._require_following()
         size = self._size()
         target = follow.read_rows(rows, size)
         if self._follow_fresh:
             self._follow_fresh = False
-            if target:
+            self._follow_in_sync = True
+            if history and (history.get("moves") or target):
+                self._clear_tree()
+                self._replay(history, size)
+                self._follow_in_sync = self._reach_or_place(target)
+            elif target:
                 # A new game replaces the tree: nothing read on the empty board survives.
                 self._clear_tree()
                 self._join_halfway(target, size)
-            self._follow_in_sync = True
             self._emit_state(command_id)
             return
         if not self._analysing():
@@ -1452,6 +1457,29 @@ class BridgeSession(KaTrainHost):
             self._engine.terminate_queries()
         self._request_local(ask=self._follow_analysis)
         self._emit_state(command_id)
+
+    def _replay(self, history, size) -> None:
+        """Plays the phone's record: its setup, then its moves through the core.
+
+        Stones its referee removed without a capture are cleared before their move.
+        A move the rules refuse ends the replay; the board seen is reached from there.
+        """
+        properties = dict(self.game.root.properties)
+        self.game = Game(self, self._engine, game_properties={**properties, **follow.history_properties(history, size)})
+        for step in history.get("moves") or []:
+            erased = {tuple(point) for point in step.get("erased") or []}
+            if erased:
+                before = serialize.stone_map(self.game)
+                self._place(before, {point: color for point, color in before.items() if point not in erased})
+            point = step.get("point")
+            coords = None if point is None else to_engine_coords(point[0], point[1], size)
+            try:
+                node = self.game.play(Move(coords=coords, player=step["color"]), analyze=False)
+            except IllegalMoveException:
+                self._log_stderr(f"follow: the phone's record stops at move {self.game.current_node.depth}: {step}")
+                return
+            if self._follow_analysis:
+                node.analyze(self.game.engines[node.next_player])
 
     def _join_halfway(self, target, size) -> None:
         """The first position already has stones: place them as the game's setup."""

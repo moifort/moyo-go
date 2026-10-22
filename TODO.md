@@ -191,10 +191,13 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   together — because a score without its markers saves almost none of the work. A drawn zone, or walking KataGo's line from a live position,
   belongs to the analysis: a click on the board opens it, with KataGo on.
 
-- **A game joined halfway loses its order.** The stones already on the board are
-  placed as a setup, and who moves first is guessed from the count until the first
-  move settles it. Kifu knows the order when it recorded from the start; sending its
-  SGF at connection would recover it.
+- **A game joined halfway keeps its order only from Kifu's record.** Kifu now sends
+  its record (setup, moves, erasures) with the first line a Mac receives, and the
+  bridge replays it. Only a newcomer gets it: sending it with every line would let
+  the bridge resync from moves rather than boards, but brings back the earlier take
+  where KataGo re-read the whole game each time. Erasures replay as `AE`, which
+  ends KataGo's figures for the rest of the game (KaTrain limitation, below). A
+  phone that does not send a record still gets its stones placed as a setup.
 
 - **A board no moves explain is placed, not followed.** Before, the Mac stayed on
   the last position it understood and every later board drifted further out of

@@ -31,17 +31,47 @@ public enum BoardBroadcast {
             }
             return out
         }
+
+        /// Where `point` of the image lands on the board `orient` returns.
+        public func orient(_ point: Intersection, size: Int) -> Intersection {
+            let last = size - 1
+            switch self {
+            case .leftPlayer: return Intersection(col: point.row, row: last - point.col)
+            case .rightPlayer: return Intersection(col: last - point.row, row: point.col)
+            }
+        }
     }
 
-    public static func line(position: Position, status: Recorder.Status, toPlay: Stone, viewpoint: Viewpoint) -> Data {
+    /// `history`, for a Mac that just connected, adds the record so far: setup and moves,
+    /// turned like the rows, so a game joined halfway keeps its order and its prisoners.
+    public static func line(
+        position: Position, status: Recorder.Status, toPlay: Stone, viewpoint: Viewpoint, history: GameRecord? = nil
+    ) -> Data {
         let rows = viewpoint.orient(position).description.split(separator: "\n").map(String.init)
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "size": position.size, "rows": rows, "status": statusName(status),
             "follow": true, "next": toPlay == .white ? "W" : "B",
         ]
+        if let history {
+            payload["history"] = historyPayload(history, viewpoint: viewpoint)
+        }
         var data = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
         data.append(UInt8(ascii: "\n"))
         return data
+    }
+
+    static func historyPayload(_ record: GameRecord, viewpoint: Viewpoint) -> [String: Any] {
+        func wire(_ point: Intersection) -> [Int] {
+            let turned = viewpoint.orient(point, size: record.size)
+            return [turned.row, turned.col]
+        }
+        let moves: [[String: Any]] = record.moves.map { recorded in
+            var move: [String: Any] = ["color": recorded.move.color == .white ? "W" : "B"]
+            if let point = recorded.move.point { move["point"] = wire(point) }
+            if !recorded.erased.isEmpty { move["erased"] = recorded.erased.map(wire) }
+            return move
+        }
+        return ["setup": ["B": record.setupBlack.map(wire), "W": record.setupWhite.map(wire)], "moves": moves]
     }
 
     /// "locked" when the board matches the record, "uncertain" while the referee waits.

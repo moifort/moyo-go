@@ -431,7 +431,7 @@ final class GameSession {
         let status = recorder.status
         let count = recorder.record.moves.count
         let last = recorder.record.moves.last?.move
-        server.publish(position: accepted, status: status, toPlay: recorder.record.toPlay)
+        server.publish(record: recorder.record, status: status)
         Task { @MainActor in
             self.acceptedPosition = accepted
             self.candidatePosition = candidate

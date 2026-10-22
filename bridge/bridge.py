@@ -83,7 +83,7 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
     elif name == "follow_analysis":
         session.submit(session.follow_analysis, command_id, bool(command["on"]))
     elif name == "follow_board":
-        session.submit(session.follow_board, command_id, list(command["rows"]))
+        session.submit(session.follow_board, command_id, list(command["rows"]), command.get("history"))
     elif name == "follow_end":
         session.submit(session.follow_end, command_id, command.get("result"))
     elif name == "estimate":

@@ -23,6 +23,7 @@ public struct BridgeCommand: Encodable, Sendable {
     var whiteName: String?
     var zone: LocalZone?
     var rows: [String]?
+    var history: PhoneHistory?
     var result: String?
     var analysis: Bool?
     var on: Bool?
@@ -128,9 +129,10 @@ public struct BridgeCommand: Encodable, Sendable {
         BridgeCommand(id: id, cmd: "estimate", on: on)
     }
 
-    /// The position the phone sees, as it wrote it. The bridge finds the moves.
-    public static func followBoard(id: Int, rows: [String]) -> BridgeCommand {
-        BridgeCommand(id: id, cmd: "follow_board", rows: rows)
+    /// The position the phone sees, as it wrote it. The bridge finds the moves;
+    /// `history`, with the first board, gives them for a game joined halfway.
+    public static func followBoard(id: Int, rows: [String], history: PhoneHistory? = nil) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "follow_board", rows: rows, history: history)
     }
 
     /// The game on the real board is over: it opens as a record under review.
