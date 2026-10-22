@@ -22,7 +22,7 @@ Moyo : `docs/protocol.md` (à la racine du dépôt). Les commandes ci-dessous pa
 
     cd Kifu && xcodegen generate
     xcodebuild -project Kifu.xcodeproj -scheme Kifu -destination 'generic/platform=iOS' -allowProvisioningUpdates -quiet build
-    APP=$(find ~/Library/Developer/Xcode/DerivedData -path "*Kifu*/Build/Products/Debug-iphoneos/Kifu.app" | head -1)
+    APP=$(find ~/Library/Developer/Xcode/DerivedData -path "*Kifu*/Build/Products/Release-iphoneos/Kifu.app" | head -1)
     xcrun devicectl device install app --device <identifiant> "$APP"
     xcrun devicectl device process launch --device <identifiant> com.thibautmottet.Kifu
 
