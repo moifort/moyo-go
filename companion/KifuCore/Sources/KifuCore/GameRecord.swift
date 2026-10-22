@@ -66,10 +66,11 @@ public struct GameRecord: Sendable, Equatable {
     }
 
     /// Makes `seen` the accepted position: added stones become moves in alternation order
-    /// (same colour: by coordinates), removed stones are written as erasures on the next move.
+    /// (same colour: by coordinates), removed or recoloured stones are written as erasures on the next move.
     public mutating func force(to seen: Position) {
         let diff = position.diff(to: seen)
-        var erased = diff.filter { $0.value == .empty }.keys.sorted()
+        // A stone that changed colour is erased too: its new colour comes back as a move.
+        var erased = diff.keys.filter { position[$0] != .empty }.sorted()
         var added = diff.filter { $0.value != .empty }.map { ($0.key, $0.value) }.sorted { $0.0 < $1.0 }
         var color = toPlay
         var next = position

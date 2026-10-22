@@ -75,4 +75,16 @@ final class GameRecordTests: XCTestCase {
         XCTAssertTrue(r.moves[2].uncertain)
         XCTAssertEqual(r.toPlay, .black)
     }
+
+    func testForceErasesAStoneThatChangedColourBeforeItsMove() {
+        var r = GameRecord(start: Position(size: 9))
+        r.apply([Move(color: .black, point: at(4, 4))])
+        var seen = r.position
+        seen[at(4, 4)] = .white                 // the black stone now reads white
+        r.force(to: seen)
+        XCTAssertEqual(r.position, seen)
+        XCTAssertEqual(r.moves.last?.move, Move(color: .white, point: at(4, 4)))
+        // Without the erasure, the file plays a white stone on a black one.
+        XCTAssertEqual(r.moves.last?.erased, [at(4, 4)])
+    }
 }
