@@ -181,7 +181,8 @@ func runReplay(_ arguments: [String]) {
         guard let (image, _) = loadGray(c.image) else { continue }
         let t = Date()
         if reader == nil || c.corners != corners {
-            reader = SceneReader(calibration: Calibration(lines: 19, corners: c.corners.map { Point(x: $0[0], y: $0[1]) }), imageWidth: image.width, imageHeight: image.height)
+            // The app keeps the focal of the calibration when the grid is refitted.
+            reader = SceneReader(calibration: Calibration(lines: 19, corners: c.corners.map { Point(x: $0[0], y: $0[1]) }), imageWidth: image.width, imageHeight: image.height, focal: reader?.focal)
             corners = c.corners
         }
         let built = -t.timeIntervalSinceNow

@@ -368,6 +368,21 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   next row; it is read right on the fixtures, but rendering each stone's shadow from a
   light direction fitted on the frame would be the sound answer.
 
+- **The lens focal comes from the calibration's corners.** The 3D reader needs a focal to
+  give stones their height, and four corners fix it badly: on a board seen square from its
+  middle one vanishing point lies near infinity, and on the 22 October trial a refit 3 px off
+  took it from 3000 px to none at all, twelve far stones misread with it. The reader now keeps
+  the focal it found at calibration. The camera knows its own (`AVCaptureDevice` field of view,
+  or the intrinsics it can deliver with each frame), which would spare the guess entirely;
+  left for now because the calibration's value read every verified frame right, and the
+  intrinsics depend on the format and zoom chosen.
+
+- **The grid refit can slide a few pixels on a board that does not move.** Its score, the
+  darkness of the lines, prefers a grid 3 px off on a dense board, where stones cover most of
+  the lines; once there the climb stays there. With the lens kept the reader does not mind
+  3 px, so the refit is left as it is; judging a refit by how well the 3D reader explains the
+  frame with the known stones would be the next step if a slide ever matters again.
+
 - **The 3D reader renders again from scratch when the grid moves a pixel.** Rendering the
   board costs a cold reading, about a second on the Mac, so it is only redone when a corner
   moved a pixel or more since the last rendering; the tracker's smaller nudges are ignored.

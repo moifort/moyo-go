@@ -114,7 +114,10 @@ public final class SceneReader {
 
     /// Renders the board for frames of the given size, once per calibration: every frame then
     /// only samples its pixels.
-    public init?(calibration: Calibration, imageWidth: Int, imageHeight: Int, k1: Double = 0, settings: SceneSettings = SceneSettings()) {
+    ///
+    /// `focal`, in pixels of the full frame, is the one an earlier reader found at calibration
+    /// (`focal` of that reader): a grid refitted during the game must not change the lens.
+    public init?(calibration: Calibration, imageWidth: Int, imageHeight: Int, k1: Double = 0, focal: Double? = nil, settings: SceneSettings = SceneSettings()) {
         self.settings = settings
         lines = calibration.lines
         guard let fullGeometry = BoardGeometry(calibration: calibration) else { return nil }
@@ -125,11 +128,14 @@ public final class SceneReader {
         let corners = calibration.corners.map { Point(x: ($0.x + 0.5) / Double(f) - 0.5, y: ($0.y + 0.5) / Double(f) - 0.5) }
         guard let g = BoardGeometry(calibration: Calibration(lines: lines, corners: corners)) else { return nil }
         geometry = g
-        camera = g.camera(imageWidth: width, imageHeight: height)
+        camera = g.camera(imageWidth: width, imageHeight: height, focal: focal.map { $0 / Double(f) })
         build()
         state = [UInt8](repeating: 0, count: lines * lines)
         stamp = [Int32](repeating: 0, count: intensity.count)
     }
+
+    /// The lens focal in pixels of the full frame, nil when the corners gave no camera.
+    public var focal: Double? { camera.map { $0.focal * Double(scale) } }
 
     /// Samples `full`, a frame of the size the reader was built for.
     public func load(_ full: GrayImage) {

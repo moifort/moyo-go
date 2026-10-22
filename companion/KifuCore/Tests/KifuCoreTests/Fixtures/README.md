@@ -52,3 +52,12 @@ Recommended set: empty board, a few stones, a dense position, a hand over the bo
 - `rasante-blanche-au-bord-droit`: the frame of `rasante-blanches-au-fond-perdues` with the
   corners the tracker fitted on it. The white stone at (17,5) leans right, over the last line;
   with the disk of (18,5) held on the line, it read that stone's rim as a second white.
+
+`Suivi/` holds frames checked by their own test, not by `FixtureTests`: they need more than
+the corners to be read.
+
+- `Suivi/rasante-grille-glissee`: the 17:06 trial of 22 October 2026, move 92, a dense board.
+  The tracker had slid 3 px on the far corners although the board had not moved (`corners`);
+  `calibration` are the corners of the frames before. From the slid corners alone the camera
+  has no focal and twelve far stones misread; `SceneReaderLensTests` reads it with the lens
+  of the calibration.

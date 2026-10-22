@@ -195,6 +195,7 @@ final class GameSession {
         }
         engine.reader = reader
         engine.readerCalibration = calibration
+        engine.focal = (reader as? SceneReader)?.focal
         engine.calibration = calibration
         engine.tracker = GridTracker(calibration: calibration)
         let points = Self.gridPoints(of: geometry)
@@ -206,9 +207,10 @@ final class GameSession {
         }
     }
 
-    private nonisolated static func makeReader(_ calibration: Calibration, width: Int, height: Int) -> BoardReader? {
+    /// `focal` is the lens found at calibration; nil at calibration itself.
+    private nonisolated static func makeReader(_ calibration: Calibration, width: Int, height: Int, focal: Double? = nil) -> BoardReader? {
         if useSceneReader {
-            return SceneReader(calibration: calibration, imageWidth: width, imageHeight: height)
+            return SceneReader(calibration: calibration, imageWidth: width, imageHeight: height, focal: focal)
         }
         return BoardGeometry(calibration: calibration).map { IntersectionReader(geometry: $0) }
     }
@@ -228,7 +230,7 @@ final class GameSession {
             zip(last.corners, moved.corners).map { hypot($0.x - $1.x, $0.y - $1.y) }.max() ?? 0
         } ?? .infinity
         if !(engine.reader is SceneReader) || shift >= Self.sceneRebuildDistance,
-           let reader = Self.makeReader(moved, width: frame.gray.width, height: frame.gray.height) {
+           let reader = Self.makeReader(moved, width: frame.gray.width, height: frame.gray.height, focal: engine.focal) {
             engine.reader = reader
             engine.readerCalibration = moved
             engine.recorder?.follow(reader: reader)
@@ -353,6 +355,8 @@ final class GameSession {
         var reader: BoardReader?
         /// The calibration `reader` was made for, which the tracker may since have nudged.
         var readerCalibration: Calibration?
+        /// The lens focal the calibration's reader found, kept when the grid is refitted.
+        var focal: Double?
         var recorder: Recorder?
         var lastReadPosition = Position(size: GameSession.lines)
         var frozenGray: GrayImage?

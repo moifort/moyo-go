@@ -84,16 +84,25 @@ public struct BoardGeometry: Sendable {
         }
     }
 
-    public func camera(imageWidth: Int, imageHeight: Int) -> Camera? {
+    /// The camera that sees the board through `toImage`, for stones' height. `focal`, in pixels
+    /// of this image, is the one found at calibration: read from the corners alone it is
+    /// ill-conditioned, a board seen square from its middle leaving one vanishing point near
+    /// infinity. Three pixels on the far corners then take it from 3000 px to no camera at all.
+    public func camera(imageWidth: Int, imageHeight: Int, focal: Double? = nil) -> Camera? {
         let m = toImage.m
         let cx = Double(imageWidth) / 2, cy = Double(imageHeight) / 2
         let h1 = (m[0], m[3], m[6]), h2 = (m[1], m[4], m[7]), h3 = (m[2], m[5], m[8])
         // With K = diag(f, f, 1) about (cx, cy), r1 ⊥ r2 fixes f.
         let a1 = h1.0 - cx * h1.2, b1 = h1.1 - cy * h1.2
         let a2 = h2.0 - cx * h2.2, b2 = h2.1 - cy * h2.2
-        let f2 = -(a1 * a2 + b1 * b2) / (h1.2 * h2.2)
-        guard f2.isFinite, f2 > 0 else { return nil }
-        let f = f2.squareRoot()
+        let f: Double
+        if let focal {
+            f = focal
+        } else {
+            let f2 = -(a1 * a2 + b1 * b2) / (h1.2 * h2.2)
+            guard f2.isFinite, f2 > 0 else { return nil }
+            f = f2.squareRoot()
+        }
         let longest = Double(max(imageWidth, imageHeight))
         guard f > 0.3 * longest, f < 6 * longest else { return nil }
         var m1 = [a1 / f, b1 / f, h1.2], m2 = [a2 / f, b2 / f, h2.2]

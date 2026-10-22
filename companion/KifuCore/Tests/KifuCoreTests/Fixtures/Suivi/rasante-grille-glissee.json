@@ -1,0 +1,61 @@
+{
+  "note": "22 October 2026, 17:21, move 92 of the 17:06 trial: White has just captured at (15,18). corners are where the tracker had slid on this frame, 3 px off on the far corners although the board had not moved; calibration are the corners of the frames before, whose reader found the lens. From corners alone the camera comes out with no focal and the far rows misread.",
+  "lines": 19,
+  "corners": [
+    [
+      772,
+      1717
+    ],
+    [
+      2255.3333333333335,
+      1716.5
+    ],
+    [
+      2979.5,
+      2961.3333333333335
+    ],
+    [
+      53,
+      2959.8333333333335
+    ]
+  ],
+  "calibration": [
+    [
+      769.5,
+      1714
+    ],
+    [
+      2256.3333333333335,
+      1715.5
+    ],
+    [
+      2977,
+      2961.3333333333335
+    ],
+    [
+      52.5,
+      2959.3333333333335
+    ]
+  ],
+  "expected": [
+    ".............O.X...",
+    "..XXXX.O....O.OX.X.",
+    "..XOOXXOO.O..OXXX.X",
+    ".O.O.OOXXXO..OOOOXO",
+    ".XO....X.O.O.X..OOO",
+    "X.XXXOO.XXOO.X..X..",
+    ".X.X.X.OOXXOX.X.X..",
+    ".XX.XOO..XOOXXOOOX.",
+    ".OOOOXO.OX....XO.O.",
+    "O.O.OX...X.X..XO...",
+    ".OX.OXX.X..O.XXO...",
+    "XXXOOOX.X.O..XO.XO.",
+    ".OX.XOOOXO....OOOOX",
+    ".OXX.XOXX..XX.O.OX.",
+    ".OXXXXXOX.X.XXOOX.X",
+    "..OXXOOOXX.XOXOXXX.",
+    "..OXOO.XO.XOOOOOX..",
+    ".O.OX.OX.X....O.OX.",
+    "..O.O..........O..."
+  ]
+}
