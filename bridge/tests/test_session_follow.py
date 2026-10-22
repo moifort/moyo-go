@@ -138,15 +138,55 @@ def test_a_misread_stone_is_corrected(session):
     assert board(session) == {(2, 2): "B", (6, 7): "W"}
 
 
-def test_a_position_out_of_reach_is_not_followed(session, stream):
+def test_several_moves_seen_at_once_are_all_played(session, stream):
+    session.follow_board(3, rows((2, 2, "B")))
+    # Three moves went by before the phone sent the board: White, Black, White.
+    session.follow_board(4, rows((2, 2, "B"), (6, 6, "W"), (4, 4, "B"), (0, 8, "W")))
+    node = session.game.current_node
+    assert node.depth == 4
+    assert [n.move.player for n in node.nodes_from_root[1:]] == ["B", "W", "B", "W"]
+    assert last_state(stream)["in_sync"] is True
+
+
+def test_a_position_out_of_reach_is_shown_as_placed_stones(session, stream):
     session.follow_board(3, rows((2, 2, "B")))
     session.follow_board(4, rows((2, 2, "B"), (3, 3, "B"), (4, 4, "B")))
-    assert session.game.current_node.depth == 1
+    # No moves explain it: the stones are placed, so the Mac shows the real board.
+    assert board(session) == {(2, 2): "B", (3, 3): "B", (4, 4): "B"}
+    assert session.game.current_node.move is None
     assert last_state(stream)["in_sync"] is False
-    # Once the board is right again, the game picks up where it was.
-    session.follow_board(5, rows((2, 2, "B"), (6, 6, "W")))
-    assert session.game.current_node.depth == 2
+    # The next move seen is followed from there.
+    session.follow_board(5, rows((2, 2, "B"), (3, 3, "B"), (4, 4, "B"), (6, 6, "W")))
+    assert session.game.current_node.move.player == "W"
     assert last_state(stream)["in_sync"] is True
+
+
+def test_a_misread_board_is_left_when_the_game_comes_back(session, stream):
+    session.follow_board(3, rows((2, 2, "B")))
+    session.follow_board(4, rows((2, 2, "B"), (3, 3, "B"), (4, 4, "B")))
+    session.follow_board(5, rows((2, 2, "B"), (6, 6, "W")))
+    node = session.game.current_node
+    assert node.depth == 2
+    assert node.move.player == "W"
+    assert last_state(stream)["in_sync"] is True
+
+
+def test_placed_stones_can_lift_and_turn_stones(session, stream):
+    for n, stones in enumerate(
+        [
+            [(2, 2, "B")],
+            [(2, 2, "B"), (6, 6, "W")],
+            [(2, 2, "B"), (6, 6, "W"), (4, 4, "B")],
+            [(2, 2, "B"), (6, 6, "W"), (4, 4, "B"), (0, 0, "W")],
+            [(2, 2, "B"), (6, 6, "W"), (4, 4, "B"), (0, 0, "W"), (8, 8, "B")],
+        ]
+    ):
+        session.follow_board(3 + n, rows(*stones))
+    # The first stone is gone, the second changed colour, two black stones appeared.
+    seen = [(6, 6, "B"), (4, 4, "B"), (0, 0, "W"), (8, 8, "B"), (1, 1, "B"), (7, 7, "B")]
+    session.follow_board(10, rows(*seen))
+    assert board(session) == {(r, c): color for r, c, color in seen}
+    assert last_state(stream)["in_sync"] is False
 
 
 def test_an_illegal_board_leaves_no_trace_in_the_tree(session):
@@ -189,6 +229,15 @@ def test_candidates_list_the_likely_sequences():
     assert follow.candidates({}, {(0, 0): "W"}, "B") == [[None, ("W", (0, 0))]]
     assert follow.candidates({}, {(0, 0): "W", (1, 1): "B"}, "B") == [[("B", (1, 1)), ("W", (0, 0))]]
     assert follow.candidates({}, {(0, 0): "B", (1, 1): "B"}, "B") == []
+    three = follow.candidates({}, {(0, 0): "B", (1, 1): "W", (2, 2): "B"}, "B")
+    assert three == [
+        [("B", (0, 0)), ("W", (1, 1)), ("B", (2, 2))],
+        [("B", (2, 2)), ("W", (1, 1)), ("B", (0, 0))],
+    ]
+    assert follow.candidates({}, {(0, 0): "W", (1, 1): "W", (2, 2): "B"}, "B") == [
+        [None, ("W", (0, 0)), ("B", (2, 2)), ("W", (1, 1))],
+        [None, ("W", (1, 1)), ("B", (2, 2)), ("W", (0, 0))],
+    ]
 
 
 def test_rows_of_the_wrong_size_are_refused():

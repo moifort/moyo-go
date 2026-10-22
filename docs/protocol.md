@@ -55,10 +55,13 @@ d'accueil : le téléphone est posé sur un troisième côté de la table.
 
 Le téléphone n'envoie que des positions ; retrouver les coups est l'affaire du pont
 (`bridge/follow.py`, `Session.follow_board`). Chaque position reçue est atteinte en
-avançant d'un coup, d'une passe puis un coup, en revenant à une position antérieure
+avançant de un à six coups alternés (le téléphone envoie parfois le plateau en
+retard), précédés au besoin d'une passe, en revenant à une position antérieure
 (un coup repris) ou en corrigeant une lecture jusqu'à trois coups en arrière ; chaque
 candidat est joué par le cœur de KaTrain et gardé seulement si le plateau obtenu est
-celui reçu, captures comprises. Une partie rejointe en cours place les pierres déjà
+celui reçu, captures comprises. Une position qu'aucun coup n'explique est posée telle
+quelle (`AE`, puis `AB`/`AW`) : Moyo montre le vrai plateau, signalé « Position non
+reconnue », et suit le coup suivant à partir de là. Une partie rejointe en cours place les pierres déjà
 posées comme position de départ.
 
 ## Dans le code

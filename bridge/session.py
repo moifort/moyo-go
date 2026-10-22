@@ -1409,7 +1409,7 @@ class BridgeSession(KaTrainHost):
             self._emit_state(command_id)
             return
         if not self._analysing():
-            self._follow_in_sync = self._reach(target)
+            self._follow_in_sync = self._reach_or_place(target)
             self._request_local(ask=self._follow_analysis)
             self._emit_state(command_id)
             return
@@ -1418,7 +1418,7 @@ class BridgeSession(KaTrainHost):
         cursor = self.game.current_node
         self.game.set_current_node(self._live)
         try:
-            self._follow_in_sync = self._reach(target)
+            self._follow_in_sync = self._reach_or_place(target)
         finally:
             self._live = self.game.current_node
             self.game.set_current_node(cursor)
@@ -1458,6 +1458,53 @@ class BridgeSession(KaTrainHost):
         properties = dict(self.game.root.properties)
         self.game = Game(self, self._engine, game_properties={**properties, **follow.setup_properties(target, size)})
 
+    def _reach_or_place(self, target) -> bool:
+        """Follows the board seen, placing its stones when no moves explain it.
+
+        A board left behind would leave the Mac showing an old position for the rest
+        of the game, every later board further out of reach. Placed stones show the
+        real board, and the next move is followed from there. False when they were
+        placed: the moves in between are lost.
+        """
+        if self._reach(target):
+            return True
+        before = serialize.stone_map(self.game)
+        self._log_stderr(
+            f"follow: board out of reach at move {self.game.current_node.depth}, stones placed: "
+            f"added {sorted((p, c) for p, c in target.items() if before.get(p) != c)}, "
+            f"removed {sorted(p for p in before if p not in target)}"
+        )
+        self._place(before, target)
+        return False
+
+    def _place(self, before, target) -> None:
+        """Turns the board into `target` with setup nodes: AE first, then AB and AW.
+
+        The core places stones before it clears any, so a stone that changed colour
+        is cleared in a node of its own before the new one is placed.
+        """
+        size = self._size()
+
+        def sgf(points, color="B"):
+            return [Move(coords=to_engine_coords(r, c, size), player=color).sgf((size, size)) for r, c in sorted(points)]
+
+        node = self.game.current_node
+        cleared = [point for point, color in before.items() if target.get(point) != color]
+        if cleared:
+            node = type(node)(parent=node, properties={"AE": sgf(cleared)})
+        placed = {}
+        for color, key in (("B", "AB"), ("W", "AW")):
+            points = [point for point, stone in target.items() if stone == color and before.get(point) != color]
+            if points:
+                placed[key] = sgf(points, color)
+        if placed:
+            node = type(node)(parent=node, properties=placed)
+        self.game.set_current_node(node)
+        if self._follow_analysis:
+            # KaTrain does not send cleared points to KataGo: past an AE the game is
+            # followed without figures (see TODO.md).
+            node.analyze(self.game.engines[node.next_player])
+
     def _reach(self, target) -> bool:
         start = self.game.current_node
         if serialize.stone_map(self.game) == target or self._play_towards(target):
@@ -1480,7 +1527,8 @@ class BridgeSession(KaTrainHost):
         size = self._size()
         saved_pl = start.get_property("PL", None)
         # Only a setup leaves the turn open; an empty board is Black's to start.
-        turn_unknown = start.is_root and not start.children and bool(start.placements)
+        setup = bool(start.placements or start.clear_placements) and start.move is None
+        turn_unknown = setup and not start.children
         before = serialize.stone_map(self.game)
         for sequence in follow.candidates(before, target, start.next_player, turn_unknown):
             played, created = [], []

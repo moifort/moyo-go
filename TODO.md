@@ -196,6 +196,17 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   move settles it. Kifu knows the order when it recorded from the start; sending its
   SGF at connection would recover it.
 
+- **A board no moves explain is placed, not followed.** Before, the Mac stayed on
+  the last position it understood and every later board drifted further out of
+  reach: at move 106 of a real game three moves (B, W, B) arrived in one board and
+  the lower left never showed up again. Up to six alternating moves are now tried,
+  then the stones are placed. Two limits are left: KaTrain does not send `AE` to
+  KataGo, so a placed board that lifts a stone ends the figures for the rest of the
+  game; and mid-game `AB`/`AW` reach KataGo as initial stones, wrong if one sits
+  where an earlier stone was captured. Sending Kifu's moves rather than its board
+  would remove both; why Kifu sent three moves at once is not known yet (no trace
+  of the lines received was kept — the bridge now logs the boards it places).
+
 ## Design
 
 - **The score curve does not animate.** The old bars grew with `.animation`; the

@@ -7,6 +7,7 @@ read, the candidate sequences listed, the setup of a game joined halfway written
 down. The session plays them.
 """
 
+from itertools import permutations
 from typing import Dict, List, Optional, Tuple
 
 from pysgf import Move
@@ -16,6 +17,11 @@ from protocol import CommandError, to_engine_coords
 #: How many moves back a correction may reach: the phone misread a stone, then saw
 #: it right. Beyond that, a position that is neither ahead nor behind is not followed.
 CORRECTION_DEPTH = 3
+
+#: How many moves one board may add: the phone sends the board late when its reading
+#: hesitated over a few moves. Every order of each colour's stones is tried, so this
+#: stays small — six moves are 36 orders at most.
+MAX_MOVES = 6
 
 Position = Dict[Tuple[int, int], str]
 
@@ -41,23 +47,34 @@ def candidates(
 
     Each sequence lists (colour, point), None standing for a pass. Stones that
     disappeared are not listed: they are captures, and only playing the moves can
-    say whether they are. A stone of the wrong colour is the other player's move
-    after a pass the phone could not see — unless nobody knows yet whose turn it
-    is, at the start of a game joined halfway; two new stones are two moves, one each.
+    say whether they are. New stones alternate colours, one move each, up to
+    MAX_MOVES of them when the phone sent the board late; the order within a colour
+    is unknown, so every order is listed. A first stone of the wrong colour is the
+    other player's move after a pass the phone could not see — unless nobody knows
+    yet whose turn it is, at the start of a game joined halfway.
     """
-    added = [(color, point) for point, color in after.items() if before.get(point) != color]
-    if len(added) == 1:
-        color, point = added[0]
-        if color == to_play:
-            return [[(color, point)]]
-        if turn_unknown:
-            return [[(color, point)], [None, (color, point)]]
-        return [[None, (color, point)]]
-    if len(added) == 2 and added[0][0] != added[1][0]:
-        first = next(stone for stone in added if stone[0] == to_play)
-        second = next(stone for stone in added if stone[0] != to_play)
-        return [[first, second]]
-    return []
+    added = sorted((point, color) for point, color in after.items() if before.get(point) != color)
+    if not added or len(added) > MAX_MOVES:
+        return []
+    by_color = {color: [point for point, stone in added if stone == color] for color in ("B", "W")}
+    if abs(len(by_color["B"]) - len(by_color["W"])) > 1:
+        return []
+    if len(by_color["B"]) == len(by_color["W"]):
+        first = to_play
+    else:
+        first = "B" if len(by_color["B"]) > len(by_color["W"]) else "W"
+    second = "W" if first == "B" else "B"
+    sequences = []
+    for firsts in permutations(by_color[first]):
+        for seconds in permutations(by_color[second]):
+            sequence = []
+            for n in range(len(added)):
+                sequence.append((first, firsts[n // 2]) if n % 2 == 0 else (second, seconds[n // 2]))
+            sequences.append(sequence)
+    if first == to_play:
+        return sequences
+    passed = [[None, *sequence] for sequence in sequences]
+    return [*sequences, *passed] if turn_unknown else passed
 
 
 def setup_properties(position: Position, size: int) -> Dict[str, List[str]]:
