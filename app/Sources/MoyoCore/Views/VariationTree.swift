@@ -47,18 +47,35 @@ struct VariationTree: View {
             .scrollBounceBehavior(.basedOnSize)
             .frame(height: min(contentSize.height, Self.maxHeight))
             .onAppear { reveal(currentID, with: proxy, animated: false) }
-            .onChange(of: currentID) { _, id in reveal(id, with: proxy, animated: true) }
+            .onChange(of: revealKey) { _, key in reveal(key.id, with: proxy, animated: true) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Arbre des variantes")
     }
 
+    /// What moves the position on screen out of view: another node, or a tree that
+    /// grew or narrowed around it — a move of KataGo's line opens a column.
+    private struct RevealKey: Equatable {
+        let id: Int?
+        let rows: Int
+        let columns: Int
+    }
+
+    private var revealKey: RevealKey {
+        RevealKey(id: currentID, rows: layout.rows, columns: layout.columns)
+    }
+
+    /// Scrolls on the next turn of the main loop. A node played just now arrives
+    /// with the tree that holds it: asked at once, the scroll would look for a
+    /// stone not laid out yet, and silently stay where it was.
     private func reveal(_ id: Int?, with proxy: ScrollViewProxy, animated: Bool) {
         guard let id else { return }
-        if animated {
-            withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
-        } else {
-            proxy.scrollTo(id, anchor: .center)
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
+            } else {
+                proxy.scrollTo(id, anchor: .center)
+            }
         }
     }
 
