@@ -68,6 +68,14 @@ public enum ScoreCurve {
         return CGFloat(move) / CGFloat(span) * width
     }
 
+    /// The move under a point of the chart, the inverse of `x`: the nearest one,
+    /// kept within the game, so a click past its last move lands on that move.
+    public static func move(atX x: CGFloat, span: Int, width: CGFloat, last: Int) -> Int {
+        guard width > 0, last > 0 else { return 0 }
+        let move = Int((x / width * CGFloat(span)).rounded())
+        return min(max(0, move), last)
+    }
+
     /// The midline is halfway down; a lead rises above it, a deficit sinks below.
     ///
     /// The peak stops `inset` short of the edge: drawn right on it, half the stroke

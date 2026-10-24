@@ -6,24 +6,34 @@ import SwiftUI
 /// is white, below it they are behind and it turns red. The midline is drawn, so
 /// an even game reads as a flat line on it rather than as an empty chart. Under
 /// review the part of the game not yet reached is dimmed, and a hairline marks
-/// the position on screen — the way lichess marks the move being looked at.
+/// the position on screen — the way lichess marks the move being looked at. There,
+/// as on lichess, a click on the chart goes to that move, and a drag scrubs
+/// through the game: a collapse seen on the curve is one click from the board.
 public struct ScoreChart: View {
     public let scores: [Int: Double]
     public let moveNumber: Int
     /// Moves in the record under review, nil while a game is being played.
     public let moveCount: Int?
     public let height: CGFloat
+    /// Goes to a move of the record. Nil makes the chart a picture only.
+    public let onSelect: ((Int) -> Void)?
+
+    /// The last move asked for during a drag, so a drag sends one request per
+    /// move crossed rather than one per pointer event.
+    @State private var dragged: Int?
 
     public init(
         scores: [Int: Double],
         moveNumber: Int,
         moveCount: Int? = nil,
-        height: CGFloat = 56
+        height: CGFloat = 56,
+        onSelect: ((Int) -> Void)? = nil
     ) {
         self.scores = scores
         self.moveNumber = moveNumber
         self.moveCount = moveCount
         self.height = height
+        self.onSelect = onSelect
     }
 
     private var lineWidth: CGFloat { height < 30 ? 1 : 1.5 }
@@ -119,7 +129,32 @@ public struct ScoreChart: View {
             }
         }
         .frame(height: height)
+        .overlay {
+            if let onSelect, let moveCount {
+                GeometryReader { proxy in
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { drag in
+                                    let move = ScoreCurve.move(
+                                        atX: drag.location.x,
+                                        span: ScoreCurve.span(moveNumber: moveNumber, moveCount: moveCount),
+                                        width: proxy.size.width,
+                                        last: moveCount
+                                    )
+                                    guard move != dragged else { return }
+                                    dragged = move
+                                    onSelect(move)
+                                }
+                                .onEnded { _ in dragged = nil }
+                        )
+                        .pointerStyle(.link)
+                }
+            }
+        }
         .accessibilityLabel("Graphe de l'avantage au score")
+        .accessibilityHint(onSelect != nil && moveCount != nil ? "Cliquer pour aller au coup" : "")
     }
 
     private var stroke: StrokeStyle {

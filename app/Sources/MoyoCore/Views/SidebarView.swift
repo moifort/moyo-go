@@ -328,7 +328,8 @@ struct ReviewPanel: View {
                 moveNumber: state.moveNumber,
                 moveCount: state.moveCount,
                 lead: session.currentLead,
-                caption: { leadCaption($0, perspective: state.humanColor) }
+                caption: { leadCaption($0, perspective: state.humanColor) },
+                onSelect: { session.goto(moveNumber: $0) }
             )
             if let progress = session.analysisProgress {
                 gauge(done: progress.done, total: progress.total)

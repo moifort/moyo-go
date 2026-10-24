@@ -12,19 +12,23 @@ public struct ScoreSection: View {
     public let lead: Double?
     /// Who is ahead, in words: "Vous menez", "Blanc mène".
     public let caption: (Double) -> String
+    /// Goes to the move clicked on the chart, under review.
+    public let onSelect: ((Int) -> Void)?
 
     public init(
         scores: [Int: Double],
         moveNumber: Int,
         moveCount: Int? = nil,
         lead: Double?,
-        caption: @escaping (Double) -> String
+        caption: @escaping (Double) -> String,
+        onSelect: ((Int) -> Void)? = nil
     ) {
         self.scores = scores
         self.moveNumber = moveNumber
         self.moveCount = moveCount
         self.lead = lead
         self.caption = caption
+        self.onSelect = onSelect
     }
 
     public var body: some View {
@@ -43,7 +47,7 @@ public struct ScoreSection: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            ScoreChart(scores: scores, moveNumber: moveNumber, moveCount: moveCount)
+            ScoreChart(scores: scores, moveNumber: moveNumber, moveCount: moveCount, onSelect: onSelect)
         }
     }
 

@@ -31,6 +31,22 @@ struct ScoreCurveTests {
         #expect(points.map(\.move) == [0, 1])
     }
 
+    @Test("Un clic sur le graphe vise le coup le plus proche")
+    func clickPicksTheNearestMove() {
+        // 120 coups sur 240 points : deux points par coup.
+        #expect(ScoreCurve.move(atX: 0, span: 120, width: 240, last: 120) == 0)
+        #expect(ScoreCurve.move(atX: 101, span: 120, width: 240, last: 120) == 51)
+        #expect(ScoreCurve.move(atX: 240, span: 120, width: 240, last: 120) == 120)
+    }
+
+    @Test("Un clic hors de la partie s'arrête à ses bords")
+    func clickIsClampedToTheGame() {
+        #expect(ScoreCurve.move(atX: -30, span: 120, width: 240, last: 120) == 0)
+        #expect(ScoreCurve.move(atX: 300, span: 120, width: 240, last: 120) == 120)
+        // Partie courte : la largeur couvre 60 coups, mais il n'y en a que 20.
+        #expect(ScoreCurve.move(atX: 200, span: 60, width: 240, last: 20) == 20)
+    }
+
     @Test("Le début de partie ne s'étire pas sur toute la largeur")
     func earlyGameKeepsAMinimumSpan() {
         #expect(ScoreCurve.span(moveNumber: 4, moveCount: nil) == ScoreCurve.minimumSpan)
