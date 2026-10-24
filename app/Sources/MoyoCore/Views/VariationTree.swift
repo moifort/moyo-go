@@ -30,25 +30,33 @@ struct VariationTree: View {
         )
     }
 
+    /// Where the tree is scrolled to, set by hand: the sidebar scrolls too, and a
+    /// `ScrollViewReader` inside it never moved this one.
+    @State private var position = ScrollPosition()
+    /// The visible part of the tree, once laid out.
+    @State private var viewport: CGSize = .zero
+
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView([.vertical, .horizontal]) {
-                ZStack(alignment: .topLeading) {
-                    Canvas { context, _ in drawEdges(in: &context) }
-                    moveNumbers
-                    ForEach(layout.placed) { placed in
-                        node(placed)
-                            .id(placed.id)
-                            .position(center(row: placed.row, column: placed.column))
-                    }
+        ScrollView([.vertical, .horizontal]) {
+            ZStack(alignment: .topLeading) {
+                Canvas { context, _ in drawEdges(in: &context) }
+                moveNumbers
+                ForEach(layout.placed) { placed in
+                    node(placed)
+                        .position(center(row: placed.row, column: placed.column))
                 }
-                .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(contentSize.height, Self.maxHeight))
-            .onAppear { reveal(currentID, with: proxy, animated: false) }
-            .onChange(of: revealKey) { _, key in reveal(key.id, with: proxy, animated: true) }
+            .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
         }
+        .scrollPosition($position)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: min(contentSize.height, Self.maxHeight))
+        .onScrollGeometryChange(for: CGSize.self) { $0.containerSize } action: { _, size in
+            let first = viewport == .zero
+            viewport = size
+            if first { reveal(animated: false) }
+        }
+        .onChange(of: revealKey) { reveal(animated: true) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Arbre des variantes")
     }
@@ -65,17 +73,19 @@ struct VariationTree: View {
         RevealKey(id: currentID, rows: layout.rows, columns: layout.columns)
     }
 
-    /// Scrolls on the next turn of the main loop. A node played just now arrives
-    /// with the tree that holds it: asked at once, the scroll would look for a
-    /// stone not laid out yet, and silently stay where it was.
-    private func reveal(_ id: Int?, with proxy: ScrollViewProxy, animated: Bool) {
-        guard let id else { return }
-        DispatchQueue.main.async {
-            if animated {
-                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
-            } else {
-                proxy.scrollTo(id, anchor: .center)
-            }
+    /// Puts the position on screen in the middle of the tree's area, as far as the
+    /// edges of the tree allow.
+    private func reveal(animated: Bool) {
+        guard let id = currentID, let slot = layout.slot(of: id), viewport != .zero else { return }
+        let target = center(row: slot.row, column: slot.column)
+        let point = CGPoint(
+            x: min(max(target.x - viewport.width / 2, 0), max(contentSize.width - viewport.width, 0)),
+            y: min(max(target.y - viewport.height / 2, 0), max(contentSize.height - viewport.height, 0))
+        )
+        if animated {
+            withAnimation(.easeOut(duration: 0.15)) { position.scrollTo(point: point) }
+        } else {
+            position.scrollTo(point: point)
         }
     }
 
