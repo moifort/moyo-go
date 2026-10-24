@@ -78,8 +78,6 @@ class BridgeSession(KaTrainHost):
         #: The numbers the app knows nodes by, both ways. Never reused.
         self._node_numbers: Dict[int, int] = {}
         self._numbered: Dict[int, Any] = {}
-        #: For each node, the child last walked through: → goes back the same way.
-        self._last_child: Dict[int, Any] = {}
         #: The shape of the tree as the app last received it.
         self._emitted_tree: Optional[tuple] = None
         # -- review state, all empty outside a review
@@ -1065,7 +1063,6 @@ class BridgeSession(KaTrainHost):
         self._analysis_nodes = {}
         self._node_numbers = {}
         self._numbered = {}
-        self._last_child = {}
         self._emitted_tree = None
 
     def _analysing(self) -> bool:
@@ -1198,7 +1195,6 @@ class BridgeSession(KaTrainHost):
         self._live = self.game.current_node
         self._view = "analysis"
         self._emitted_best = None
-        self._remember_path(self._live)
         self._boost_window()
         self._request_local(ask=True)
 
@@ -1232,15 +1228,10 @@ class BridgeSession(KaTrainHost):
             self._writer.emit("thinking", None, value=True)
             self._maybe_play_ai_move()
 
-    def _remember_path(self, node) -> None:
-        for step in node.nodes_from_root[1:]:
-            self._last_child[id(step.parent)] = step
-
     def _show(self, node, command_id) -> None:
         """Puts a node on screen, with what a position on screen is owed."""
         self._local_wanted = False
         self.game.set_current_node(node)
-        self._remember_path(node)
         self._emitted_best = None
         self._boost_window()
         self._request_local(ask=True)
@@ -1273,8 +1264,10 @@ class BridgeSession(KaTrainHost):
             target = node.parent or node
         elif to == "forward":
             target = self._next_child(node) or node
-        elif to in ("previous_sibling", "next_sibling"):
-            target = self._sibling(node, -1 if to == "previous_sibling" else 1) or node
+        elif to == "next_sibling":
+            target = self._first_branch(node) or self._sibling(node, 1) or node
+        elif to == "previous_sibling":
+            target = self._sibling(node, -1) or node
         elif to == "start":
             target = self.game.root
         elif to == "end":
@@ -1293,18 +1286,29 @@ class BridgeSession(KaTrainHost):
         return [child for child in node.ordered_children if id(child) in shown]
 
     def _next_child(self, node):
-        """The child last walked through; failing that the game's own, then the first."""
+        """The move that carries on down the line on screen, never into a branch.
+
+        The game's own move where there is one, otherwise the first child: the one
+        the tree draws in the same column. A branch is entered with ↓ alone.
+        """
         children = self._visible_children(node)
         if not children:
             return None
-        remembered = self._last_child.get(id(node))
-        if any(child is remembered for child in children):
-            return remembered
         line = self._main_line()
         for child in children:
             if any(child is other for other in line):
                 return child
         return children[0]
+
+    def _first_branch(self, node):
+        """The first branch starting after this move, for ↓; None at no fork.
+
+        Takes precedence over the next sibling: arriving on a fork, ↓ goes down the
+        branch it opens, and from there on to the next one.
+        """
+        following = self._next_child(node)
+        branches = [child for child in self._visible_children(node) if child is not following]
+        return branches[0] if branches else None
 
     def _sibling(self, node, step):
         if node.parent is None:

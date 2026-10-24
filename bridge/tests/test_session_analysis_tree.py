@@ -207,26 +207,44 @@ def test_a_click_in_the_tree_from_the_live_view_enters_analysis(playing):
     assert playing.game.current_node is playing.game.root
 
 
-def test_back_and_forward_follow_the_branch_last_walked(reviewing):
+def test_forward_stays_on_the_line_and_never_enters_a_branch(reviewing):
     reviewing.goto(2, 2)
     fork = reviewing.game.current_node
     reviewing.play(3, 0, 0)
-    branch = reviewing.game.current_node
     reviewing.navigate(4, "back")
     assert reviewing.game.current_node is fork
     reviewing.navigate(5, "forward")
-    assert reviewing.game.current_node is branch
+    assert reviewing.game.current_node is reviewing._line[3]
 
 
-def test_forward_prefers_the_game_on_a_fresh_fork(reviewing):
+def test_forward_inside_a_branch_carries_on_down_it(reviewing):
+    reviewing.goto(2, 2)
+    reviewing.play(3, 0, 0)
+    branch = reviewing.game.current_node
+    reviewing.play(4, 0, 8)
+    deep = reviewing.game.current_node
+    reviewing.goto_node(5, reviewing._number(branch))
+    reviewing.navigate(6, "forward")
+    assert reviewing.game.current_node is deep
+
+
+def test_down_enters_the_branches_of_a_fork_one_after_the_other(reviewing):
     reviewing.goto(2, 2)
     fork = reviewing.game.current_node
     reviewing.play(3, 0, 0)
-    reviewing._last_child.clear()
-    reviewing.goto_node(4, reviewing._number(fork))
-    reviewing._last_child.pop(id(fork), None)
-    reviewing.navigate(5, "forward")
+    first = reviewing.game.current_node
+    reviewing.goto(4, 2)
+    reviewing.play(5, 8, 8)
+    second = reviewing.game.current_node
+    reviewing.goto(6, 2)
+    reviewing.navigate(7, "next_sibling")
+    assert reviewing.game.current_node is first
+    reviewing.navigate(8, "next_sibling")
+    assert reviewing.game.current_node is second
+    reviewing.navigate(9, "previous_sibling")
+    reviewing.navigate(10, "previous_sibling")
     assert reviewing.game.current_node is reviewing._line[3]
+    assert reviewing.game.current_node.parent is fork
 
 
 def test_siblings_and_the_way_back_to_the_game(reviewing):
@@ -245,7 +263,7 @@ def test_siblings_and_the_way_back_to_the_game(reviewing):
     reviewing.navigate(9, "game")
     assert reviewing.game.current_node is fork
     reviewing.navigate(10, "end")
-    assert reviewing.game.current_node is deep
+    assert reviewing.game.current_node is reviewing._line[-1]
 
 
 def test_start_and_nowhere_to_go(reviewing):

@@ -561,7 +561,12 @@ public final class GameSession {
     }
 
     public var hasPreviousSibling: Bool { siblings.first.map { $0.id != state?.nodeId } ?? false }
-    public var hasNextSibling: Bool { siblings.last.map { $0.id != state?.nodeId } ?? false }
+    /// ↓ has somewhere to go: a branch starting after the move on screen, which it
+    /// enters first, or the next variation beside it.
+    public var hasNextSibling: Bool {
+        if let id = state?.nodeId, tree.filter({ $0.parent == id }).count > 1 { return true }
+        return siblings.last.map { $0.id != state?.nodeId } ?? false
+    }
 
     /// Opens a record, replacing whatever the window was showing.
     ///

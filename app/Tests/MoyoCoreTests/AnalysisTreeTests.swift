@@ -119,6 +119,9 @@ struct AnalysisTreeTests {
         #expect(session.hasPreviousSibling)
         #expect(!session.hasNextSibling)
         #expect(session.canStepForward)
+        // A fork: ↓ goes down the branch it opens.
+        session.handle(.state(id: nil, try state(#""status":"review","view":"analysis","node_id":2,"move_count":3"#)))
+        #expect(session.hasNextSibling)
     }
 
     @Test("Le sélecteur n'existe que s'il y a une partie à retrouver, et pas pendant le décompte")

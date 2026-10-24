@@ -75,11 +75,11 @@ dans l'état courant est grisé, jamais caché, pour que le menu garde sa forme.
 | Analyse | `⌘2` | Sélecteur sur Analyse |
 | — | | |
 | Coup précédent | `←` | Le parent du nœud affiché, dans une branche comme dans la partie |
-| Coup suivant | `→` | L'enfant par lequel on est passé en dernier, à défaut le premier |
+| Coup suivant | `→` | La suite de la ligne affichée (le coup de la partie, à défaut le premier enfant) ; n'entre jamais dans une branche |
 | Variante précédente | `↑` | Variante sœur précédente au même coup |
-| Variante suivante | `↓` | Variante sœur suivante au même coup |
+| Variante suivante | `↓` | Sur un embranchement, la première branche qui en part ; sinon la variante sœur suivante au même coup |
 | Début de la partie | `⌘←` | La racine |
-| Fin de la variante | `⌘→` | Fin de la branche affichée (fin de la partie sur la ligne de la partie) |
+| Fin de la variante | `⌘→` | Fin de la ligne affichée en suivant `→` (fin de la partie sur la ligne de la partie) |
 | Revenir à la partie | `⌘↑` | Le coup de la ligne de la partie d'où part la branche affichée |
 | — | | |
 | Supprimer la variante | `⌘⌫` | Supprime le nœud affiché et sa descendance ; grisé hors nœud d'analyse |
