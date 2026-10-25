@@ -52,6 +52,12 @@ public struct GameCommands: Commands {
             .keyboardShortcut("e", modifiers: .command)
             .disabled(session?.canEstimate != true && session?.isEstimating != true)
 
+            Button(session?.isShowingWeaknesses == true ? "Masquer les faiblesses" : "Montrer les faiblesses") {
+                session?.toggleWeaknesses()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(session?.canShowWeaknesses != true)
+
             Divider()
 
             Button("Abandonner") { session?.resign() }

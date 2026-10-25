@@ -88,6 +88,8 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         session.submit(session.follow_end, command_id, command.get("result"))
     elif name == "estimate":
         session.submit(session.set_estimate, command_id, bool(command["on"]))
+    elif name == "weaknesses":
+        session.submit(session.set_weaknesses, command_id, bool(command["on"]))
     elif name == "state":
         session.submit(session.state, command_id)
     else:

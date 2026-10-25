@@ -29,6 +29,7 @@ import record
 import review
 import scoring
 import serialize
+import weakness
 from host import KaTrainHost
 from protocol import CommandError, to_display_coords, to_engine_coords
 
@@ -108,6 +109,12 @@ class BridgeSession(KaTrainHost):
         #: KataGo line: {"node", "depth", "wanted", "done"}. `done` once KataGo
         #: has nothing left to play in the zone.
         self._local_extension: Optional[Dict[str, Any]] = None
+        #: The player asked to see the weak points of the groups. It stays on, from
+        #: one position to the next, until they turn it off.
+        self._weaknessing = False
+        #: KataGo's answers for the weak points, by node id: the node itself, and
+        #: each colour's answer once back — `False` when the query failed.
+        self._weakness: Dict[int, Dict[str, Any]] = {}
         self._game_info: Dict[str, Any] = {}
         #: Every node the record came with, branches included, and the command that
         #: opened it. Once all of them are analysed the record goes back to the app
@@ -563,6 +570,7 @@ class BridgeSession(KaTrainHost):
         self._drawn_zone = None
         self._local_wanted = False
         self._local_extension = None
+        self._weakness = {}
         self._game_info = {}
         self._recorded = []
         self._record_command = None
@@ -1004,6 +1012,7 @@ class BridgeSession(KaTrainHost):
         followed and left aside, or one that is over — and `move_number` is the
         position on screen counted from the root, branch or not.
         """
+        self._request_weaknesses()
         line = self._main_line()
         if self._status == "review":
             result, info = self._game_info.get("result"), self._game_info
@@ -1031,10 +1040,97 @@ class BridgeSession(KaTrainHost):
                     "local_pending": self._local_pending(),
                     "local_wanted": self._local_wanted
                     or bool(self._local_extension and self._local_extension["wanted"]),
+                    "weaknessing": self._weaknessing,
+                    "weaknesses": self._weaknesses(),
+                    "weaknesses_pending": self._weaknesses_pending(),
                 },
                 extra=self._view_fields(),
                 **self._estimate_fields(),
             ),
+        )
+
+    # -- weak points ---------------------------------------------------------
+
+    def set_weaknesses(self, command_id, on):
+        """Shows or hides the weak points of the groups, in analysis only."""
+        self._require_review()
+        self._weaknessing = bool(on)
+        self._emit_state(command_id)
+
+    def _weakness_entry(self):
+        """The answers for the position on screen; None inside a walked sequence.
+
+        A sequence being walked shows another board than the anchor's, and asking
+        KataGo twice more at each of its steps would slow the walk for points the
+        player is not looking for there.
+        """
+        if not self._weaknessing or self._variation:
+            return None
+        node = self.game.current_node
+        entry = self._weakness.get(id(node))
+        return entry if entry is not None and entry["node"] is node else None
+
+    def _request_weaknesses(self) -> None:
+        """Asks both colours about the position on screen, once per position.
+
+        Called as the analysis state goes out, so every way of landing on a
+        position — a key, a click in the tree, a move played — is covered.
+        """
+        if not self._weaknessing or self._variation or self._engine is None:
+            return
+        node = self.game.current_node
+        if self._weakness_entry() is not None:
+            return
+        near = weakness.area(serialize.stone_map(self.game), self._size())
+        if not near:
+            # An empty board, or one with no room left: nothing to ask.
+            self._weakness[id(node)] = {"node": node, "B": False, "W": False}
+            return
+        self._weakness[id(node)] = {"node": node, "B": None, "W": None}
+        for player in (node.next_player, "W" if node.next_player == "B" else "B"):
+            self._send_weakness_query(node, player, near)
+
+    def _send_weakness_query(self, node, player, near) -> None:
+        """The only call that reaches KataGo for the weak points; tests replace it."""
+        weakness.request(
+            self._engine,
+            node,
+            player,
+            near,
+            self._size(),
+            on_result=lambda analysis: self.submit(self._on_weakness_analysis, node, player, analysis),
+            on_error=lambda analysis: self.submit(self._on_weakness_failure, node, player, analysis),
+            # Behind the local reading: the board shows that one first.
+            priority=PRIORITY_DEFAULT + 1,
+        )
+
+    def _on_weakness_analysis(self, node, player, analysis) -> None:
+        entry = self._weakness.get(id(node))
+        if entry is None or entry["node"] is not node:
+            return  # another record has been opened since
+        entry[player] = analysis
+        if self._analysing() and self._weakness_entry() is entry:
+            self._emit_state()
+
+    def _on_weakness_failure(self, node, player, analysis) -> None:
+        self._log_stderr(f"weakness analysis failed: {analysis}")
+        self._on_weakness_analysis(node, player, False)
+
+    def _weaknesses_pending(self) -> bool:
+        entry = self._weakness_entry()
+        return bool(entry and (entry["B"] is None or entry["W"] is None))
+
+    def _weaknesses(self) -> Optional[List[Dict[str, Any]]]:
+        """Both colours' weak points, once both answers are back: one alone would
+        read as the other colour having none."""
+        entry = self._weakness_entry()
+        if entry is None or entry["B"] is None or entry["W"] is None:
+            return None
+        if not entry["B"] or not entry["W"]:
+            return []  # a failed query: each colour is measured against the other
+        stones = serialize.stone_map(self.game)
+        return weakness.points(entry["B"], entry["W"], stones, self._size(), "B") + weakness.points(
+            entry["W"], entry["B"], stones, self._size(), "W"
         )
 
     def _require_review(self) -> None:

@@ -174,6 +174,7 @@ public struct BoardView: View {
                 drawTerritory(in: &context, geometry: geometry, points: estimate.points)
             }
             drawLastMove(in: &context, geometry: geometry)
+            drawWeaknesses(in: &context, geometry: geometry)
         }
         if showsLocal, let nearby = state.localMove, nearby.point != state.bestMove?.point {
             drawProposal(in: &context, geometry: geometry, at: nearby.point, color: Theme.localMove)
@@ -255,6 +256,35 @@ public struct BoardView: View {
             with: .color(Theme.gridLine.opacity(0.4)),
             lineWidth: max(0.6, radius * 0.06)
         )
+    }
+
+    /// The weak points: a small disc in the colour of the stone that would hit there,
+    /// half black, half white on a vital point both colours share.
+    ///
+    /// Round, where the territory is square, so the two never read alike; under the
+    /// markers, since KataGo's own proposal stays the first thing to read.
+    private func drawWeaknesses(in context: inout GraphicsContext, geometry: BoardGeometry) {
+        // Half a stone across: big enough never to pass for a star point.
+        let radius = geometry.stoneRadius * 0.5
+        for mark in state.weakMarks {
+            let center = geometry.position(of: mark.point)
+            let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+            let disc = Path(ellipseIn: rect)
+            if mark.colors.count == 2 {
+                var left = Path()
+                left.move(to: center)
+                left.addArc(center: center, radius: radius, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
+                left.closeSubpath()
+                context.fill(disc, with: .color(Theme.stone(.white)))
+                context.fill(left, with: .color(Theme.stone(.black)))
+            } else if let color = mark.colors.first {
+                context.fill(disc, with: .color(Theme.stone(color)))
+            }
+            // White on light wood needs a dark edge; black, a light one, which also
+            // sets it apart from the star points.
+            let edge = mark.colors == [.black] ? Theme.stone(.white).opacity(0.85) : Theme.gridLine.opacity(0.6)
+            context.stroke(disc, with: .color(edge), lineWidth: max(0.8, radius * 0.16))
+        }
     }
 
     /// Territory as small squares on the empty points, in the colour that owns them.

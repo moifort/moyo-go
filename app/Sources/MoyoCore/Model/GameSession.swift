@@ -762,6 +762,18 @@ public final class GameSession {
         bridge.send(.estimate(id: nextID(), on: !isEstimating))
     }
 
+    /// Whether the weak points are on: the bridge's word, not ours.
+    public var isShowingWeaknesses: Bool { state?.weaknessing == true }
+
+    /// The weak points are a question asked in analysis, never during a game.
+    public var canShowWeaknesses: Bool { phase == .running && isAnalysing }
+
+    /// Shows the weak points, or hides them. They stay on from one position to the next.
+    public func toggleWeaknesses() {
+        guard canShowWeaknesses else { return }
+        bridge.send(.weaknesses(id: nextID(), on: !isShowingWeaknesses))
+    }
+
     /// True when the player may act: a game is running and it is their turn.
     ///
     /// `isHumanTurn` is false in analysis, where `canPlace` takes over.

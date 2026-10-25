@@ -129,6 +129,11 @@ public struct BridgeCommand: Encodable, Sendable {
         BridgeCommand(id: id, cmd: "estimate", on: on)
     }
 
+    /// Shows or hides the weak points of the groups, in analysis only.
+    public static func weaknesses(id: Int, on: Bool) -> BridgeCommand {
+        BridgeCommand(id: id, cmd: "weaknesses", on: on)
+    }
+
     /// The position the phone sees, as it wrote it. The bridge finds the moves;
     /// `history`, with the first board, gives them for a game joined halfway.
     public static func followBoard(id: Int, rows: [String], history: PhoneHistory? = nil) -> BridgeCommand {

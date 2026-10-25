@@ -105,6 +105,27 @@ public struct BestMove: Codable, Sendable, Hashable {
     public var point: Point { Point(row: row, col: col) }
 }
 
+/// A point where a stone would hit a weakness of the other colour's stones.
+///
+/// `color` is who would play there; `swing` how many stones of the other colour
+/// KataGo sees change hands beyond what a move elsewhere does. Picked by the
+/// bridge, never derived here.
+public struct WeakPoint: Codable, Sendable, Hashable {
+    public let row: Int
+    public let col: Int
+    public let color: PlayerColor
+    public let swing: Double
+
+    public init(row: Int, col: Int, color: PlayerColor, swing: Double) {
+        self.row = row
+        self.col = col
+        self.color = color
+        self.swing = swing
+    }
+
+    public var point: Point { Point(row: row, col: col) }
+}
+
 /// The best move inside the zone of the fight, read by KataGo kept in that zone.
 ///
 /// `pointsLost` is what playing it costs against the best move on the whole board.
@@ -354,6 +375,12 @@ public struct GameState: Codable, Sendable {
     public let localPending: Bool?
     /// ⌥→ was pressed before the reading came back; the first move is on its way.
     public let localWanted: Bool?
+    /// The player asked for the weak points. Absent from an older bridge.
+    public let weaknessing: Bool?
+    /// Both colours' weak points; nil while off, or until both answers are back.
+    public let weaknesses: [WeakPoint]?
+    /// KataGo is still looking for the weak points of the position on screen.
+    public let weaknessesPending: Bool?
 
     // -- the analysis tree; absent from an older bridge
 
@@ -374,6 +401,20 @@ public struct GameState: Codable, Sendable {
     public var isFollowing: Bool { status == .following }
 
     public var isReadingLocally: Bool { localPending == true }
+
+    /// The weak points by intersection, each with who would hit there: both
+    /// colours on the vital point they share, black first.
+    public var weakMarks: [(point: Point, colors: [PlayerColor])] {
+        var byPoint: [Point: Set<PlayerColor>] = [:]
+        var order: [Point] = []
+        for weak in weaknesses ?? [] {
+            if byPoint[weak.point] == nil { order.append(weak.point) }
+            byPoint[weak.point, default: []].insert(weak.color)
+        }
+        return order.map { point in
+            (point, [PlayerColor.black, .white].filter { byPoint[point]!.contains($0) })
+        }
+    }
 
     /// A record with no game behind it: no live view to go back to.
     public var isReviewing: Bool { status == .review }

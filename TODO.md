@@ -74,6 +74,26 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   `build-app.sh` produces. To check by hand on that build before release: open a
   record, wait for the gauge to finish, reopen it, and see no gauge.
 
+- **Weak points stay out of the game against the AI.** Showing where a group can
+  be hit while playing would whisper the move; the points are a tool for learning
+  in review and analysis, which is where they are asked for.
+
+- **A weak point is not named.** "Cut", "vital point", "eye" would need shape rules
+  written by hand, against the bridge owning every rule, and KataGo does not say.
+  The point is measured, not explained.
+
+- **The group a weak point hits is not shown.** A halo on the target group when the
+  pointer rests on the point would tie the two together. Second to the point itself;
+  wait and see whether the link is missed in use.
+
+- **A click on a weak point plays the colour to move, not the point's colour.** A
+  pass slipped in silently would surprise in the tree; ⌘P already does it in the open.
+
+- **Weak points are tuned on four positions.** The 0.3-stone threshold and the two
+  lines around the stones come from a calm opening, a lone stone under attack, a cut
+  and an invasion. Real games will tell whether the threshold lets noise through or
+  hides lighter weaknesses; the numbers live in `bridge/weakness.py`.
+
 - **SGF comments.** `C[]` is kept as KaTrain's node note and written back on save,
   but never shown. A review that showed the commentary would be worth more than one
   that only shows the engine.

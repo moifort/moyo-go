@@ -591,6 +591,7 @@ struct ReviewPanel: View {
             stepHint
             navigation
             EstimateButton(session: session)
+            WeaknessButton(session: session)
             PhoneButton(session: session)
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
