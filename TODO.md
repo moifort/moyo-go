@@ -49,6 +49,10 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   opens the game in analysis, as asked, so the territory table of the count is
   seen only while the dead stones are being agreed on. The result stays in the
   sidebar and the window's subtitle.
+  Asking for the analysis while counting settles the count as it stands, so
+  there is no way back to "Reprendre la partie" from there: keeping the count
+  open behind the analysis would mean a third state between scoring and
+  finished, for a case — resuming after looking at the analysis — no one asked for.
 
 - **A stored analysis is trusted as it is.** A record written back with its analysis
   is read again without asking KataGo anything, even if the engine now runs deeper
