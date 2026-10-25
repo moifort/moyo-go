@@ -124,7 +124,7 @@ struct AnalysisTreeTests {
         #expect(session.hasNextSibling)
     }
 
-    @Test("Le sélecteur n'existe que s'il y a une partie à retrouver, et pas pendant le décompte")
+    @Test("Le sélecteur n'existe que s'il y a une partie à retrouver, décompte compris")
     func toggle() throws {
         let session = session()
         session.handle(.state(id: nil, try state(#""status":"review","view":"analysis""#)))
@@ -133,7 +133,7 @@ struct AnalysisTreeTests {
         #expect(session.canSwitchView)
         #expect(session.canPlace)
         session.handle(.state(id: nil, try state(#""status":"scoring","view":"live""#)))
-        #expect(!session.canSwitchView)
+        #expect(session.canSwitchView)
     }
 
     @Test("Dans une variante, le score est celui de la position, pas celui de la courbe")

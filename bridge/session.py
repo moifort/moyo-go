@@ -1203,7 +1203,10 @@ class BridgeSession(KaTrainHost):
         self._require_game()
         if view == "analysis":
             if self._status == "scoring":
-                raise CommandError("not_now", "le décompte doit d'abord être tranché")
+                # Asking for the analysis while counting settles the count as it
+                # stands: the game is over, and its analysis opens on the result.
+                self.accept_score(command_id)
+                return
             if not self._analysing():
                 self._enter_analysis()
                 if self._ai_pending:

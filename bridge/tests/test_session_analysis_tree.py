@@ -142,11 +142,15 @@ def test_the_ai_waits_while_the_player_analyses(playing):
     assert events(playing, "thinking")[-1]["value"] is True
 
 
-def test_no_analysis_while_counting(playing):
-    playing._status = "scoring"
-    with pytest.raises(CommandError) as exc:
-        playing.set_view(2, "analysis")
-    assert exc.value.code == "not_now"
+def test_asking_for_the_analysis_while_counting_settles_the_count(playing):
+    playing.play_pass(2)
+    playing.game.play(__import__("pysgf").Move(coords=None, player="W"))
+    playing._enter_scoring()
+    playing.set_view(3, "analysis")
+    state = last_state(playing)
+    assert state["status"] == "finished"
+    assert state["view"] == "analysis"
+    assert state["result"]
 
 
 def test_a_counted_game_opens_in_analysis(playing):

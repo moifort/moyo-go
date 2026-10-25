@@ -504,8 +504,9 @@ public final class GameSession {
     /// The toggle at the top of the window has something to switch to.
     public var hasLiveGame: Bool { state?.hasLiveGame ?? false }
 
-    /// The toggle can be moved: not while the dead stones are being agreed on.
-    public var canSwitchView: Bool { phase == .running && hasLiveGame && state?.status != .scoring }
+    /// The toggle can be moved. While counting, asking for the analysis settles the
+    /// count as it stands, and the game is over.
+    public var canSwitchView: Bool { phase == .running && hasLiveGame }
 
     /// Switches between the game itself and its analysis.
     public func setView(_ view: GameView) {
