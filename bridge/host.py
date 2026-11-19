@@ -73,6 +73,17 @@ class NullControls:
         pass
 
 
+def _command_id(args) -> Optional[int]:
+    """The id of the command a task runs for, if it runs for one.
+
+    Every command method takes its command id first, so an error can be attributed
+    to the command that caused it. Tasks the core queues on its own — an analysis
+    coming back — start with a node instead, and belong to no command.
+    """
+    first = args[0] if args else None
+    return first if isinstance(first, int) and not isinstance(first, bool) else None
+
+
 class KaTrainHost(KaTrainBase):
     """The process side of a KaTrain session: worker thread, engine, diagnostics.
 
@@ -140,11 +151,9 @@ class KaTrainHost(KaTrainBase):
         try:
             fn(*args)
         except CommandError as exc:
-            # Every command method takes its command id first, so the error can
-            # be attributed to the command that caused it.
-            self._writer.emit("error", args[0] if args else None, code=exc.code, message=exc.message)
+            self._writer.emit("error", _command_id(args), code=exc.code, message=exc.message)
         except Exception as exc:  # keep the bridge alive; the app sees the error
-            self._writer.emit("error", None, code="internal", message=f"{type(exc).__name__}: {exc}")
+            self._writer.emit("error", _command_id(args), code="internal", message=f"{type(exc).__name__}: {exc}")
             self._log_stderr(f"worker error: {type(exc).__name__}: {exc}")
 
     def stop(self) -> None:

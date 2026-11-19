@@ -273,11 +273,17 @@ class BridgeSession(KaTrainHost):
             self._writer.emit("error", None, code="unknown_ai", message=f"AI strategy {strategy} not found")
             self._emit_state()
             return
-        generate_ai_move(self.game, strategy, settings)
-        self._writer.emit("thinking", None, value=False)
-        if self._two_passes_played():
-            self._enter_scoring()
-        self._emit_state()
+        # Whatever KataGo does with the move, the thinking ends and the board says
+        # where things stand: a failure here would otherwise leave the player
+        # waiting on an indicator nothing will ever turn off. The error itself goes
+        # on to `run_task`, which reports it.
+        try:
+            generate_ai_move(self.game, strategy, settings)
+            if self._two_passes_played():
+                self._enter_scoring()
+        finally:
+            self._writer.emit("thinking", None, value=False)
+            self._emit_state()
 
     # -- commands ------------------------------------------------------------
 

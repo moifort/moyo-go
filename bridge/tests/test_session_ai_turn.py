@@ -74,3 +74,41 @@ def test_the_ai_plays_on_when_the_count_is_called_off_after_its_own_pass(session
     session.resume_game(3)
     assert len(ai_moves) == 1
     assert session.game.current_node.next_player == "B"
+
+
+def _events(bridge):
+    import json
+
+    return [json.loads(line) for line in bridge._writer._stream.getvalue().splitlines()]
+
+
+def test_a_failing_ai_move_still_ends_the_thinking_and_says_which_command(session, monkeypatch):
+    # KataGo choking on the AI's move must not leave "KataGo réfléchit…" on screen
+    # forever, and the error has to name the move that set it off.
+    def broken_ai_move(game, strategy, settings):
+        raise KeyError("policy")
+
+    monkeypatch.setattr(session_module, "generate_ai_move", broken_ai_move)
+    session._writer._stream.truncate(0)
+    session._writer._stream.seek(0)
+    session.run_task(session.play, 7, 4, 4)
+    events = _events(session)
+    thinking = [event["value"] for event in events if event["event"] == "thinking"]
+    assert thinking[-1] is False
+    errors = [event for event in events if event["event"] == "error"]
+    assert errors and errors[-1]["id"] == 7
+    assert errors[-1]["code"] == "internal"
+    # The state after the failure, so the board shows where things stand.
+    last_thinking = max(i for i, event in enumerate(events) if event["event"] == "thinking")
+    assert any(event["event"] == "state" for event in events[last_thinking:])
+
+
+def test_an_error_in_a_task_the_core_queued_belongs_to_no_command(session):
+    def callback(node, analysis):
+        raise ValueError("bad analysis")
+
+    session._writer._stream.truncate(0)
+    session._writer._stream.seek(0)
+    session.run_task(callback, session.game.current_node, {})
+    errors = [event for event in _events(session) if event["event"] == "error"]
+    assert errors[-1]["id"] is None
