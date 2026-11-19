@@ -526,7 +526,17 @@ public final class GameSession {
         return state.status == .playing
     }
 
+    /// The player asked to give up, from the sidebar or the menu: the window asks
+    /// whether they mean it before anything is sent.
+    public var isConfirmingResignation = false
+
+    public func requestResignation() {
+        guard state?.status == .playing else { return }
+        isConfirmingResignation = true
+    }
+
     public func resign() {
+        isConfirmingResignation = false
         guard state != nil, state?.status == .playing else { return }
         bridge.send(.resign(id: nextID()))
     }

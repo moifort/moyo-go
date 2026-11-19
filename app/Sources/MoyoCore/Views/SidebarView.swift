@@ -2,7 +2,6 @@ import SwiftUI
 
 public struct SidebarView: View {
     @Bindable public var session: GameSession
-    @State private var isConfirmingResignation = false
     @State private var isConfiguringAI = false
 
     public init(session: GameSession) {
@@ -267,7 +266,7 @@ public struct SidebarView: View {
             // Available even while the AI is thinking — you give up when you decide
             // to, not when it is your turn. Confirmed because it ends the game.
             Button(role: .destructive) {
-                isConfirmingResignation = true
+                session.requestResignation()
             } label: {
                 Label("Abandonner", systemImage: "flag")
                     .frame(maxWidth: .infinity)
@@ -276,14 +275,6 @@ public struct SidebarView: View {
         }
         .buttonStyle(.glass)
         .controlSize(.large)
-        .confirmationDialog(
-            "Abandonner la partie ?",
-            isPresented: $isConfirmingResignation,
-            titleVisibility: .visible
-        ) {
-            Button("Abandonner", role: .destructive) { session.resign() }
-            Button("Continuer", role: .cancel) {}
-        }
     }
 }
 

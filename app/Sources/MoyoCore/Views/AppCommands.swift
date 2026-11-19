@@ -60,7 +60,7 @@ public struct GameCommands: Commands {
 
             Divider()
 
-            Button("Abandonner") { session?.resign() }
+            Button("Abandonner…") { session?.requestResignation() }
                 .disabled(session?.state?.status != .playing)
 
             Divider()

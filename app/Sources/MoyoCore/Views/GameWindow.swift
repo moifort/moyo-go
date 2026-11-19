@@ -34,6 +34,16 @@ public struct GameWindow: View {
             NewGameSheet(session: session)
         }
         .focusedSceneValue(\.gameSession, session)
+        // Here rather than in the sidebar, so the menu's "Abandonner…" asks the same
+        // question even with the sidebar collapsed.
+        .confirmationDialog(
+            "Abandonner la partie ?",
+            isPresented: $session.isConfirmingResignation,
+            titleVisibility: .visible
+        ) {
+            Button("Abandonner", role: .destructive) { session.resign() }
+            Button("Continuer", role: .cancel) {}
+        }
         .onReceive(NotificationCenter.default.publisher(for: .moyoNewGameRequested)) { _ in
             isShowingNewGame = true
         }
