@@ -65,12 +65,12 @@ public struct GameCommands: Commands {
 
             Divider()
 
-            // Available only while counting; the sidebar keeps a single action there,
-            // so these two live in the menu.
-            Button("Reprendre la partie") { session?.resumeGame() }
+            // Available only while counting, as in the sidebar.
+            Button("Accepter le score") { session?.acceptScore() }
+                .keyboardShortcut(.return, modifiers: .command)
                 .disabled(session?.state?.status != .scoring)
 
-            Button("Accepter le score") { session?.acceptScore() }
+            Button("Reprendre la partie") { session?.resumeGame() }
                 .disabled(session?.state?.status != .scoring)
         }
     }

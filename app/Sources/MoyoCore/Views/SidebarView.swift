@@ -33,9 +33,13 @@ public struct SidebarView: View {
             } else if let state = session.state, state.isFollowing {
                 followingPanel(state)
             } else if let state = session.state, let scoring = state.scoring {
-                ScoringPanel(detail: scoring, humanColor: state.humanColor) {
-                    NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)
-                }
+                ScoringPanel(
+                    detail: scoring,
+                    humanColor: state.humanColor,
+                    onAccept: { session.acceptScore() },
+                    onResume: { session.resumeGame() },
+                    onNewGame: { NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil) }
+                )
             } else if let state = session.state {
                 statusRow(state)
                 divider

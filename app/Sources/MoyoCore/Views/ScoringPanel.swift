@@ -10,11 +10,21 @@ public struct ScoringPanel: View {
     public let detail: ScoringDetail
     /// The colour the person played, so the columns say "vous" and "KataGo".
     public let humanColor: PlayerColor?
+    public let onAccept: () -> Void
+    public let onResume: () -> Void
     public let onNewGame: () -> Void
 
-    public init(detail: ScoringDetail, humanColor: PlayerColor? = nil, onNewGame: @escaping () -> Void) {
+    public init(
+        detail: ScoringDetail,
+        humanColor: PlayerColor? = nil,
+        onAccept: @escaping () -> Void = {},
+        onResume: @escaping () -> Void = {},
+        onNewGame: @escaping () -> Void
+    ) {
         self.detail = detail
         self.humanColor = humanColor
+        self.onAccept = onAccept
+        self.onResume = onResume
         self.onNewGame = onNewGame
     }
 
@@ -24,11 +34,32 @@ public struct ScoringPanel: View {
             PlayerTable(rows: rows, humanColor: humanColor)
             outcome
             Spacer(minLength: 0)
-            Button("Nouvelle partie", action: onNewGame)
-                .buttonStyle(.glassProminent)
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
+            actions
         }
+    }
+
+    /// Settling the count is what the player came here to do: accepting it comes
+    /// first, taking the game back up beside it. A new game is only the way out,
+    /// and it no longer looks like the answer the panel expects.
+    private var actions: some View {
+        VStack(spacing: 7) {
+            Button(action: onAccept) {
+                Text("Accepter le score").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .help("Accepter le score (⌘↩)")
+            HStack(spacing: 7) {
+                Button(action: onResume) {
+                    Text("Reprendre").frame(maxWidth: .infinity)
+                }
+                .help("Reprendre la partie : le dernier passe est annulé")
+                Button(action: onNewGame) {
+                    Text("Nouvelle partie").frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.glass)
+        }
+        .controlSize(.large)
     }
 
     private var header: some View {
