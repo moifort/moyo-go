@@ -63,6 +63,24 @@ public struct GameWindow: View {
         } message: {
             Text(session.lastError?.message ?? "")
         }
+        // One question wherever the window would be replaced: a new game, a record
+        // opened, dropped or handed over by the Finder, a phone connected.
+        .confirmationDialog(
+            replacementTitle,
+            isPresented: Binding(
+                // Down while the work is being saved; each button settles the
+                // question itself, so closing the dialog cancels nothing.
+                get: { session.isConfirmingReplacement && !session.isSavingBeforeReplacement },
+                set: { _ in }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Enregistrer d'abord") { session.saveThenReplace() }
+            Button("Remplacer", role: .destructive) { session.replace() }
+            Button("Annuler", role: .cancel) { session.cancelReplacement() }
+        } message: {
+            Text(replacementMessage)
+        }
         .onChange(of: session.pendingExport) { _, document in
             guard let document else { return }
             // Out of the view update: a modal panel run from inside one stalls it.
@@ -175,6 +193,20 @@ public struct GameWindow: View {
         .labelsHidden()
         .disabled(!session.canSwitchView)
         .help("Partie en cours (⌘1) · Analyse (⌘2)")
+    }
+
+    private var replacementTitle: String {
+        switch session.pendingReplacement {
+        case .record: return "Ouvrir cette partie à la place ?"
+        case .follow: return "Suivre le plateau à la place ?"
+        case .newGame, nil: return "Commencer une nouvelle partie ?"
+        }
+    }
+
+    private var replacementMessage: String {
+        session.hasGameInProgress
+            ? "La partie en cours n'est pas enregistrée. Elle sera perdue si elle est remplacée."
+            : "Les variantes ajoutées à cette analyse ne sont pas enregistrées. Elles seront perdues si elle est remplacée."
     }
 
     private var title: String {

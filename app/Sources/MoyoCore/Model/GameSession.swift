@@ -128,14 +128,8 @@ public final class GameSession {
     /// position the phone sends starts the next game.
     private var followedGameEnded = false
 
-    /// The player asked to connect while a game was under way: the sidebar asks
-    /// whether to save it first.
-    public var isConfirmingFollow = false
     /// The sheet listing the phones in sight is open, for the player to pick one.
     public var isChoosingPhone = false
-    /// The game is being saved before following starts; the save panel's answer
-    /// starts it.
-    private var followsAfterExport = false
 
     /// Score lead per move number, filled in as analyses come back.
     public private(set) var scoreByMove: [Int: Double] = [:]
@@ -345,22 +339,19 @@ public final class GameSession {
         return state.status == .scoring || (state.status == .playing && state.moveNumber > 0)
     }
 
-    /// The player clicked "Connecter". A game under way is not dropped without
-    /// asking: the sidebar first offers to save it, or to give it up. Then the
+    /// The player clicked "Connecter". Work under way is not dropped without
+    /// asking: the window first offers to save it, or to replace it. Then the
     /// phones in sight are listed, for the player to pick one.
     public func connectPhone() {
         if isFollowing {
             phone.connect()  // the link dropped or failed: the game followed goes on
-        } else if hasGameInProgress {
-            isConfirmingFollow = true
         } else {
-            choosePhone()
+            replaceOrAsk(.follow)
         }
     }
 
     /// Opens the list of phones running Kifu.
     public func choosePhone() {
-        isConfirmingFollow = false
         phone.startDiscovery()
         isChoosingPhone = true
     }
@@ -371,10 +362,86 @@ public final class GameSession {
         startFollowing(phone: service)
     }
 
-    /// Saves the game under way, then follows the real board whatever the panel's answer.
-    public func saveThenFollow() {
-        followsAfterExport = true
+    // -- replacing the work on screen -----------------------------------------
+
+    /// What the player asked for that would take the window's place.
+    public enum Replacement: Equatable, Sendable {
+        case newGame
+        case record(SGFImport.Record)
+        case follow
+    }
+
+    /// Waiting for the player's answer: save first, replace, or cancel.
+    public private(set) var pendingReplacement: Replacement?
+    public var isConfirmingReplacement: Bool { pendingReplacement != nil }
+
+    /// The save panel is open for the work about to be replaced.
+    private var replacesAfterExport = false
+    public var isSavingBeforeReplacement: Bool { replacesAfterExport }
+    /// The save panel wrote the file it was opened for.
+    private var exportWritten = false
+    /// The shape of the work when it was last saved: unchanged since, it is safe.
+    private var savedWork: String?
+
+    /// What changes when the player adds to the work: moves played, nodes added.
+    private var workSignature: String? {
+        guard let state else { return nil }
+        return "\(state.status)|\(state.moveCount ?? state.moveNumber)|\(tree.count)"
+    }
+
+    /// A game against the AI under way, or an analysis holding variations of the
+    /// player's own, not saved since its last change.
+    public var hasWorkToProtect: Bool {
+        guard let state, !isFollowing, workSignature != savedWork else { return false }
+        if hasGameInProgress { return true }
+        return state.isAnalysing && tree.contains { $0.origin == .analysis }
+    }
+
+    private func replaceOrAsk(_ replacement: Replacement) {
+        if hasWorkToProtect {
+            pendingReplacement = replacement
+        } else {
+            perform(replacement)
+        }
+    }
+
+    private func perform(_ replacement: Replacement) {
+        switch replacement {
+        case .newGame: newGame()
+        case .record(let record): load(record)
+        case .follow: choosePhone()
+        }
+    }
+
+    /// The player chose to give up the work on screen.
+    public func replace() {
+        guard let replacement = pendingReplacement else { return }
+        pendingReplacement = nil
+        perform(replacement)
+    }
+
+    public func cancelReplacement() {
+        pendingReplacement = nil
+        replacesAfterExport = false
+    }
+
+    /// Saves the work on screen; once written, what was asked for replaces it.
+    /// A save panel dismissed replaces nothing.
+    public func saveThenReplace() {
+        guard pendingReplacement != nil else { return }
+        replacesAfterExport = true
+        exportWritten = false
         exportRecord()
+    }
+
+    /// The sheet's "Commencer": a new game, once the work on screen is safe.
+    public func requestNewGame() {
+        replaceOrAsk(.newGame)
+    }
+
+    /// A record read from disk, opened once the work on screen is safe.
+    public func requestOpening(_ record: SGFImport.Record) {
+        replaceOrAsk(.record(record))
     }
 
     /// Starts following: an empty game with no AI, and the chosen phone's link opened.
@@ -382,7 +449,7 @@ public final class GameSession {
     /// start — a game recorded halfway is joined where it stands.
     func startFollowing(phone service: String) {
         guard phase == .running else { return }
-        isConfirmingFollow = false
+        pendingReplacement = nil
         isFollowing = true
         beginFollowedGame(size: 19)
         phone.connect(to: service)
@@ -628,7 +695,7 @@ public final class GameSession {
     /// the sandbox out of the child process and the encoding guess in AppKit's hands.
     public func openRecord(at url: URL) {
         do {
-            load(try SGFImport.read(url))
+            requestOpening(try SGFImport.read(url))
         } catch {
             recordName = nil
             openedRecord = nil
@@ -681,6 +748,8 @@ public final class GameSession {
     /// is the one to keep — it may carry the variation being walked — so the
     /// analysis is no longer written there behind their back.
     public func recordSaved(to url: URL) {
+        exportWritten = true
+        savedWork = workSignature
         guard let opened = openedRecord?.record.url else { return }
         if opened.standardizedFileURL.path == url.standardizedFileURL.path {
             openedRecord = nil
@@ -690,9 +759,12 @@ public final class GameSession {
     /// The save panel is done with the document, written or not.
     public func exportHandled() {
         pendingExport = nil
-        if followsAfterExport {
-            followsAfterExport = false
-            choosePhone()
+        guard replacesAfterExport else { return }
+        replacesAfterExport = false
+        if exportWritten {
+            replace()
+        } else {
+            pendingReplacement = nil
         }
     }
 

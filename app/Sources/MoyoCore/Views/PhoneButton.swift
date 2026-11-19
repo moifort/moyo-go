@@ -76,17 +76,6 @@ struct PhoneButton: View {
                     : "Moyo ne suivra plus les parties enregistrées par Kifu."
             )
         }
-        .confirmationDialog(
-            "Une partie est en cours",
-            isPresented: $session.isConfirmingFollow,
-            titleVisibility: .visible
-        ) {
-            Button("Enregistrer, puis suivre") { session.saveThenFollow() }
-            Button("Abandonner et suivre", role: .destructive) { session.choosePhone() }
-            Button("Annuler", role: .cancel) {}
-        } message: {
-            Text("Suivre la partie du plateau remplace celle-ci.")
-        }
     }
 }
 

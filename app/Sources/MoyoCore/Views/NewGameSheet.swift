@@ -39,8 +39,8 @@ public struct NewGameSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Commencer") {
                     session.settings = draft
-                    session.newGame()
                     dismiss()
+                    session.requestNewGame()
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.glassProminent)
