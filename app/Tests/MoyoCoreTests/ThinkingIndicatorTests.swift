@@ -50,8 +50,13 @@ struct ThinkingIndicatorTests {
     func hidesAtOnceWhenAlreadyShownLongEnough() async throws {
         let indicator = indicator()
         indicator.began()
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(indicator.isVisible)
+        // Waits for the indicator to appear, then for longer than its minimum: a
+        // fixed 250 ms failed on the Xcode 27 runner, where the timer woke the
+        // appearance late enough that it had been up for less than the minimum.
+        while !indicator.isVisible {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(160))
         indicator.ended()
         #expect(!indicator.isVisible)
     }
