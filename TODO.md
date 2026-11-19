@@ -107,8 +107,6 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 - **Teaching mode.** KaTrain's per-move feedback on mistakes and better options. The
   bridge already sends `points_lost` with the best move and nothing displays it.
 
-- **Teaching mode.** KaTrain's per-move feedback on mistakes and better options.
-
 - **The score estimate only counts a settled position.** "Estimer le score" (⌘E)
   counts the board like a finished game once KataGo's ownership map leaves at most
   ten points in doubt, as KaTrain's `Game.manual_score` does. Before that it shows
@@ -195,12 +193,6 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   name with a real hyphen loses it; asking Apple for the entitlement in Kifu would
   fix it at the source.
 
-- **Kifu does not announce the end yet.** Moyo opens a followed game as a record
-  when the phone sends `{"end":true,"result":"B+R"}` (result optional, SGF form).
-  Kifu's "Fin de partie" writes its SGF but sends nothing, and it has no resign
-  button: both belong in Kifu. Until then, "Connecté à …" on the Mac stops following
-  and opens the record the same way.
-
 - **A finished game on the real board is not counted.** "Fin" opens the record with
   no result: the dead stones were never agreed on, and neither side typed a score.
   The bridge's count from the review would be one more step.
@@ -235,6 +227,14 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   of the lines received was kept — the bridge now logs the boards it places).
 
 ## Design
+
+- **The board is one VoiceOver element.** It says its size and the stones, but
+  there is no walking the intersections, and no playing from the keyboard. Doing it
+  properly means a focusable grid of 361 accessibility elements with their own
+  labels (coordinate, stone, marker) and a keyboard cursor with its own drawing, on
+  top of a Canvas that has no hit testing of its own. Raised by the 19 November audit
+  and left for a pass of its own: it is a feature, not a fix, and it wants trying
+  with VoiceOver users rather than guessing.
 
 - **The score curve does not animate.** The old bars grew with `.animation`; the
   curve is a `Canvas`, which redraws in place. Animating it would mean an
@@ -330,6 +330,15 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
 - **iOS and iPadOS.** macOS only, by design.
 
 ## Companion
+
+- **A misread move cannot be corrected while recording.** Only "Recalibrer" exists:
+  a stone the camera got wrong stays in the record until the game is reviewed on the
+  Mac. A correction means letting the player take back the last move or move a stone
+  by hand, and having the referee of `KifuCore` (`Recorder`, `Rules`) accept a record
+  that no longer follows from what the camera sees, then resynchronise with it.
+  Raised by the 19 November audit and deferred: it touches the referee's core
+  invariant and wants a trial on a real board, where the deletion confirmation and
+  the move count of the same point were small enough to fix at once.
 
 - **No shared Swift package for the board line.** Kifu encodes it in
   `BoardBroadcast`, Moyo decodes it in `PhoneBoard`, each with its own tests, and
