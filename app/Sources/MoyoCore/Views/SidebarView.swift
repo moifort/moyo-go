@@ -463,9 +463,12 @@ struct ReviewPanel: View {
     /// The same moves as the Analyse menu and its keys, within reach of the mouse:
     /// a record dropped on the window is read with the pointer as often as with keys.
     /// Each button names its shortcut on hover, so the keys are learnt by using it.
+    ///
+    /// Two compact rows: moving through the tree, then the lines KataGo proposes.
+    /// Taking a line back is ⌘Z, ⇧⌥← or ⌥←, and the menu: no button of its own.
     private var navigation: some View {
-        VStack(spacing: 7) {
-            HStack(spacing: 7) {
+        VStack(spacing: 6) {
+            HStack(spacing: 5) {
                 step("Début de la partie (⌘←)", systemImage: "backward.end.fill", enabled: session.canStepBackward) {
                     session.navigate(.start)
                 }
@@ -478,38 +481,22 @@ struct ReviewPanel: View {
                 step("Fin de la variante (⌘→)", systemImage: "forward.end.fill", enabled: session.canStepForward) {
                     session.navigate(.end)
                 }
-            }
-            HStack(spacing: 7) {
                 step("Variante précédente (↑)", systemImage: "chevron.up", enabled: session.hasPreviousSibling) {
                     session.navigate(.previousSibling)
                 }
                 step("Variante suivante (↓)", systemImage: "chevron.down", enabled: session.hasNextSibling) {
                     session.navigate(.nextSibling)
                 }
+            }
+            HStack(spacing: 5) {
                 step("Revenir à la partie (⌘↑)", systemImage: "arrow.turn.left.up", enabled: session.isInBranch) {
                     session.navigate(.game)
                 }
                 step("Passer (⌘P)", systemImage: "hand.raised", enabled: true) {
                     session.passTurn()
                 }
-            }
-            HStack(spacing: 7) {
-                step(
-                    "Remonter la proposition de KataGo (⇧⌥←)", systemImage: "arrow.uturn.backward",
-                    enabled: (state.variationDepth ?? 0) > 0
-                ) {
-                    session.stepVariation(-1)
-                }
                 step("Dérouler la proposition de KataGo (⇧⌥→)", systemImage: "sparkles", enabled: true) {
                     session.stepVariation(1)
-                }
-            }
-            HStack(spacing: 7) {
-                step(
-                    "Remonter la séquence locale (⌥←)", systemImage: "arrow.uturn.backward.circle",
-                    enabled: session.isWalkingLocal
-                ) {
-                    session.stepVariation(-1, kind: .local)
                 }
                 step(
                     "Dérouler la séquence locale (⌥→)", systemImage: "scope", enabled: session.canWalkLocal,
@@ -530,7 +517,7 @@ struct ReviewPanel: View {
             }
         }
         .buttonStyle(.glass)
-        .controlSize(.large)
+        .controlSize(.regular)
     }
 
     /// An icon wide enough to hit, named above the buttons on hover and for
@@ -585,8 +572,10 @@ struct ReviewPanel: View {
             }
             stepHint
             navigation
-            EstimateButton(session: session)
-            WeaknessButton(session: session)
+            HStack(spacing: 7) {
+                EstimateButton(session: session, compact: true)
+                WeaknessButton(session: session, compact: true)
+            }
             PhoneButton(session: session)
             Button {
                 NotificationCenter.default.post(name: .moyoNewGameRequested, object: nil)

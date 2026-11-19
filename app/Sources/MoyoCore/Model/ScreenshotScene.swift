@@ -53,6 +53,13 @@ public enum ScreenshotScene {
         case "stopped":
             play(state(status: "playing"))
             session.bridgeDidStop()
+        case "review":
+            session.requestOpening(
+                SGFImport.Record(
+                    name: "demo.sgf",
+                    contents: "(;GM[1]FF[4]SZ[9]KM[6.5];B[cc];W[gg];B[gc];W[cg];B[ee];W[fd];B[df];W[ff](;B[dc])(;B[fe]))"
+                )
+            )
         case "ghost":
             hover = Point(row: 3, col: 3)
             play(state(status: "playing"))

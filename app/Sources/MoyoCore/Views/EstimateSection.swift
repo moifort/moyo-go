@@ -62,13 +62,15 @@ struct EstimateSection: View {
 /// Shows or hides the estimate. It stays on, move after move, until pressed again.
 struct EstimateButton: View {
     @Bindable var session: GameSession
+    /// One word, to share a row with the weak points.
+    var compact = false
 
     var body: some View {
         Button {
             session.toggleEstimate()
         } label: {
             Label(
-                session.isEstimating ? "Masquer l'estimation" : "Estimer le score",
+                compact ? "Estimer" : session.isEstimating ? "Masquer l'estimation" : "Estimer le score",
                 systemImage: session.isEstimating ? "eye.slash" : "square.grid.3x3.square"
             )
             .frame(maxWidth: .infinity)
@@ -76,6 +78,7 @@ struct EstimateButton: View {
         .buttonStyle(.glass)
         .controlSize(.large)
         .disabled(!session.canEstimate && !session.isEstimating)
+        .accessibilityLabel(session.isEstimating ? "Masquer l'estimation" : "Estimer le score")
         .help("Le territoire de chacun selon KataGo, compté comme en fin de partie (⌘E)")
     }
 }
