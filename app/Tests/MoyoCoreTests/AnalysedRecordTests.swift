@@ -98,6 +98,7 @@ struct AnalysedRecordTests {
         session.handle(.recordAnalysed(id: command, contents: Self.analysed))
         #expect(try contents(url) == edited)
         #expect(session.lastErrorMessage == SGFExport.Failure.changedOnDisk(url.lastPathComponent).errorDescription)
+        #expect(session.lastError?.title == "L'analyse n'a pas pu être enregistrée")
     }
 
     @Test("Un enregistrement fait à la main sur le même fichier l'emporte")

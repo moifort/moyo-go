@@ -56,7 +56,9 @@ public final class GameSession {
 
     public private(set) var phase: Phase = .starting
     public private(set) var state: GameState?
-    public private(set) var lastErrorMessage: String?
+    /// The last failure worth telling the player, until they dismiss it.
+    public private(set) var lastError: SessionError?
+    public var lastErrorMessage: String? { lastError?.message }
     public var settings = Settings()
 
     /// AI modes this installation offers, in KaTrain's own recommended order.
@@ -256,16 +258,14 @@ public final class GameSession {
             do {
                 try SGFExport.rewrite(contents, over: opened.record)
             } catch {
-                lastErrorMessage = error.localizedDescription
+                lastError = SessionError(kind: .saving, message: error.localizedDescription)
             }
 
         case .failure(_, let code, let message):
-            // Some refusals are answers, not faults, and a keystroke that arrives a
-            // moment too early should not raise a dialog: an illegal move simply
-            // does not land, and a variation asked for before its analysis has come
-            // back simply does not move.
-            if !Self.silentFailures.contains(code) {
-                lastErrorMessage = message
+            // Some refusals are answers, not faults: those stay silent. The others
+            // are said in the app's words, chosen from the code.
+            if let error = SessionError.fromBridge(code: code, message: message) {
+                lastError = error
             }
 
         case .engineFailed(let message):
@@ -275,11 +275,6 @@ public final class GameSession {
             break
         }
     }
-
-    /// Refusals the board answers on its own, without a word.
-    ///
-    /// `not_following` is a position the phone sent just as following stopped.
-    private static let silentFailures: Set<String> = ["illegal_move", "no_variation", "not_following"]
 
     private func apply(_ newState: GameState) {
         // Moves beyond the current one no longer exist, typically after an undo —
@@ -366,7 +361,7 @@ public final class GameSession {
         followedGameEnded = false
         scoreByMove.removeAll()
         state = nil
-        lastErrorMessage = nil
+        lastError = nil
         recordName = nil
         openedRecord = nil
         analysisProgress = nil
@@ -418,7 +413,7 @@ public final class GameSession {
         store.save(settings)
         scoreByMove.removeAll()
         state = nil
-        lastErrorMessage = nil
+        lastError = nil
         recordName = nil
         openedRecord = nil
         analysisProgress = nil
@@ -490,7 +485,7 @@ public final class GameSession {
 
     /// Dismisses the last failure, once the player has seen it.
     public func clearError() {
-        lastErrorMessage = nil
+        lastError = nil
     }
 
     // -- analysis ------------------------------------------------------------
@@ -579,7 +574,7 @@ public final class GameSession {
         } catch {
             recordName = nil
             openedRecord = nil
-            lastErrorMessage = error.localizedDescription
+            lastError = SessionError(kind: .opening, message: error.localizedDescription)
         }
     }
 
@@ -588,7 +583,7 @@ public final class GameSession {
         stopFollowing(openingRecord: false)
         scoreByMove.removeAll()
         analysisProgress = nil
-        lastErrorMessage = nil
+        lastError = nil
         recordName = record.name
         openedRecord = nil
         thinking.ended()

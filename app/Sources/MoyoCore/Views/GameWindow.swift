@@ -40,18 +40,18 @@ public struct GameWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .moyoOpenRecordRequested)) { _ in
             presentOpenPanel()
         }
-        // `lastErrorMessage` was already being set and shown nowhere. A record that
-        // will not open has to say so, or the window simply ignores the file.
+        // Under a title that says what failed: a record that will not open, an
+        // analysis that could not be written back, an action refused, the engine.
         .alert(
-            "Cette partie n'a pas pu être ouverte",
+            session.lastError?.title ?? "",
             isPresented: Binding(
-                get: { session.lastErrorMessage != nil },
+                get: { session.lastError != nil },
                 set: { if !$0 { session.clearError() } }
             )
         ) {
             Button("Fermer", role: .cancel) { session.clearError() }
         } message: {
-            Text(session.lastErrorMessage ?? "")
+            Text(session.lastError?.message ?? "")
         }
         .onChange(of: session.pendingExport) { _, document in
             guard let document else { return }
