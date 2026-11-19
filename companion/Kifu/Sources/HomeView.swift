@@ -3,6 +3,10 @@ import KifuCore
 
 struct HomeView: View {
     @State private var games: [URL] = []
+    /// "N coups" per game, read off the main thread: a long list of files would stall it.
+    @State private var summaries: [URL: String] = [:]
+    /// The games swiped away, waiting for the player to confirm.
+    @State private var pendingDeletion: [URL] = []
     @State private var showGame = false
     @AppStorage(TrialLog.defaultsKey) private var trialMode = false
     @AppStorage(CameraSession.ultraWideDefaultsKey) private var ultraWide = false
@@ -50,19 +54,32 @@ struct HomeView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(url.deletingPathExtension().lastPathComponent)
-                                Text(summary(of: url)).font(.caption).foregroundStyle(.secondary)
+                                Text(summaries[url] ?? " ").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
                         }
                     }
                     .onDelete { offsets in
-                        for i in offsets { try? FileManager.default.removeItem(at: games[i]) }
-                        reload()
+                        pendingDeletion = offsets.map { games[$0] }
                     }
                 }
             }
             .navigationTitle("Kifu")
+            .confirmationDialog(
+                pendingDeletion.count > 1 ? "Supprimer ces parties ?" : "Supprimer cette partie ?",
+                isPresented: Binding(get: { !pendingDeletion.isEmpty }, set: { if !$0 { pendingDeletion = [] } }),
+                titleVisibility: .visible
+            ) {
+                Button("Supprimer", role: .destructive) {
+                    for url in pendingDeletion { try? FileManager.default.removeItem(at: url) }
+                    pendingDeletion = []
+                    reload()
+                }
+                Button("Annuler", role: .cancel) { pendingDeletion = [] }
+            } message: {
+                Text("Le fichier SGF est effacé du téléphone.")
+            }
         }
         .fullScreenCover(isPresented: $showGame, onDismiss: reload) { GameFlowView() }
         .onAppear(perform: reload)
@@ -73,11 +90,20 @@ struct HomeView: View {
         let urls = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         games = urls.filter { $0.pathExtension == "sgf" }.sorted { $0.lastPathComponent > $1.lastPathComponent }
             .filter { !$0.lastPathComponent.hasPrefix(".") }
+        let listed = games
+        Task { summaries = await Self.summaries(of: listed) }
     }
 
-    private func summary(of url: URL) -> String {
+    /// Off the main actor: a nonisolated async function runs on the global executor.
+    nonisolated private static func summaries(of urls: [URL]) async -> [URL: String] {
+        var read: [URL: String] = [:]
+        for url in urls { read[url] = summary(of: url) }
+        return read
+    }
+
+    nonisolated private static func summary(of url: URL) -> String {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return "" }
-        let moves = text.components(separatedBy: ";").count - 2
-        return "\(max(moves, 0)) coup\(moves > 1 ? "s" : "")"
+        let moves = SGFSummary.moveCount(in: text)
+        return "\(moves) coup\(moves > 1 ? "s" : "")"
     }
 }
