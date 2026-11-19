@@ -10,7 +10,7 @@ controls — lives in `host.py`. Everything that is pure reading of a record liv
 `review.py`. What remains here is the state and who is allowed to change it.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Set
 
 from katrain.core.ai import generate_ai_move
 from katrain.core.constants import (
@@ -32,6 +32,13 @@ import serialize
 import weakness
 from host import KaTrainHost
 from protocol import CommandError, to_display_coords, to_engine_coords
+
+
+class _TreeView(NamedTuple):
+    """The tree as one command sees it: the ids shown, and those on the line of the game."""
+
+    shown: Set[int]
+    line: Set[int]
 
 
 class BridgeSession(KaTrainHost):
@@ -1200,10 +1207,11 @@ class BridgeSession(KaTrainHost):
 
     def _kept(self, node) -> bool:
         """Whether a node belongs to the game, the record, or the player's analysis."""
+        key = id(node)
         return (
-            id(node) in self._analysis_nodes
-            or any(node is other for other in self._recorded)
-            or any(node is other for other in self._main_line())
+            key in self._analysis_nodes
+            or key in {id(other) for other in self._recorded}
+            or key in {id(other) for other in self._main_line()}
         )
 
     def _origins(self) -> Dict[int, str]:
@@ -1223,9 +1231,10 @@ class BridgeSession(KaTrainHost):
             origins[id(node)] = "game"
         return origins
 
-    def _visible_nodes(self) -> List[Any]:
+    def _visible_nodes(self, origins: Optional[Dict[int, str]] = None) -> List[Any]:
         """The tree the player sees, root first, each parent before its children."""
-        origins = self._origins()
+        if origins is None:
+            origins = self._origins()
         shown = set()
         for node in self.game.root.nodes_in_tree:
             if id(node) not in origins:
@@ -1275,7 +1284,7 @@ class BridgeSession(KaTrainHost):
         origins = self._origins()
         size = self._size()
         nodes = []
-        for node in self._visible_nodes():
+        for node in self._visible_nodes(origins):
             move = node.move
             point = (
                 to_display_coords(move.coords, size)
@@ -1375,60 +1384,67 @@ class BridgeSession(KaTrainHost):
             raise CommandError("bad_arguments", f"unknown destination '{to}'")
         self._keep_preview()
         node = self.game.current_node
+        # The visible tree and the line of the game, worked out once for the whole
+        # move: every helper below used to rebuild them for each child it looked at.
+        tree = self._tree_view()
         if to == "back":
             target = node.parent or node
         elif to == "forward":
-            target = self._next_child(node) or node
+            target = self._next_child(node, tree) or node
         elif to == "next_sibling":
-            target = self._first_branch(node) or self._sibling(node, 1) or node
+            target = self._first_branch(node, tree) or self._sibling(node, 1, tree) or node
         elif to == "previous_sibling":
-            target = self._sibling(node, -1) or node
+            target = self._sibling(node, -1, tree) or node
         elif to == "start":
             target = self.game.root
         elif to == "end":
             target = node
-            while (following := self._next_child(target)) is not None:
+            while (following := self._next_child(target, tree)) is not None:
                 target = following
         else:
-            on_line = {id(other) for other in self._main_line()}
+            on_line = tree.line
             target = node
             while id(target) not in on_line and target.parent is not None:
                 target = target.parent
         self._show(target, command_id)
 
-    def _visible_children(self, node) -> List[Any]:
-        shown = {id(other) for other in self._visible_nodes()}
+    def _tree_view(self) -> "_TreeView":
+        return _TreeView({id(other) for other in self._visible_nodes()}, {id(other) for other in self._main_line()})
+
+    def _visible_children(self, node, tree: Optional["_TreeView"] = None) -> List[Any]:
+        shown = (tree or self._tree_view()).shown
         return [child for child in node.ordered_children if id(child) in shown]
 
-    def _next_child(self, node):
+    def _next_child(self, node, tree: Optional["_TreeView"] = None):
         """The move that carries on down the line on screen, never into a branch.
 
         The game's own move where there is one, otherwise the first child: the one
         the tree draws in the same column. A branch is entered with ↓ alone.
         """
-        children = self._visible_children(node)
+        tree = tree or self._tree_view()
+        children = self._visible_children(node, tree)
         if not children:
             return None
-        line = self._main_line()
         for child in children:
-            if any(child is other for other in line):
+            if id(child) in tree.line:
                 return child
         return children[0]
 
-    def _first_branch(self, node):
+    def _first_branch(self, node, tree: Optional["_TreeView"] = None):
         """The first branch starting after this move, for ↓; None at no fork.
 
         Takes precedence over the next sibling: arriving on a fork, ↓ goes down the
         branch it opens, and from there on to the next one.
         """
-        following = self._next_child(node)
-        branches = [child for child in self._visible_children(node) if child is not following]
+        tree = tree or self._tree_view()
+        following = self._next_child(node, tree)
+        branches = [child for child in self._visible_children(node, tree) if child is not following]
         return branches[0] if branches else None
 
-    def _sibling(self, node, step):
+    def _sibling(self, node, step, tree: Optional["_TreeView"] = None):
         if node.parent is None:
             return None
-        siblings = self._visible_children(node.parent)
+        siblings = self._visible_children(node.parent, tree)
         index = next(i for i, other in enumerate(siblings) if other is node) + step
         return siblings[index] if 0 <= index < len(siblings) else None
 

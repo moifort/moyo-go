@@ -533,3 +533,18 @@ def test_a_reading_left_by_a_freed_node_is_not_inherited(reviewing):
     reviewing._local_queries.clear()
     reviewing._request_local(ask=True)
     assert [asked for asked, _ in reviewing._local_queries] == [node]
+
+
+def test_walking_to_the_end_computes_the_visible_tree_once(reviewing, monkeypatch):
+    # Every step used to recompute the whole visible tree, and its origins, for
+    # each child it looked at: quadratic on a long record held by the arrow key.
+    run(reviewing, reviewing.navigate, 2, "start")
+    calls = []
+    original = reviewing._visible_nodes
+    monkeypatch.setattr(reviewing, "_visible_nodes", lambda *a, **k: calls.append(1) or original(*a, **k))
+    calls.clear()
+    reviewing.navigate(3, "end")
+    navigation_calls = len(calls)
+    assert reviewing.game.current_node is reviewing._line[-1]
+    # Once to find the way, once more for the tree sent with the state.
+    assert navigation_calls <= 2
