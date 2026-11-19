@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public enum BridgeStartupError: LocalizedError {
@@ -37,6 +38,9 @@ public final class BridgeProcess: @unchecked Sendable {
 
     public var isRunning: Bool { process.isRunning }
 
+    /// The descriptor commands are written to.
+    var commandDescriptor: Int32 { inPipe.fileHandleForWriting.fileDescriptor }
+
     public func start(
         python: URL,
         script: URL,
@@ -61,6 +65,11 @@ public final class BridgeProcess: @unchecked Sendable {
         process.standardInput = inPipe
         process.standardOutput = outPipe
         process.standardError = errPipe
+
+        // The bridge can die between `isRunning` and a write: the write into the
+        // closed pipe would then raise SIGPIPE, which kills the app. With the flag
+        // on, the write only fails, and the end of the stream reports the stop.
+        _ = fcntl(commandDescriptor, F_SETNOSIGPIPE, 1)
 
         let (stream, continuation) = AsyncStream<BridgeEvent>.makeStream(bufferingPolicy: .unbounded)
         self.continuation = continuation
