@@ -678,7 +678,7 @@ class BridgeSession(KaTrainHost):
         anchor = self._anchor()
         if self._variation_kind == "best":
             return review.variation(anchor)
-        reading = self._local.get(id(anchor))
+        reading = self._local_for(anchor)
         if not reading or reading["analysis"] is None:
             return []
         prefer = local.whole_board_choice(anchor, reading["zone"], self._size())
@@ -752,7 +752,7 @@ class BridgeSession(KaTrainHost):
                 return False
             extension["wanted"] = extension["wanted"] or wanted
             return True
-        reading = self._local.get(id(self._anchor()))
+        reading = self._local_for(self._anchor())
         if not reading or reading["zone"] is None:
             return False
         node = self.game.current_node
@@ -791,7 +791,7 @@ class BridgeSession(KaTrainHost):
         self._emit_state()
 
     def _refuse_local_end(self, anchor) -> None:
-        reading = self._local.get(id(anchor))
+        reading = self._local_for(anchor)
         if not reading or reading["zone"] is None:
             raise CommandError("no_variation", "aucun combat local à cette position")
         if reading["analysis"] is None:
@@ -929,13 +929,23 @@ class BridgeSession(KaTrainHost):
         zone = self._drawn_zone or local.region(
             serialize.stone_map(self.game), self._size(), serialize.last_move(self.game)
         )
-        reading = self._local.get(id(node))
+        reading = self._local_for(node)
         if reading is None or reading["zone"] != zone:
-            reading = {"zone": zone, "analysis": None, "asked": False}
+            reading = {"zone": zone, "analysis": None, "asked": False, "node": node}
             self._local[id(node)] = reading
         if ask and zone is not None and not reading["asked"]:
             reading["asked"] = True
             self._send_local_query(node, zone)
+
+    def _local_for(self, node) -> Optional[Dict[str, Any]]:
+        """The local reading of that very node.
+
+        Readings are keyed by `id(node)`, and a node deleted since — a branch
+        dropped, a preview taken away — may have been freed and its id handed to a
+        new one. The entry holds its node, and only that node gets it back.
+        """
+        reading = self._local.get(id(node))
+        return reading if reading is not None and reading.get("node") is node else None
 
     def _send_local_query(self, node, zone) -> None:
         """The only call that reaches KataGo for a local reading; tests replace it."""
@@ -956,7 +966,7 @@ class BridgeSession(KaTrainHost):
         if extension is not None and node is extension["node"]:
             self._on_local_extension(analysis, zone)
             return
-        reading = self._local.get(id(node))
+        reading = self._local_for(node)
         if reading is None or not (self._analysing() or self._status == "following"):
             return  # another record has been opened since
         if zone is not None and reading["zone"] != zone:
@@ -987,13 +997,13 @@ class BridgeSession(KaTrainHost):
                 and not extension["done"]
                 and extension["depth"] == len(self._variation)
             )
-        reading = self._local.get(id(self._focus_node()))
+        reading = self._local_for(self._focus_node())
         return bool(reading and reading.get("asked") and reading["analysis"] is None)
 
     def _local_reading(self) -> Optional[Dict[str, Any]]:
         if self._variation and self._variation_kind != "local":
             return None
-        return self._local.get(id(self._focus_node()))
+        return self._local_for(self._focus_node())
 
     def _local_zone(self) -> Optional[Dict[str, int]]:
         """The zone on screen: on the record itself, and while its sequence is walked."""

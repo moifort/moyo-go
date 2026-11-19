@@ -520,3 +520,16 @@ def test_a_refused_reading_ends_the_fight_instead_of_hanging(reviewing):
     end = reviewing.game.current_node
     run(reviewing, reviewing._on_local_failure, end, {"error": "boom"})
     assert last_state(reviewing)["local_pending"] is False
+
+
+def test_a_reading_left_by_a_freed_node_is_not_inherited(reviewing):
+    # Readings are keyed by id(node); a node deleted since may have been freed and
+    # its id handed to a new node, which must not inherit a zone and a reading.
+    node = reviewing._focus_node()
+    stale = {"zone": {"top": 0, "left": 0, "bottom": 2, "right": 2}, "analysis": local_answer(["A1"]), "asked": True}
+    stale["node"] = object()
+    reviewing._local[id(node)] = stale
+    assert reviewing._local_reading() is None
+    reviewing._local_queries.clear()
+    reviewing._request_local(ask=True)
+    assert [asked for asked, _ in reviewing._local_queries] == [node]
