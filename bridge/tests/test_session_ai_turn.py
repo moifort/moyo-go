@@ -112,3 +112,12 @@ def test_an_error_in_a_task_the_core_queued_belongs_to_no_command(session):
     session.run_task(callback, session.game.current_node, {})
     errors = [event for event in _events(session) if event["event"] == "error"]
     assert errors[-1]["id"] is None
+
+
+def test_the_state_says_the_komi_of_the_game(ai_moves):
+    # The app shows the komi of the game on screen, not the one in its settings.
+    bridge = BridgeSession(EventWriter(io.StringIO()))
+    bridge._engine = FakeEngine()
+    bridge.new_game(1, 9, 7.5, "japanese", "B", "ai:human", {})
+    states = [event for event in _events(bridge) if event["event"] == "state"]
+    assert states[-1]["komi"] == 7.5

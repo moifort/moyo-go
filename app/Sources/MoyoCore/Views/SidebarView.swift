@@ -144,7 +144,7 @@ public struct SidebarView: View {
                 black: state.captures.byBlack,
                 white: state.captures.byWhite
             ),
-            PlayerTable.Row("Komi", black: nil, white: session.settings.komi),
+            PlayerTable.Row("Komi", black: nil, white: session.komi),
         ]
     }
 

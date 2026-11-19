@@ -92,6 +92,9 @@ def game_state(
         "score_history": score_history(game),
         "score_lead": node.score,
         "human_color": human_color,
+        # The game's own komi: a record or a followed game need not have the one
+        # in the app's settings.
+        "komi": game.root.komi,
         "status": status,
         "result": result,
         "ai_strategy": ai_strategy,

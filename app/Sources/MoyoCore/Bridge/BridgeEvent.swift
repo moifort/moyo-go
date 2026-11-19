@@ -341,6 +341,8 @@ public struct GameState: Codable, Sendable {
     public let scoreHistory: [Double?]
     public let scoreLead: Double?
     public let humanColor: PlayerColor
+    /// The game's own komi. Absent from an older bridge.
+    public let komi: Double?
     public let status: GameStatus
     public let result: String?
     public let scoring: ScoringDetail?

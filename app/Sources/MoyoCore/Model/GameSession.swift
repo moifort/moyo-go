@@ -899,6 +899,10 @@ public final class GameSession {
         bridge.send(.weaknesses(id: nextID(), on: !isShowingWeaknesses))
     }
 
+    /// The komi of the game on screen: a record or a followed game need not have
+    /// the one in the settings.
+    public var komi: Double { state?.komi ?? settings.komi }
+
     /// True when the player may act: a game is running and it is their turn.
     ///
     /// `isHumanTurn` is false in analysis, where `canPlace` takes over.
