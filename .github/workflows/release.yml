@@ -34,7 +34,7 @@ jobs:
   # rien gagner. Tout ce qui suit a besoin de ce qui précède, dans l'ordre.
   release:
     name: 🪨 Build, gate, upload & submit
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 150
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
