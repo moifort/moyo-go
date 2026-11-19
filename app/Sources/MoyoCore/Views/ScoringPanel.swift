@@ -48,11 +48,11 @@ public struct ScoringPanel: View {
             }
             .buttonStyle(.glassProminent)
             .help("Accepter le score (⌘↩)")
-            HStack(spacing: 7) {
+            Group {
                 Button(action: onResume) {
-                    Text("Reprendre").frame(maxWidth: .infinity)
+                    Text("Reprendre la partie").frame(maxWidth: .infinity)
                 }
-                .help("Reprendre la partie : le dernier passe est annulé")
+                .help("Le dernier passe est annulé et la partie continue")
                 Button(action: onNewGame) {
                     Text("Nouvelle partie").frame(maxWidth: .infinity)
                 }

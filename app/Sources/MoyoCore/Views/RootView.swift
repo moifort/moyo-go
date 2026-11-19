@@ -28,6 +28,7 @@ public struct RootView: View {
             // A record the app was launched with may have landed before this view.
             if let url = RecordInbox.take() { session.openRecord(at: url) }
             if DemoScript.isRequested() { await DemoScript.run(on: session) }
+            if let scene = ScreenshotScene.requested() { await ScreenshotScene.run(scene, on: session) }
         }
         // Here rather than in the game window, which only exists once KataGo is up:
         // the session holds the record until then.
