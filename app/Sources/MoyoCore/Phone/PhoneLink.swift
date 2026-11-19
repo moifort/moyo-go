@@ -78,13 +78,16 @@ public final class PhoneLink {
         hostNames[service] ?? Self.displayName(service)
     }
 
+    var isSearching: Bool { browser != nil }
+
     /// Starts looking for phones, without connecting. Does nothing if already looking.
     public func startDiscovery() {
         guard browser == nil else { return }
         let browser = NWBrowser(for: .bonjour(type: Self.serviceType, domain: nil), using: .tcp)
-        browser.stateUpdateHandler = { [weak self] state in
+        browser.stateUpdateHandler = { [weak self, weak browser] state in
             Task { @MainActor [weak self] in
-                if case .failed(let error) = state { self?.status = .failed(error.localizedDescription) }
+                guard let self, let browser, self.browser === browser else { return }
+                if case .failed(let error) = state { self.searchFailed(error.localizedDescription) }
             }
         }
         browser.browseResultsChangedHandler = { [weak self] results, _ in
@@ -92,6 +95,14 @@ public final class PhoneLink {
         }
         self.browser = browser
         browser.start(queue: queue)
+    }
+
+    /// The search failed — local network refused, typically. It is dropped, so the
+    /// next `startDiscovery`, behind "Réessayer", starts a fresh one.
+    func searchFailed(_ message: String) {
+        browser?.cancel()
+        browser = nil
+        status = .failed(message)
     }
 
     /// Connects to the phone behind that service, or to the one chosen last.
@@ -164,6 +175,12 @@ public final class PhoneLink {
                 case .failed(let error):
                     self.connection = nil
                     self.status = .failed(error.localizedDescription)
+                case .waiting(let error):
+                    // The phone cannot be reached as things stand: rather than
+                    // "Connexion à…" for ever, say so, and let "Réessayer" try again.
+                    self.connection = nil
+                    connection.cancel()
+                    self.status = .failed("\(self.name(of: service)) est injoignable : \(error.localizedDescription)")
                 case .cancelled:
                     self.connectionDropped()
                 default: break
@@ -201,9 +218,19 @@ public final class PhoneLink {
         }
     }
 
+    /// No line of the protocol comes near this: a peer that never sends a newline
+    /// has its bytes dropped rather than piling up.
+    static let maximumLine = 1_024 * 1_024
+
+    var bufferedBytes: Int { buffer.count }
+
     /// Splits the stream on newlines; a partial line waits for the rest.
     func consume(_ data: Data) {
         buffer.append(data)
+        if buffer.count > Self.maximumLine, !buffer.contains(UInt8(ascii: "\n")) {
+            buffer.removeAll()
+            return
+        }
         while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
             let line = String(decoding: buffer[buffer.startIndex..<newline], as: UTF8.self)
             buffer.removeSubrange(buffer.startIndex...newline)
