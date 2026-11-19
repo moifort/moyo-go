@@ -8,6 +8,10 @@ import Foundation
 public enum ScreenshotScene {
     public static let flag = "--scene"
 
+    /// An intersection the board treats as hovered from the start: a screenshot has
+    /// no pointer to put there.
+    @MainActor static var hover: Point?
+
     public static func requested(in arguments: [String] = CommandLine.arguments) -> String? {
         guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }
         return arguments[index + 1]
@@ -49,6 +53,9 @@ public enum ScreenshotScene {
         case "stopped":
             play(state(status: "playing"))
             session.bridgeDidStop()
+        case "ghost":
+            hover = Point(row: 3, col: 3)
+            play(state(status: "playing"))
         default:
             play(state(status: "playing"))
         }

@@ -12,7 +12,8 @@ public struct BoardView: View {
     /// following. A zone the player drew stays visible either way.
     public let showsLocal: Bool
 
-    /// The intersection under the pointer, for the caption of a proposed move.
+    /// The intersection under the pointer: the caption of a proposed move, and the
+    /// translucent stone where a click would place one.
     @State private var hovered: Point?
     /// The corners of the drag under way, snapped to the intersections.
     @State private var draft: (start: Point, end: Point)?
@@ -167,6 +168,9 @@ public struct BoardView: View {
         drawGrid(in: &context, geometry: geometry)
         drawStarPoints(in: &context, geometry: geometry)
         drawStones(in: &context, geometry: geometry)
+        if let ghost = state.ghostStone(at: hovered ?? ScreenshotScene.hover, interactive: isInteractive), draft == nil {
+            drawGhost(ghost, in: &context, geometry: geometry)
+        }
         if let scoring = state.scoring {
             drawTerritory(in: &context, geometry: geometry, points: scoring.points)
         } else {
@@ -387,6 +391,20 @@ public struct BoardView: View {
         }
     }
 
+    /// Where the stone would land, translucent: the colour to play, on the empty
+    /// intersection under the pointer.
+    private func drawGhost(_ stone: Stone, in context: inout GraphicsContext, geometry: BoardGeometry) {
+        let radius = geometry.stoneRadius
+        let center = geometry.position(row: stone.row, col: stone.col)
+        let path = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+        context.fill(path, with: .color(Theme.stone(stone.color).opacity(0.45)))
+        context.stroke(
+            path,
+            with: .color(Theme.stoneEdge(stone.color).opacity(0.45)),
+            lineWidth: geometry.step * (stone.color == .black ? 0.5 : 0.8) / 28
+        )
+    }
+
     private func drawLastMove(in context: inout GraphicsContext, geometry: BoardGeometry) {
         guard let last = state.lastMove,
             let stone = state.stones.first(where: { $0.row == last.row && $0.col == last.col })
@@ -402,5 +420,16 @@ public struct BoardView: View {
             with: .color(Theme.lastMoveMarker(on: stone.color)),
             lineWidth: max(0.8, geometry.stoneRadius * 0.10)
         )
+    }
+}
+
+extension GameState {
+    /// The stone a click on `point` would place, to show under the pointer: none on a
+    /// stone, none when a click places nothing, and none while counting, where a
+    /// click marks a group instead.
+    func ghostStone(at point: Point?, interactive: Bool) -> Stone? {
+        guard interactive, status != .scoring, let point else { return nil }
+        guard !stones.contains(where: { $0.point == point }) else { return nil }
+        return Stone(row: point.row, col: point.col, color: toPlay)
     }
 }
