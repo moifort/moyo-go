@@ -10,7 +10,19 @@ public final class GameSession {
     public enum Phase: Equatable {
         case starting
         case running
-        case failed(String)
+        case failed(EngineFailure)
+    }
+
+    /// Why there is no game on screen: an engine that never came up, or one that
+    /// stopped later on. The detail is the diagnostic, shown selectable.
+    public struct EngineFailure: Equatable, Sendable {
+        public enum Moment: Equatable, Sendable { case startup, stopped }
+        public let moment: Moment
+        public let detail: String
+
+        public var title: String {
+            moment == .startup ? "Le moteur n'a pas démarré" : "Le moteur s'est arrêté"
+        }
     }
 
     /// What the player chose last, carried across launches.
@@ -154,14 +166,23 @@ public final class GameSession {
     /// A game the bridge has turned into text, waiting for the save panel.
     public private(set) var pendingExport: SGFExport.Document?
 
-    private let bridge: BridgeProcess
+    private var bridge: BridgeProcess
+    private let makeBridge: () -> BridgeProcess
+    private let location: () -> BridgeLocation?
     private let store: SettingsStore
     private var nextCommandID = 1
     private var hasStarted = false
     private var eventTask: Task<Void, Never>?
 
-    public init(bridge: BridgeProcess = BridgeProcess(), store: SettingsStore = SettingsStore()) {
+    public init(
+        bridge: BridgeProcess = BridgeProcess(),
+        store: SettingsStore = SettingsStore(),
+        makeBridge: @escaping () -> BridgeProcess = { BridgeProcess() },
+        location: @escaping () -> BridgeLocation? = { BridgeLocation.resolve() }
+    ) {
         self.bridge = bridge
+        self.makeBridge = makeBridge
+        self.location = location
         self.store = store
         self.settings = store.load() ?? Settings()
         phone.onBoard = { [weak self] board in self?.phoneBoardDidChange(board) }
@@ -176,9 +197,12 @@ public final class GameSession {
         guard !hasStarted else { return }
         hasStarted = true
         phone.startDiscovery()
-        guard let location = BridgeLocation.resolve() else {
+        guard let location = location() else {
             phase = .failed(
-                "Emplacement du projet inconnu. Définissez MOYO_DEV_ROOT ou reconstruisez l'application."
+                EngineFailure(
+                    moment: .startup,
+                    detail: "Emplacement du projet inconnu. Définissez MOYO_DEV_ROOT ou reconstruisez l'application."
+                )
             )
             return
         }
@@ -193,10 +217,12 @@ public final class GameSession {
                 for await event in events {
                     self?.handle(event)
                 }
+                // A bridge replaced by a restart ends here too: that is no failure.
+                guard !Task.isCancelled else { return }
                 self?.bridgeDidStop()
             }
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(EngineFailure(moment: .startup, detail: error.localizedDescription))
         }
     }
 
@@ -205,11 +231,33 @@ public final class GameSession {
         bridge.stop()
     }
 
-    private func bridgeDidStop() {
-        guard case .failed = phase else {
-            phase = .failed("Le pont s'est arrêté. La partie en cours est perdue.")
-            return
-        }
+    /// The bridge's output ended. Internal so the tests can stop it.
+    func bridgeDidStop() {
+        if case .failed = phase { return }
+        phase = .failed(
+            phase == .running
+                ? EngineFailure(moment: .stopped, detail: "La partie en cours est perdue. Le journal du moteur dit pourquoi.")
+                : EngineFailure(moment: .startup, detail: "Le moteur s'est arrêté avant d'être prêt.")
+        )
+    }
+
+    /// Where the bridge writes its diagnostics, once it has been launched.
+    public var logURL: URL? { bridge.logURL }
+
+    /// Starts a new bridge in place of the one that stopped.
+    public func restartEngine() {
+        eventTask?.cancel()
+        eventTask = nil
+        bridge.stop()
+        bridge = makeBridge()
+        hasStarted = false
+        state = nil
+        tree = []
+        treeLayout = TreeLayout(nodes: [])
+        lastError = nil
+        thinking.ended()
+        phase = .starting
+        start()
     }
 
     // -- events --------------------------------------------------------------
@@ -269,7 +317,7 @@ public final class GameSession {
             }
 
         case .engineFailed(let message):
-            phase = .failed(message)
+            phase = .failed(EngineFailure(moment: .startup, detail: message))
 
         case .unknown:
             break

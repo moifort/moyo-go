@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 public struct RootView: View {
@@ -16,8 +17,8 @@ public struct RootView: View {
                 startup
             case .running:
                 GameWindow(session: session)
-            case .failed(let message):
-                failure(message)
+            case .failed(let failure):
+                self.failure(failure)
             }
         }
         .preferredColorScheme(.dark)
@@ -46,19 +47,29 @@ public struct RootView: View {
         .background(Theme.windowBackground)
     }
 
-    private func failure(_ message: String) -> some View {
+    private func failure(_ failure: GameSession.EngineFailure) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 30))
                 .foregroundStyle(Theme.secondaryText)
-            Text("Le moteur n'a pas démarré")
+            Text(failure.title)
                 .font(.system(size: 16, weight: .medium))
-            Text(message)
+            Text(failure.detail)
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
                 .textSelection(.enabled)
+            HStack(spacing: 10) {
+                Button("Relancer le moteur") { session.restartEngine() }
+                    .buttonStyle(.glassProminent)
+                if let log = session.logURL {
+                    Button("Afficher le journal") { NSWorkspace.shared.activateFileViewerSelecting([log]) }
+                        .buttonStyle(.glass)
+                }
+            }
+            .controlSize(.large)
+            .padding(.top, 6)
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
