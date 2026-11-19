@@ -14,6 +14,8 @@ final class BoardServer: @unchecked Sendable {
     private var newcomerLine: Data?
     /// Called on the server queue with the number of connected Macs.
     var onClientsChanged: ((Int) -> Void)?
+    /// Called on the server queue with why the Mac cannot see the phone, nil once it can.
+    var onAdvertisingProblem: ((String?) -> Void)?
 
     static let viewpointDefaultsKey = "moyoViewpoint"
     /// Whose seat Moyo shows the board from, chosen on the home screen.
@@ -23,9 +25,31 @@ final class BoardServer: @unchecked Sendable {
 
     func start() {
         queue.async { [self] in
-            guard listener == nil, let listener = try? NWListener(using: .tcp) else { return }
+            guard listener == nil else { return }
+            let listener: NWListener
+            do {
+                listener = try NWListener(using: .tcp)
+            } catch {
+                onAdvertisingProblem?(BoardBroadcast.advertisingProblem(error as? NWError ?? .posix(.EINVAL)))
+                return
+            }
             listener.service = NWListener.Service(name: "Kifu — \(UIDevice.current.name)", type: BoardBroadcast.serviceType)
             listener.newConnectionHandler = { [weak self] connection in self?.add(connection) }
+            listener.stateUpdateHandler = { [weak self, weak listener] state in
+                guard let self, let listener, self.listener === listener else { return }
+                switch state {
+                case .ready:
+                    self.onAdvertisingProblem?(nil)
+                case .waiting(let error):
+                    // Local network refused, typically: the listener waits for the user's say.
+                    self.onAdvertisingProblem?(BoardBroadcast.advertisingProblem(error))
+                case .failed(let error):
+                    self.onAdvertisingProblem?(BoardBroadcast.advertisingProblem(error))
+                    listener.cancel()
+                    self.listener = nil
+                default: break
+                }
+            }
             self.listener = listener
             listener.start(queue: queue)
         }
@@ -39,6 +63,7 @@ final class BoardServer: @unchecked Sendable {
             lastLine = nil
             newcomerLine = nil
             onClientsChanged?(0)
+            onAdvertisingProblem?(nil)
         }
     }
 
@@ -52,6 +77,16 @@ final class BoardServer: @unchecked Sendable {
             newcomerLine = newcomer
             guard data != lastLine else { return }
             lastLine = data
+            for c in connections where c.state == .ready {
+                c.send(content: data, completion: .contentProcessed { _ in })
+            }
+        }
+    }
+
+    /// Tells every Mac the game is over, so Moyo opens it as a record.
+    func announceEnd(result: GameResult) {
+        let data = BoardBroadcast.endLine(result: result)
+        queue.async { [self] in
             for c in connections where c.state == .ready {
                 c.send(content: data, completion: .contentProcessed { _ in })
             }

@@ -60,7 +60,8 @@ caractères, est ignorée.
 `result` est au format SGF (`RE[]`) et absent quand la partie s'est simplement
 terminée : le téléphone ne compte pas. Moyo ouvre alors la partie suivie comme un
 enregistrement en relecture, et la position suivante commence une nouvelle partie.
-Kifu n'envoie pas encore ce message (voir `TODO.md`).
+Kifu l'envoie quand on touche « Noir abandonne », « Blanc abandonne » ou « Partie
+terminée » (`BoardBroadcast.endLine`).
 
 ## Ce que Kifu envoie
 

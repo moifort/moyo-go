@@ -82,6 +82,8 @@ final class GameSession {
     var cancelled = false
     /// Macs running Moyo that follow the game.
     var connectedMacs = 0
+    /// Why Moyo cannot see this phone, shown while recording; nil when it can.
+    var advertisingProblem: String?
 
     private let worker = DispatchQueue(label: "Kifu.worker", qos: .userInitiated)
     private var camera: CameraSession?
@@ -107,6 +109,9 @@ final class GameSession {
         UIApplication.shared.isIdleTimerDisabled = true
         server.onClientsChanged = { [weak self] count in
             Task { @MainActor in self?.connectedMacs = count }
+        }
+        server.onAdvertisingProblem = { [weak self] problem in
+            Task { @MainActor in self?.advertisingProblem = problem }
         }
         server.start()
     }
@@ -312,6 +317,7 @@ final class GameSession {
 
     func endGame(_ result: GameResult) {
         self.result = result
+        server.announceEnd(result: result)
         worker.async {
             self.engine.recording = false
             self.engine.result = result

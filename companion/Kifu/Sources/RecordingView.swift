@@ -29,6 +29,15 @@ struct RecordingView: View {
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .background(.black.opacity(0.65), in: Capsule())
                 .foregroundStyle(.white)
+                if let problem = session.advertisingProblem {
+                    Label(problem, systemImage: "wifi.exclamationmark")
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .background(.red.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24)
+                }
             }
             .padding(.top, 8)
 

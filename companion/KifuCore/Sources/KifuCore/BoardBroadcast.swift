@@ -1,4 +1,6 @@
 import Foundation
+import Network
+import dnssd
 
 /// The line sent to Moyo on the Mac, in the format GoBoardVision already speaks:
 /// `{"size":19,"rows":["X..", ...],"status":"locked"}` and a newline, row 0 at the top.
@@ -72,6 +74,26 @@ public enum BoardBroadcast {
             return move
         }
         return ["setup": ["B": record.setupBlack.map(wire), "W": record.setupWhite.map(wire)], "moves": moves]
+    }
+
+    /// The game is over: `{"end":true,"result":"W+R"}`, `result` absent when the game was
+    /// simply played out, since the phone does not count. Moyo opens the game it followed
+    /// as a record, and the next position starts a new game.
+    public static func endLine(result: GameResult) -> Data {
+        var payload: [String: Any] = ["end": true]
+        if let value = result.sgfValue { payload["result"] = value }
+        var data = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
+        data.append(UInt8(ascii: "\n"))
+        return data
+    }
+
+    /// Why the Mac cannot see the phone, said on the recording screen: without it, a refused
+    /// local network leaves Moyo empty-handed and Kifu silent.
+    public static func advertisingProblem(_ error: NWError) -> String {
+        if case .dns(let code) = error, code == DNSServiceErrorType(kDNSServiceErr_PolicyDenied) {
+            return "Moyo ne peut pas voir ce téléphone : autorise Kifu dans Réglages › Confidentialité › Réseau local."
+        }
+        return "Moyo ne peut pas voir ce téléphone : \(error.localizedDescription)"
     }
 
     /// "locked" when the board matches the record, "uncertain" while the referee waits.

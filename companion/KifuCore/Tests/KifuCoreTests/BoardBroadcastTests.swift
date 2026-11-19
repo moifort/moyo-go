@@ -114,4 +114,21 @@ final class BoardBroadcastTests: XCTestCase {
         XCTAssertEqual(BoardBroadcast.statusName(.pending), "uncertain")
         XCTAssertEqual(BoardBroadcast.statusName(.awaitingCaptureRemoval), "uncertain")
     }
+
+    /// The end of the game, as Moyo's `PhoneGameEnd` reads it (docs/protocol.md).
+    func testEndLineCarriesTheResultInSGFForm() throws {
+        struct End: Decodable { let end: Bool; let result: String? }
+        let data = BoardBroadcast.endLine(result: .blackResigned)
+        XCTAssertEqual(data.last, UInt8(ascii: "\n"))
+        let wire = try JSONDecoder().decode(End.self, from: data.dropLast())
+        XCTAssertTrue(wire.end)
+        XCTAssertEqual(wire.result, "W+R")
+    }
+
+    func testEndLineOfAGamePlayedOutHasNoResult() throws {
+        let data = BoardBroadcast.endLine(result: .finished)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data.dropLast()) as? [String: Any])
+        XCTAssertEqual(object["end"] as? Bool, true)
+        XCTAssertNil(object["result"])
+    }
 }
