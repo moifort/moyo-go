@@ -70,6 +70,7 @@ def game_info(root) -> Dict[str, Any]:
         "result": text("RE"),
         "date": text("DT"),
         "event": text("EV"),
+        "game_name": text("GN"),
     }
 
 

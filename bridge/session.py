@@ -621,7 +621,7 @@ class BridgeSession(KaTrainHost):
         self._record_command = command_id
         self._show(self._line[-1], command_id)
 
-    def export_sgf(self, command_id, black_name, white_name):
+    def export_sgf(self, command_id, black_name, white_name, reason="export"):
         """Hands the game over as SGF text, for the app to write where the player chose.
 
         What goes out is what the tree shows: the line of the game, the branches the
@@ -629,24 +629,102 @@ class BridgeSession(KaTrainHost):
         variation being walked, which is how a reading of KataGo's is kept. Moves
         taken back against the AI, and the corrections made while following the
         real board, stay in KaTrain's tree but were never part of the game.
+
+        `reason` says who asked: the save panel ("export") or the library
+        ("autosave"), which keeps every game as it goes. Either way the answer
+        carries what the library shows of the game without reading the record: the
+        position at the end of its line, its length, how much of it KataGo has
+        read, and what the record says about it.
         """
         self._require_game()
+        if reason not in ("export", "autosave"):
+            raise CommandError("bad_arguments", f"unknown export reason '{reason}'")
         nodes = self._visible_nodes()
-        if self._status == "review":
-            text = record.text(self.game.root, nodes=nodes)
-        else:
-            text = record.text(
-                self.game.root,
-                nodes=nodes,
-                properties={
-                    "AP": "Moyo",
-                    "DT": record.sgf_date(self.game.root.get_property("DT", None)),
-                    "PB": black_name or None,
-                    "PW": white_name or None,
-                    "RE": self._live_node().end_state or None,
-                },
-            )
-        self._writer.emit("sgf", command_id, contents=text)
+        overrides: Dict[str, Any] = {}
+        if self._status != "review":
+            overrides = {
+                "AP": "Moyo",
+                "DT": record.sgf_date(self.game.root.get_property("DT", None)),
+                "PB": black_name or None,
+                "PW": white_name or None,
+                # Only a game over has a result: one under way, or being counted,
+                # goes out without, which is also what lets it be resumed.
+                "RE": self._live_node().end_state or None,
+            }
+        text = record.text(self.game.root, nodes=nodes, properties=overrides or None)
+        line = self._main_line()
+        info = review.game_info(self.game.root)
+        for key, name in (("PB", "black_name"), ("PW", "white_name"), ("RE", "result")):
+            if key in overrides:
+                info[name] = overrides[key]
+        self._writer.emit(
+            "sgf",
+            command_id,
+            contents=text,
+            reason=reason,
+            final_board=self._board_at(line[-1]),
+            move_count=len(line) - 1,
+            analysed={
+                "done": sum(1 for node in line if node.analysis_complete or node.analysis_from_sgf),
+                "total": len(line),
+            },
+            game_info=info,
+        )
+
+    def _board_at(self, node) -> Dict[str, Any]:
+        """The stones at a node of the tree, wherever the board on screen stands."""
+        here = self.game.current_node
+        if node is here:
+            return serialize.board_text(self._size(), serialize.stone_map(self.game))
+        self.game.set_current_node(node)
+        try:
+            return serialize.board_text(self._size(), serialize.stone_map(self.game))
+        finally:
+            self.game.set_current_node(here)
+
+    def continue_game(self, command_id, contents, human_color, ai_strategy, ai_settings):
+        """Picks up a game against the AI from the record the library kept of it.
+
+        Read like a record, then played on: the end of its main line is the
+        position on the board, the player keeps their colour and the AI its mode,
+        and whoever is to move moves — the AI at once, if it is its turn. A line
+        ending on two passes was being counted, and is counted again. The branches
+        the player built in analysis come back as theirs. A record with a result
+        is a game over, and is refused: it is read, not resumed.
+        """
+        if self._engine is None:
+            raise CommandError("no_engine", "engine not started")
+        root = review.parse(contents)
+        if review.game_info(root)["result"]:
+            raise CommandError("finished", "cette partie est terminée")
+        self._human_color = human_color
+        self.players_info[human_color].update(PLAYER_HUMAN, PLAYING_NORMAL)
+        self.players_info[self._ai_color].update(PLAYER_AI, ai_strategy)
+        if ai_settings and self.config(f"ai/{ai_strategy}") is not None:
+            self.config(f"ai/{ai_strategy}").update(ai_settings)
+        self._clear_review()
+        self._clear_tree()
+        self._emitted_scores.clear()
+        self._dead = set()
+        self._ai_pending = False
+        self._status = "playing"
+        self.game = Game(self, self._engine, move_tree=root)
+        line = review.main_line(self.game.root)
+        on_line = {id(node) for node in line}
+        for node in self.game.root.nodes_in_tree:
+            if id(node) not in on_line:
+                self._analysis_nodes[id(node)] = node
+        self.game.set_current_node(line[-1])
+        self._boost_window()
+        if self._two_passes_played():
+            self._enter_scoring()
+            self._emit_state(command_id)
+            return
+        self._ai_pending = self.players_info[self.game.current_node.next_player].ai
+        if self._ai_pending:
+            self._writer.emit("thinking", None, value=True)
+        self._emit_state(command_id)
+        self._maybe_play_ai_move()
 
     def goto(self, command_id, move_number):
         """Jumps to a position in the line of the game. Out-of-range asks are clamped."""

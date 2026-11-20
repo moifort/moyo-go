@@ -53,7 +53,20 @@ def _dispatch(session: BridgeSession, writer: EventWriter, command: Dict[str, An
         )
     elif name == "export_sgf":
         session.submit(
-            session.export_sgf, command_id, command.get("black_name"), command.get("white_name")
+            session.export_sgf,
+            command_id,
+            command.get("black_name"),
+            command.get("white_name"),
+            command.get("reason") or "export",
+        )
+    elif name == "continue_game":
+        session.submit(
+            session.continue_game,
+            command_id,
+            command["contents"],
+            command.get("human_color", "B"),
+            command.get("ai_strategy", "ai:human"),
+            command.get("ai_settings") or {},
         )
     elif name == "goto":
         session.submit(session.goto, command_id, int(command["move_number"]))

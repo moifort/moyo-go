@@ -139,3 +139,15 @@ def count(scoring: Dict[str, Any], dead: Optional[List[tuple]]) -> Dict[str, Any
         "points": scoring["points"],
         "dead_stones": [{"row": r, "col": c} for r, c in sorted(dead or [])],
     }
+
+
+def board_text(size: int, placed: Dict[tuple, str]) -> Dict[str, Any]:
+    """A position as one line of text: `size` rows of `size` points, top row first.
+
+    `.` for an empty point, `b` and `w` for the stones. The app draws the library's
+    thumbnails from it without an engine, and stores it next to the record.
+    """
+    cells = ["."] * (size * size)
+    for (row, col), color in placed.items():
+        cells[row * size + col] = "b" if color == "B" else "w"
+    return {"size": size, "stones": "".join(cells)}
