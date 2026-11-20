@@ -137,6 +137,9 @@ public final class GameSession {
     /// How far KataGo has got through a record under review, nil when it is done
     /// or when no record is open.
     public private(set) var analysisProgress: (done: Int, total: Int)?
+    /// How many positions KataGo has read, kept after it is done: the library
+    /// writes the record again each time it moves.
+    private var analysisDone: Int?
 
     /// The record's file name, for the window title.
     public private(set) var recordName: String?
@@ -154,11 +157,56 @@ public final class GameSession {
     /// A record that arrived before the engine was ready, read while its sandbox
     /// grant was live and held until the bridge can take it.
     private var recordWaiting: SGFImport.Record?
+    private var recordWaitingEntry: (id: UUID?, kind: LibraryEntry.Kind, hash: String?) = (nil, .record, nil)
 
     var hasRecordWaiting: Bool { recordWaiting != nil }
 
     /// A game the bridge has turned into text, waiting for the save panel.
     public private(set) var pendingExport: SGFExport.Document?
+
+    // -- the library ------------------------------------------------------------
+
+    /// Every game played, reviewed or followed, kept as it goes.
+    public let library: GameLibrary
+
+    /// The window shows the library rather than the game. Going back to it leaves
+    /// the game where it stands in the engine.
+    public var isShowingLibrary = true
+
+    /// The library's game the session is holding, drawn at each start: a new game,
+    /// a record opened, a game followed — and each next game the phone chains.
+    struct EntryContext: Equatable {
+        let id: UUID
+        let kind: LibraryEntry.Kind
+        let createdAt: Date
+        let sourceHash: String?
+    }
+
+    private(set) var currentEntry: EntryContext?
+    public var currentEntryID: UUID? { currentEntry?.id }
+
+    /// What an autosave asked for, kept until the bridge's answer: by then the
+    /// session may already hold another game.
+    private struct AutosaveRequest {
+        let entry: EntryContext
+        let status: LibraryEntry.Status
+        let komi: Double
+        let humanColor: PlayerColor?
+        let aiStrategy: String?
+        let aiSettingValue: Double?
+    }
+
+    private var autosaves: [Int: AutosaveRequest] = [:]
+    private var autosaveTask: Task<Void, Never>?
+    /// The shape of the work when it was last sent to the library.
+    private var autosavedWork: String?
+    /// The record last written for each game: an answer that says the same thing
+    /// again changes nothing, and does not move the game up the grid.
+    private var written: [UUID: String] = [:]
+    /// How long changes are gathered before the game is written.
+    var autosaveDelay: Duration = .seconds(2)
+    /// Waiting for the last autosaves before the app quits.
+    private var quitting: [() -> Void] = []
 
     private var bridge: BridgeProcess
     private let makeBridge: () -> BridgeProcess
@@ -172,8 +220,10 @@ public final class GameSession {
         bridge: BridgeProcess = BridgeProcess(),
         store: SettingsStore = SettingsStore(),
         makeBridge: @escaping () -> BridgeProcess = { BridgeProcess() },
-        location: @escaping () -> BridgeLocation? = { BridgeLocation.resolve() }
+        location: @escaping () -> BridgeLocation? = { BridgeLocation.resolve() },
+        library: GameLibrary = GameLibrary(directory: nil)
     ) {
+        self.library = library
         self.bridge = bridge
         self.makeBridge = makeBridge
         self.location = location
@@ -267,17 +317,19 @@ public final class GameSession {
             // player came for, so it takes the place of the opening game.
             if let record = recordWaiting {
                 recordWaiting = nil
-                load(record)
+                load(record, entry: recordWaitingEntry)
             } else {
-                newGame()
+                startNewGame()
             }
 
         case .state(_, let newState):
             apply(newState)
+            workDidChange()
 
         case .tree(let nodes):
             tree = nodes
             treeLayout = TreeLayout(nodes: nodes)
+            workDidChange()
 
         case .thinking(let value):
             value ? thinking.began() : thinking.ended()
@@ -287,11 +339,20 @@ public final class GameSession {
 
         case .analysisProgress(let done, let total):
             analysisProgress = done >= total ? nil : (done, total)
+            analysisDone = done
+            workDidChange()
 
-        case .sgf(_, let contents):
+        case .sgf(let id, let answer):
+            if answer.reason == .autosave {
+                if let id, let request = autosaves.removeValue(forKey: id) {
+                    keep(answer, for: request)
+                }
+                if autosaves.isEmpty { finishQuitting() }
+                break
+            }
             pendingExport = SGFExport.Document(
                 name: SGFExport.suggestedName(recordName: isReviewing ? recordName : nil, date: .now),
-                contents: contents
+                contents: answer.contents
             )
 
         case .recordAnalysed(let id, let contents):
@@ -371,75 +432,33 @@ public final class GameSession {
         case follow
     }
 
-    /// Waiting for the player's answer: save first, replace, or cancel.
-    public private(set) var pendingReplacement: Replacement?
-    public var isConfirmingReplacement: Bool { pendingReplacement != nil }
-
-    /// The save panel is open for the work about to be replaced.
-    private var replacesAfterExport = false
-    public var isSavingBeforeReplacement: Bool { replacesAfterExport }
-    /// The save panel wrote the file it was opened for.
-    private var exportWritten = false
-    /// The shape of the work when it was last saved: unchanged since, it is safe.
-    private var savedWork: String?
-
     /// What changes when the player adds to the work: moves played, nodes added.
     private var workSignature: String? {
         guard let state else { return nil }
         return "\(state.status)|\(state.moveCount ?? state.moveNumber)|\(tree.count)"
     }
 
-    /// A game against the AI under way, or an analysis holding variations of the
-    /// player's own, not saved since its last change.
-    public var hasWorkToProtect: Bool {
-        guard let state, !isFollowing, workSignature != savedWork else { return false }
-        if hasGameInProgress { return true }
-        return state.isAnalysing && tree.contains { $0.origin == .analysis }
-    }
-
+    /// Nothing is ever lost by replacing the work on screen: the library keeps it.
+    /// Its last state goes to the bridge first, and the bridge answers in order, so
+    /// the record is written before anything replaces it.
     private func replaceOrAsk(_ replacement: Replacement) {
-        if hasWorkToProtect {
-            pendingReplacement = replacement
-        } else {
-            perform(replacement)
-        }
+        perform(replacement)
     }
 
     private func perform(_ replacement: Replacement) {
         switch replacement {
         case .newGame: newGame()
-        case .record(let record): load(record)
+        case .record(let record): open(record)
         case .follow: choosePhone()
         }
     }
 
-    /// The player chose to give up the work on screen.
-    public func replace() {
-        guard let replacement = pendingReplacement else { return }
-        pendingReplacement = nil
-        perform(replacement)
-    }
-
-    public func cancelReplacement() {
-        pendingReplacement = nil
-        replacesAfterExport = false
-    }
-
-    /// Saves the work on screen; once written, what was asked for replaces it.
-    /// A save panel dismissed replaces nothing.
-    public func saveThenReplace() {
-        guard pendingReplacement != nil else { return }
-        replacesAfterExport = true
-        exportWritten = false
-        exportRecord()
-    }
-
-    /// The sheet's "Commencer": a new game, once the work on screen is safe.
+    /// The sheet's "Commencer": a new game, the one on screen kept in the library.
     public func requestNewGame() {
         replaceOrAsk(.newGame)
     }
 
-    /// A record read from disk, opened once the work on screen is safe.
+    /// A record read from disk, opened in place of the work on screen.
     public func requestOpening(_ record: SGFImport.Record) {
         replaceOrAsk(.record(record))
     }
@@ -449,8 +468,8 @@ public final class GameSession {
     /// start — a game recorded halfway is joined where it stands.
     func startFollowing(phone service: String) {
         guard phase == .running else { return }
-        pendingReplacement = nil
         isFollowing = true
+        isShowingLibrary = false
         beginFollowedGame(size: 19)
         phone.connect(to: service)
     }
@@ -473,6 +492,8 @@ public final class GameSession {
     }
 
     private func beginFollowedGame(size: Int) {
+        flushAutosave()
+        beginEntry(.kifu)
         followedGameEnded = false
         scoreByMove.removeAll()
         state = nil
@@ -523,8 +544,18 @@ public final class GameSession {
         return nextCommandID
     }
 
+    /// A new game against KataGo, on screen.
     public func newGame() {
+        startNewGame()
+        isShowingLibrary = false
+    }
+
+    /// A new game against KataGo, wherever the window is: the one the engine opens
+    /// on waits behind the library until the player asks for it.
+    private func startNewGame() {
+        flushAutosave()
         stopFollowing(openingRecord: false)
+        beginEntry(.ai)
         store.save(settings)
         scoreByMove.removeAll()
         state = nil
@@ -703,8 +734,24 @@ public final class GameSession {
         }
     }
 
+    /// A record read from disk. The same text opened before is the same game: it
+    /// reopens from the library's record, with its branches and its analysis.
+    private func open(_ record: SGFImport.Record) {
+        let hash = GameLibrary.fingerprint(record.contents)
+        if let entry = library.entry(sourceHash: hash), let kept = library.contents(of: entry.id) {
+            written[entry.id] = kept
+            load(SGFImport.Record(name: record.name, contents: kept), entry: (entry.id, entry.kind, hash))
+        } else {
+            load(record, entry: (nil, .record, hash))
+        }
+    }
+
     /// Hands a record to the bridge, or holds it until the bridge is ready for one.
-    private func load(_ record: SGFImport.Record) {
+    /// `entry` is the library's game it belongs to: an existing one, or a new one
+    /// of that kind.
+    private func load(_ record: SGFImport.Record, entry: (id: UUID?, kind: LibraryEntry.Kind, hash: String?)) {
+        flushAutosave()
+        isShowingLibrary = false
         stopFollowing(openingRecord: false)
         scoreByMove.removeAll()
         analysisProgress = nil
@@ -714,8 +761,10 @@ public final class GameSession {
         thinking.ended()
         guard phase == .running else {
             recordWaiting = record
+            recordWaitingEntry = entry
             return
         }
+        beginEntry(entry.kind, reusing: entry.id, sourceHash: entry.hash)
         let command = nextID()
         if record.url != nil { openedRecord = (record, command) }
         bridge.send(.loadSGF(id: command, name: record.name, contents: record.contents))
@@ -730,26 +779,25 @@ public final class GameSession {
     /// mode. A record under review keeps the names it came with.
     public func exportRecord() {
         guard canExport else { return }
-        var black: String?
-        var white: String?
-        if !isReviewing, !isFollowing, let state {
-            let mode = currentMode
-            let players = SGFExport.players(
-                humanColor: state.humanColor,
-                human: NSFullUserName(),
-                ai: SGFExport.aiName(mode: mode, value: settingValue(for: mode))
-            )
-            (black, white) = (players.black, players.white)
-        }
-        bridge.send(.exportSGF(id: nextID(), blackName: black, whiteName: white))
+        let players = signingNames
+        bridge.send(.exportSGF(id: nextID(), blackName: players.black, whiteName: players.white))
+    }
+
+    /// Who signs a game against the AI. A record keeps its own names.
+    private var signingNames: (black: String?, white: String?) {
+        guard !isReviewing, !isFollowing, state?.isFollowing != true, let state else { return (nil, nil) }
+        let mode = currentMode
+        return SGFExport.players(
+            humanColor: state.humanColor,
+            human: NSFullUserName(),
+            ai: SGFExport.aiName(mode: mode, value: settingValue(for: mode))
+        )
     }
 
     /// The player saved the game themselves. Over the record's own file, that save
     /// is the one to keep — it may carry the variation being walked — so the
     /// analysis is no longer written there behind their back.
     public func recordSaved(to url: URL) {
-        exportWritten = true
-        savedWork = workSignature
         guard let opened = openedRecord?.record.url else { return }
         if opened.standardizedFileURL.path == url.standardizedFileURL.path {
             openedRecord = nil
@@ -759,13 +807,6 @@ public final class GameSession {
     /// The save panel is done with the document, written or not.
     public func exportHandled() {
         pendingExport = nil
-        guard replacesAfterExport else { return }
-        replacesAfterExport = false
-        if exportWritten {
-            replace()
-        } else {
-            pendingReplacement = nil
-        }
     }
 
     /// Moves to a position in the line of the game. The bridge clamps anything out
@@ -915,5 +956,241 @@ public final class GameSession {
     public var canPlace: Bool {
         guard phase == .running, let state else { return false }
         return canAct || state.isAnalysing || state.status == .following
+    }
+
+    // -- the library ------------------------------------------------------------
+
+    /// A new game for the library, or one it already holds picked up again.
+    private func beginEntry(_ kind: LibraryEntry.Kind, reusing id: UUID? = nil, sourceHash: String? = nil) {
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        autosavedWork = nil
+        analysisDone = nil
+        let existing = id.flatMap(library.entry)
+        currentEntry = EntryContext(
+            id: existing?.id ?? id ?? UUID(),
+            kind: existing?.kind ?? kind,
+            createdAt: existing?.createdAt ?? .now,
+            sourceHash: existing?.sourceHash ?? sourceHash
+        )
+    }
+
+    /// What the library writes again when it changes: the work itself, and how far
+    /// KataGo has read it.
+    private var autosaveSignature: String? {
+        guard let work = workSignature else { return nil }
+        return "\(work)|\(analysisDone ?? -1)"
+    }
+
+    /// A game against KataGo or a game followed is worth keeping from its first
+    /// move; a record, from the moment it is open.
+    private var isWorthKeeping: Bool {
+        guard let state, let entry = currentEntry else { return false }
+        return entry.kind == .record || (state.moveCount ?? state.moveNumber) > 0
+    }
+
+    /// The work changed: it is written once the changes settle, at once when the
+    /// game has just ended.
+    private func workDidChange() {
+        guard currentEntry != nil, let signature = autosaveSignature, signature != autosavedWork,
+              isWorthKeeping
+        else { return }
+        if state?.status == .finished, autosavedWork?.hasPrefix("\(GameStatus.finished)|") != true {
+            flushAutosave()
+            return
+        }
+        guard autosaveTask == nil else { return }
+        let delay = autosaveDelay
+        autosaveTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.autosaveTask = nil
+            self?.flushAutosave()
+        }
+    }
+
+    /// Asks the bridge for the game as it stands, for the library. Returns whether
+    /// an answer is on its way.
+    @discardableResult
+    func flushAutosave() -> Bool {
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        guard phase == .running, let entry = currentEntry, let state, let signature = autosaveSignature,
+              signature != autosavedWork, isWorthKeeping
+        else { return false }
+        autosavedWork = signature
+        let status: LibraryEntry.Status
+        switch entry.kind {
+        case .ai: status = state.status == .finished ? .finished : .inProgress
+        case .kifu: status = state.isFollowing ? .inProgress : .finished
+        case .record: status = .finished
+        }
+        let mode = currentMode
+        let players = signingNames(for: entry)
+        let command = nextID()
+        autosaves[command] = AutosaveRequest(
+            entry: entry,
+            status: status,
+            komi: state.komi ?? settings.komi,
+            humanColor: entry.kind == .ai ? state.humanColor : nil,
+            aiStrategy: entry.kind == .ai ? (state.aiStrategy ?? settings.aiStrategy) : nil,
+            aiSettingValue: entry.kind == .ai ? settingValue(for: mode) : nil
+        )
+        bridge.send(.exportSGF(id: command, blackName: players.black, whiteName: players.white, autosave: true))
+        return true
+    }
+
+    private func signingNames(for entry: EntryContext) -> (black: String?, white: String?) {
+        entry.kind == .ai && state?.isReviewing != true ? signingNames : (nil, nil)
+    }
+
+    /// Writes what the bridge answered to an autosave.
+    private func keep(_ answer: SGFAnswer, for request: AutosaveRequest) {
+        let id = request.entry.id
+        let previous = library.entry(id)
+        if previous != nil, written[id] == answer.contents { return }
+        let info = answer.gameInfo
+        let size = answer.finalBoard?.size ?? previous?.size ?? state?.size ?? settings.size
+        let entry = LibraryEntry(
+            id: id,
+            kind: request.entry.kind,
+            createdAt: request.entry.createdAt,
+            updatedAt: .now,
+            size: size,
+            komi: request.komi,
+            blackName: info?.blackName ?? previous?.blackName,
+            whiteName: info?.whiteName ?? previous?.whiteName,
+            humanColor: request.humanColor ?? previous?.humanColor,
+            aiStrategy: request.aiStrategy ?? previous?.aiStrategy,
+            aiSettingValue: request.aiSettingValue ?? previous?.aiSettingValue,
+            result: info?.result,
+            moveCount: answer.moveCount ?? previous?.moveCount ?? 0,
+            status: request.status,
+            analysis: answer.analysed.map { LibraryEntry.Analysis(done: $0.done, total: $0.total) }
+                ?? previous?.analysis ?? .none,
+            finalBoard: answer.finalBoard ?? previous?.finalBoard ?? .empty(size: size),
+            sourceHash: request.entry.sourceHash,
+            title: request.entry.kind == .ai ? nil : (info?.gameName ?? info?.event)
+        )
+        do {
+            try library.save(entry, contents: answer.contents)
+            written[id] = answer.contents
+        } catch {
+            lastError = SessionError(kind: .saving, message: error.localizedDescription)
+        }
+    }
+
+    /// The app is about to quit: the game on screen is written first. `done` is
+    /// called once it is, or after two seconds whatever happens.
+    public func prepareToQuit(_ done: @escaping () -> Void) {
+        flushAutosave()
+        guard !autosaves.isEmpty else {
+            done()
+            return
+        }
+        quitting.append(done)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            self?.finishQuitting()
+        }
+    }
+
+    private func finishQuitting() {
+        let waiting = quitting
+        quitting = []
+        waiting.forEach { $0() }
+    }
+
+    /// Back to the grid. The game stays where it is in the engine; it is written
+    /// now, so its card is up to date.
+    public func showLibrary() {
+        flushAutosave()
+        isShowingLibrary = true
+    }
+
+    /// The game the engine holds, when it is a game against KataGo still under way.
+    public var liveEntry: LibraryEntry? {
+        guard let id = currentEntryID, let state, state.status == .playing || state.status == .scoring,
+              currentEntry?.kind == .ai
+        else { return nil }
+        return library.entry(id)
+    }
+
+    /// Whether a card is the game the engine holds right now.
+    public func isOnScreen(_ entry: LibraryEntry) -> Bool {
+        entry.id == currentEntryID && state != nil
+    }
+
+    /// A card was opened: the game on screen if it is that one, a game against
+    /// KataGo picked up where it was left, anything else read from its record.
+    public func open(_ entry: LibraryEntry) {
+        guard phase == .running else { return }
+        if isOnScreen(entry) {
+            isShowingLibrary = false
+            return
+        }
+        guard let contents = library.contents(of: entry.id) else {
+            lastError = SessionError(kind: .opening, message: "Le fichier de cette partie est introuvable.")
+            return
+        }
+        written[entry.id] = contents
+        guard entry.canResume, let color = entry.humanColor else {
+            load(
+                SGFImport.Record(name: entry.displayTitle, contents: contents),
+                entry: (entry.id, entry.kind, entry.sourceHash)
+            )
+            return
+        }
+        flushAutosave()
+        stopFollowing(openingRecord: false)
+        beginEntry(.ai, reusing: entry.id)
+        isShowingLibrary = false
+        scoreByMove.removeAll()
+        state = nil
+        lastError = nil
+        recordName = nil
+        openedRecord = nil
+        analysisProgress = nil
+        let strategy = entry.aiStrategy ?? settings.aiStrategy
+        var payload: [String: Double] = [:]
+        if let setting = AIMode.mode(for: strategy).setting, let value = entry.aiSettingValue {
+            payload[setting.key] = value
+        }
+        bridge.send(
+            .continueGame(id: nextID(), contents: contents, humanColor: color, aiStrategy: strategy, aiSettings: payload)
+        )
+    }
+
+    /// The game the engine holds while it is played or followed cannot go: the
+    /// library would write it straight back.
+    public func canDelete(_ entry: LibraryEntry) -> Bool {
+        !(entry.id == currentEntryID && state?.hasLiveGame == true)
+    }
+
+    /// Removes a game from the library for good. A game on screen but over stays on
+    /// screen, no longer kept.
+    public func delete(_ entry: LibraryEntry) {
+        guard canDelete(entry) else { return }
+        if entry.id == currentEntryID {
+            autosaveTask?.cancel()
+            autosaveTask = nil
+            currentEntry = nil
+        }
+        written[entry.id] = nil
+        do {
+            try library.delete(entry.id)
+        } catch {
+            lastError = SessionError(kind: .saving, message: error.localizedDescription)
+        }
+    }
+
+    /// "Exporter en SGF…" on a card: the record kept, through the save panel.
+    public func export(_ entry: LibraryEntry) {
+        guard let contents = library.contents(of: entry.id) else { return }
+        let name = entry.kind == .ai ? nil : entry.displayTitle
+        pendingExport = SGFExport.Document(
+            name: SGFExport.suggestedName(recordName: name, date: entry.createdAt),
+            contents: contents
+        )
     }
 }

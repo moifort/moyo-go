@@ -1,7 +1,9 @@
 import Foundation
 
 /// Puts the window in a given state at launch, for the screenshots that check a
-/// change: `--scene scoring`, `--scene replace`, `--scene stopped`, `--scene review`.
+/// change: `--scene scoring`, `--scene stopped`, `--scene review`, `--scene library`,
+/// `--scene open-latest`.
+/// The library is what the window opens on; every other scene puts a game on screen.
 ///
 /// Like `--demo`, it goes through the session rather than the mouse. The states are
 /// the bridge's own events, played once the real bridge is up and quiet.
@@ -38,6 +40,16 @@ public enum ScreenshotScene {
             try? await Task.sleep(for: .milliseconds(250))
         }
         try? await Task.sleep(for: .seconds(2))
+        if scene == "library" { return }
+        if scene == "open-latest" {
+            // The card at the top of the library, opened as a click would: a game
+            // against KataGo resumes, anything else is read.
+            if let latest = session.library.entries.max(by: { $0.updatedAt < $1.updatedAt }) {
+                session.open(latest)
+            }
+            return
+        }
+        session.isShowingLibrary = false
         func play(_ line: String) {
             if let event = try? BridgeEvent.decode(line: line) { session.handle(event) }
         }
@@ -47,9 +59,6 @@ public enum ScreenshotScene {
                 ,"scoring":{"black":12.0,"white":10.5,"komi":6.5,"territory":{"B":11,"W":4},\
                 "result":"B+1.5","points":[],"dead_stones":[]}
                 """))
-        case "replace":
-            play(state(status: "playing"))
-            session.requestNewGame()
         case "stopped":
             play(state(status: "playing"))
             session.bridgeDidStop()

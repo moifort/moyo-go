@@ -5,7 +5,8 @@ import SwiftUI
 struct MoyoApp: App {
     @NSApplicationDelegateAdaptor(RecordOpeningDelegate.self) private var delegate
     /// One game and one engine for the life of the app, whatever the window does.
-    @State private var session = GameSession()
+    /// The library is the one on disk: the tests keep theirs in memory.
+    @State private var session = GameSession(library: .onDisk())
 
     init() {
         // `Moyo --smoke` vérifie le bundle depuis son propre sandbox, puis sort.
@@ -24,6 +25,7 @@ struct MoyoApp: App {
             RootView(session: session)
                 .frame(minWidth: 720, minHeight: 560)
         }
+        .defaultSize(width: 1280, height: 820)
         .windowStyle(.titleBar)
         .commands {
             SidebarCommands()

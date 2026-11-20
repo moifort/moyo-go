@@ -92,11 +92,37 @@ struct SGFExportTests {
     @Test("Le pont répond par le texte de la partie")
     func event() throws {
         let line = #"{"event":"sgf","id":3,"contents":"(;GM[1]FF[4]SZ[9];B[ee])"}"#
-        guard case .sgf(let id, let contents) = try BridgeEvent.decode(line: line) else {
+        guard case .sgf(let id, let answer) = try BridgeEvent.decode(line: line) else {
             Issue.record("attendu un événement sgf")
             return
         }
         #expect(id == 3)
-        #expect(contents == "(;GM[1]FF[4]SZ[9];B[ee])")
+        #expect(answer.contents == "(;GM[1]FF[4]SZ[9];B[ee])")
+        #expect(answer.reason == nil)
+    }
+
+    @Test("La réponse porte aussi ce que la bibliothèque montre")
+    func libraryFields() throws {
+        let line = """
+            {"event":"sgf","id":4,"contents":"(;GM[1])","reason":"autosave",            "final_board":{"size":2,"stones":"b..w"},"move_count":2,"analysed":{"done":1,"total":3},            "game_info":{"black_name":"Noir","result":"B+R","game_name":"Finale"}}
+            """
+        guard case .sgf(_, let answer) = try BridgeEvent.decode(line: line) else {
+            Issue.record("attendu un événement sgf")
+            return
+        }
+        #expect(answer.reason == .autosave)
+        #expect(answer.finalBoard?.stone(row: 0, col: 0) == .black)
+        #expect(answer.finalBoard?.stone(row: 1, col: 1) == .white)
+        #expect(answer.finalBoard?.stone(row: 0, col: 1) == nil)
+        #expect(answer.moveCount == 2)
+        #expect(answer.analysed?.done == 1)
+        #expect(answer.gameInfo?.gameName == "Finale")
+    }
+
+    @Test("Un autosave le dit au pont")
+    func autosaveCommand() throws {
+        let line = try BridgeCommand.exportSGF(id: 3, blackName: nil, whiteName: nil, autosave: true).encodedLine()
+        let object = try #require(try JSONSerialization.jsonObject(with: line) as? [String: Any])
+        #expect(object["reason"] as? String == "autosave")
     }
 }

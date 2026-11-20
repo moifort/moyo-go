@@ -30,6 +30,7 @@ public struct BridgeCommand: Encodable, Sendable {
     var view: GameView?
     var nodeId: Int?
     var to: TreeDestination?
+    var reason: String?
 
     public static func newGame(
         id: Int,
@@ -68,8 +69,27 @@ public struct BridgeCommand: Encodable, Sendable {
     ///
     /// The names sign a game against the AI; a record under review keeps its own,
     /// and the bridge ignores these.
-    public static func exportSGF(id: Int, blackName: String?, whiteName: String?) -> BridgeCommand {
-        BridgeCommand(id: id, cmd: "export_sgf", blackName: blackName, whiteName: whiteName)
+    ///
+    /// `autosave` is the library keeping the game as it goes; the answer says so,
+    /// and goes there rather than to the save panel.
+    public static func exportSGF(
+        id: Int, blackName: String?, whiteName: String?, autosave: Bool = false
+    ) -> BridgeCommand {
+        BridgeCommand(
+            id: id, cmd: "export_sgf", blackName: blackName, whiteName: whiteName,
+            reason: autosave ? "autosave" : "export"
+        )
+    }
+
+    /// Picks up a game against KataGo from the record the library kept: the
+    /// bridge plays on from the end of its line, the AI moving if it is its turn.
+    public static func continueGame(
+        id: Int, contents: String, humanColor: PlayerColor, aiStrategy: String, aiSettings: [String: Double]
+    ) -> BridgeCommand {
+        BridgeCommand(
+            id: id, cmd: "continue_game", humanColor: humanColor, aiStrategy: aiStrategy,
+            aiSettings: aiSettings, contents: contents
+        )
     }
 
     /// Jumps to a position in the record. The bridge clamps anything out of range.

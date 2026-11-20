@@ -36,6 +36,24 @@ public enum RecordInbox {
 public final class RecordOpeningDelegate: NSObject, NSApplicationDelegate {
     public override init() { super.init() }
 
+    /// Set by the root view: writes the game on screen to the library, then calls
+    /// back. Quitting waits for it, two seconds at most.
+    @MainActor public static var beforeQuitting: ((@escaping () -> Void) -> Void)?
+
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let beforeQuitting = Self.beforeQuitting else { return .terminateNow }
+        var settled = false
+        var waiting = false
+        beforeQuitting {
+            guard !settled else { return }
+            settled = true
+            if waiting { sender.reply(toApplicationShouldTerminate: true) }
+        }
+        if settled { return .terminateNow }
+        waiting = true
+        return .terminateLater
+    }
+
     public func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first(where: { $0.pathExtension.lowercased() == SGFImport.fileExtension })
         else { return }
@@ -64,6 +82,10 @@ public struct ReviewCommands: Commands {
 
     public var body: some Commands {
         CommandGroup(after: .newItem) {
+            Button("Bibliothèque") { session?.showLibrary() }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .disabled(session == nil || session?.isShowingLibrary == true)
+
             Button("Ouvrir une partie…") {
                 NotificationCenter.default.post(name: .moyoOpenRecordRequested, object: nil)
             }

@@ -81,7 +81,7 @@ struct PhoneButton: View {
 
 /// The phones running Kifu in sight, to pick the one whose game to follow. The
 /// list fills in as phones appear; while it is empty, it says what it waits for.
-private struct PhonePicker: View {
+struct PhonePicker: View {
     let phones: [PhoneLink.Phone]
     let pick: (PhoneLink.Phone) -> Void
     let cancel: () -> Void

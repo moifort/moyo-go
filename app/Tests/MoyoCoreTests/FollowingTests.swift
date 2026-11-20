@@ -50,21 +50,14 @@ struct FollowingTests {
         #expect(sent.names == ["follow_start"])
     }
 
-    @Test("Une partie en cours fait d'abord poser la question")
-    func asksFirst() throws {
+    @Test("Une partie en cours est gardée dans la bibliothèque avant d'être remplacée")
+    func keepsFirst() throws {
         let (session, sent) = session()
         session.handle(try state(status: "playing", moveNumber: 3))
         session.connectPhone()
-        #expect(session.isConfirmingReplacement)
-        #expect(!session.isFollowing)
-        #expect(sent.names.isEmpty)
-        session.saveThenReplace()
-        #expect(sent.names == ["export_sgf"])
-        session.recordSaved(to: URL(fileURLWithPath: "/tmp/partie.sgf"))
-        session.exportHandled()
-        // Saved: now the phone is picked, and only then is the game replaced.
         #expect(session.isChoosingPhone)
         #expect(!session.isFollowing)
+        #expect(sent.names.isEmpty)
         session.follow(phone: "iPhone 2")
         #expect(sent.names == ["export_sgf", "follow_start"])
     }

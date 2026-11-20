@@ -252,6 +252,8 @@ public struct GameInfo: Codable, Sendable, Hashable {
     public let result: String?
     public let date: String?
     public let event: String?
+    /// `GN`, the name the record gives the game.
+    public let gameName: String?
 
     /// A player's name and rank on one line, or nil when the record says neither.
     public func label(for color: PlayerColor) -> String? {
@@ -448,6 +450,46 @@ public struct GameState: Codable, Sendable {
     }
 }
 
+/// The answer to `export_sgf`: the record, and what the library shows without
+/// reading it.
+public struct SGFAnswer: Decodable, Sendable, Equatable {
+    public enum Reason: String, Decodable, Sendable {
+        case export
+        case autosave
+    }
+
+    public struct Analysed: Decodable, Sendable, Equatable {
+        public let done: Int
+        public let total: Int
+    }
+
+    public let contents: String
+    /// Who asked: the save panel, or the library. Absent from an older bridge,
+    /// which only ever answered the panel.
+    public let reason: Reason?
+    /// The position at the end of the line of the game.
+    public let finalBoard: LibraryEntry.Board?
+    public let moveCount: Int?
+    public let analysed: Analysed?
+    public let gameInfo: GameInfo?
+
+    public init(
+        contents: String,
+        reason: Reason? = nil,
+        finalBoard: LibraryEntry.Board? = nil,
+        moveCount: Int? = nil,
+        analysed: Analysed? = nil,
+        gameInfo: GameInfo? = nil
+    ) {
+        self.contents = contents
+        self.reason = reason
+        self.finalBoard = finalBoard
+        self.moveCount = moveCount
+        self.analysed = analysed
+        self.gameInfo = gameInfo
+    }
+}
+
 public enum BridgeEvent: Sendable {
     case ready(katago: String?, model: String?, strategies: [String], settings: [String: [String: SettingValue]])
     case state(id: Int?, GameState)
@@ -455,8 +497,9 @@ public enum BridgeEvent: Sendable {
     case score(moveNumber: Int, scoreLead: Double)
     /// How much of a record under review KataGo has finished chewing through.
     case analysisProgress(done: Int, total: Int)
-    /// The game as SGF text, in answer to `export_sgf`.
-    case sgf(id: Int?, contents: String)
+    /// The game as SGF text, in answer to `export_sgf`, with what the library
+    /// shows of it.
+    case sgf(id: Int?, SGFAnswer)
     /// A record analysed to the end, analysis included, for the app to write over
     /// the file it came from. `id` is the `load_sgf` that opened it.
     case recordAnalysed(id: Int?, contents: String)
@@ -507,7 +550,7 @@ extension BridgeEvent: Decodable {
                 total: try container.decode(Int.self, forKey: .total)
             )
         case "sgf":
-            self = .sgf(id: id, contents: try container.decode(String.self, forKey: .contents))
+            self = .sgf(id: id, try SGFAnswer(from: decoder))
         case "record_analysed":
             self = .recordAnalysed(id: id, contents: try container.decode(String.self, forKey: .contents))
         case "tree":

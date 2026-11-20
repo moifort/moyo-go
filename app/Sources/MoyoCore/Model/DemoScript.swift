@@ -28,6 +28,7 @@ public enum DemoScript {
     @MainActor
     public static func run(on session: GameSession) async {
         guard await settled(until: { session.phase == .running }, within: 120) else { return }
+        session.isShowingLibrary = false
 
         for move in moves {
             guard await settled(until: { session.state?.toPlay == session.settings.humanColor },
