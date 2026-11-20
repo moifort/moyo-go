@@ -38,10 +38,17 @@ read instead of computed again — in Moyo or in KaTrain.
 
 ## Keep a game
 
-⌘S saves to SGF. A game against the AI goes out as it was played, signed with
-your name and the opponent's mode; a record under review goes out as it came in,
-along with the engine's continuation you are walking, and KataGo's analysis of
-every position analysed so far. The file opens in KaTrain, Sabaki or OGS.
+Every game is kept without asking: played against KataGo, opened from an SGF file,
+or followed with Kifu. Moyo opens on that library — each game shown by its final
+position, the most recent first, with its result and how much of it KataGo has
+analysed. A game against KataGo left unfinished picks up where it stood, even after
+quitting; the others open for review. ⇧⌘L comes back to the library without
+interrupting the game under way.
+
+⌘S still exports to SGF, wherever you choose. A game against the AI goes out as it
+was played, signed with your name and the opponent's mode; a record under review
+goes out as it came in, along with the engine's continuation you are walking, and
+KataGo's analysis of every position analysed so far. The file opens in KaTrain, Sabaki or OGS.
 
 ## Native, and nothing else
 

@@ -65,6 +65,11 @@ and KataGo from Homebrew, and registers it for SGF files.
 instead of the bundle, and leaves `~/.katrain/config.json` in charge of the
 engine — so a game played this way behaves exactly like KaTrain.
 
+`MOYO_LIBRARY=<dossier>` puts the library of games elsewhere than
+`Application Support/Moyo/Library/`, so a development build does not touch the
+real one. `--scene library` shows it once KataGo is up; `--scene open-latest`
+opens its most recent game as a click would — resumed against KataGo, or reviewed.
+
 ## Test
 
 ```bash

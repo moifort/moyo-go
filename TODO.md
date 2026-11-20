@@ -17,10 +17,31 @@ Each entry says what it is and why it was deferred, so the reasoning survives.
   and friends). The App Store listing is worldwide, so the strings should move to a
   String Catalog with English alongside French.
 
-- **Autosave.** A game is saved only when the player asks, through the save panel.
-  The panel is what grants a sandboxed app a place to write; saving on its own would
-  mean a folder inside the container nobody browses, or a security-scoped bookmark
-  and a preference to choose it. A game lost to a quit is the price until then.
+- **Library: no bin.** Deleting a game from the library removes its record for good.
+  A bin means a second state for every entry, a place to show it and a rule for
+  emptying it; the confirmation dialog is the safeguard until deletions turn out to
+  be regretted.
+
+- **Library: no bulk import of existing SGF files.** Only records opened in Moyo
+  enter the library. Importing a folder means choosing it through a panel (the
+  sandbox), deduplicating by fingerprint, and having the bridge read every file to
+  draw its thumbnail — a long job with its own progress UI, for a need not yet seen.
+
+- **Library: a game followed with Kifu cannot be resumed.** The phone leads that
+  game, so its card only offers "Revoir". Resuming would mean asking Kifu to pick up
+  a game it has already closed, which needs a change to `docs/protocol.md` on both
+  sides.
+
+- **Library: no sync between Macs.** The library lives in the app's container
+  (`Application Support/Moyo/Library/`). iCloud would need an entitlement, conflict
+  handling on `library.json`, and records written by two Macs at once; the ⌘S export
+  covers moving a game until then.
+
+- **Library: reopening a known file skips the write-back of its analysis.** The same
+  file opened again is read from the library's copy, branches included, so the
+  analysis is not written back over the original file a second time — it would carry
+  the player's branches into it. Writing only the record's own nodes from that copy
+  is possible but not worth it before someone misses it.
 
 - **A branch cannot become the main line.** The tree shows every branch, the
   record's own and the player's, but the line of the game stays the record's
